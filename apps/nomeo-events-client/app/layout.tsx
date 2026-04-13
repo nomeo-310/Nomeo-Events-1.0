@@ -3,6 +3,10 @@ import { Geist, Geist_Mono, Figtree } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ModalProvider } from "@/providers/modal-provider";
+import { ThemeProvider } from "next-themes";
+import { ThemeWatcher } from "@/components/ui/theme-watcher";
+import { ScrollToTop } from "@/components/ui/scroll-to-top";
+import { Toaster } from "sonner";
 
 const figtree = Figtree({subsets:['latin'],variable:'--font-sans'});
 
@@ -38,11 +42,21 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{children: React.ReactNode }>) {
   return (
-    <html lang="en" className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-sans", figtree.variable)}>
+    <html lang="en" className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-sans", figtree.variable)} suppressHydrationWarning >
       <body className="min-h-full flex flex-col">
-        <ModalProvider>
-          {children}
-        </ModalProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <Toaster position="top-center" richColors />
+          <ThemeWatcher/>
+          <ModalProvider>
+            {children}
+          </ModalProvider>
+          <ScrollToTop/>
+        </ThemeProvider>
       </body>
     </html>
   );

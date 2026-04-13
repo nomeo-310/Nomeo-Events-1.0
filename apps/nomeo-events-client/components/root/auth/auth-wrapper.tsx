@@ -1,18 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { LoginForm } from "./login-form";
 import { SignupForm } from "./signup-form";
 import { ForgotPasswordForm } from "./forgot-password-form";
 import { VerifyEmailForm } from "./verify-email-form";
 import { ResetPasswordForm } from "./reset-password-form";
 import { motion, AnimatePresence } from "framer-motion";
+import { authClient } from "@/lib/auth-client";
+import { VerifyOtpForm } from "./verify-otp-form";
 
-type AuthView = 
-  | "login" 
-  | "signup" 
-  | "forgot-password" 
-  | "verify-email" 
+type AuthView =
+  | "login"
+  | "signup"
+  | "forgot-password"
+  | "verify-email"
+  | "verify-reset-otp"
   | "reset-password";
 
 interface AuthWrapperProps {
@@ -21,59 +24,56 @@ interface AuthWrapperProps {
   onClose?: () => void;
 }
 
-export const AuthWrapper = ({ 
-  defaultView = "login", 
-  onSuccess, 
-  onClose 
-}: AuthWrapperProps) => {
+export const AuthWrapper = ({ defaultView = "login", onSuccess, onClose }: AuthWrapperProps) => {
   const [currentView, setCurrentView] = useState<AuthView>(defaultView);
-  const [userEmail, setUserEmail] = useState<string>("");
-  const [resetToken, setResetToken] = useState<string>("");
+  const [pendingEmail, setPendingEmail] = useState("");
+
+  const { data: session } = authClient.useSession();
+
+  // close modal if user is already logged in
+  useEffect(() => {
+    if (session?.user) onClose?.();
+  }, [session]);
 
   const handleLoginSuccess = () => {
     onSuccess?.();
     onClose?.();
   };
 
-  const handleSignupSuccess = () => {
-    // After signup, show email verification
+  // step: signup done → verify email OTP
+  const handleSignupSuccess = (email: string) => {
+    setPendingEmail(email);
     setCurrentView("verify-email");
   };
 
-  const handleForgotPasswordSuccess = (data: any) => {
-    setUserEmail(data.email);
+  // step 1 of reset: email submitted → verify OTP
+  const handleForgotPasswordSuccess = (email: string) => {
+    setPendingEmail(email);
+    setCurrentView("verify-reset-otp");
+  };
+
+  // step 2 of reset: OTP verified → new password form
+  const handleResetOtpSuccess = () => {
     setCurrentView("reset-password");
   };
 
-  const handleVerifyEmailSuccess = () => {
-    // After email verification, go to login
-    setCurrentView("login");
-  };
-
+  // step 3 of reset: password changed → back to login
   const handleResetPasswordSuccess = () => {
-    // After password reset, go to login
     setCurrentView("login");
   };
 
-  const handleResendCode = () => {
-    console.log("Resending verification code to:", userEmail);
-    // Implement resend logic here
-  };
-
-  const views = {
+  const views: Record<AuthView, React.ReactNode> = {
     login: (
       <LoginForm
         onSuccess={handleLoginSuccess}
         onForgotPassword={() => setCurrentView("forgot-password")}
         onSignup={() => setCurrentView("signup")}
-        onGoogleLogin={() => console.log("Google login")}
       />
     ),
     signup: (
       <SignupForm
         onSuccess={handleSignupSuccess}
         onLogin={() => setCurrentView("login")}
-        onGoogleSignup={() => console.log("Google signup")}
       />
     ),
     "forgot-password": (
@@ -84,36 +84,35 @@ export const AuthWrapper = ({
     ),
     "verify-email": (
       <VerifyEmailForm
-        email={userEmail}
-        onSuccess={handleVerifyEmailSuccess}
-        onResendCode={handleResendCode}
+        email={pendingEmail}
         onBackToLogin={() => setCurrentView("login")}
+      />
+    ),
+    "verify-reset-otp": (
+      <VerifyOtpForm
+        email={pendingEmail}
+        onSuccess={handleResetOtpSuccess}
+        onBack={() => setCurrentView("forgot-password")}
       />
     ),
     "reset-password": (
       <ResetPasswordForm
-        token={resetToken}
+        email={pendingEmail}
         onSuccess={handleResetPasswordSuccess}
         onBackToLogin={() => setCurrentView("login")}
       />
     ),
   };
 
-  // Get title based on current view
   const getTitle = () => {
     switch (currentView) {
-      case "login":
-        return "Welcome Back";
-      case "signup":
-        return "Create an Account";
-      case "forgot-password":
-        return "Forgot Password?";
-      case "verify-email":
-        return "Verify Your Email";
-      case "reset-password":
-        return "Reset Password";
-      default:
-        return "Authentication";
+      case "login":            return "Welcome Back";
+      case "signup":           return "Create an Account";
+      case "forgot-password":  return "Forgot Password?";
+      case "verify-email":     return "Verify Your Email";
+      case "verify-reset-otp": return "Check Your Email";
+      case "reset-password":   return "Set New Password";
+      default:                 return "Authentication";
     }
   };
 
@@ -124,11 +123,13 @@ export const AuthWrapper = ({
       case "signup":
         return "Join us today and start your journey";
       case "forgot-password":
-        return "Enter your email to reset your password";
+        return "Enter your email and we'll send you a reset code";
       case "verify-email":
-        return "Enter the verification code sent to your email";
+        return `Enter the 6-digit code sent to ${pendingEmail}`;
+      case "verify-reset-otp":
+        return `Enter the 6-digit reset code sent to ${pendingEmail}`;
       case "reset-password":
-        return "Create a new secure password for your account";
+        return "Create a strong new password for your account";
       default:
         return "";
     }

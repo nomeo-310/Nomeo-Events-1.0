@@ -13,23 +13,19 @@ import {
 } from "@hugeicons/core-free-icons";
 import { SocialButtons } from "./social-buttons";
 import { LoginFormData } from "@/types/auth-type";
-
+import { authClient } from "@/lib/auth-client";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 interface LoginFormProps {
-  onSuccess?: (data: LoginFormData) => void;
+  onSuccess?: () => void;
   onForgotPassword?: () => void;
   onSignup?: () => void;
-  onGoogleLogin?: () => void;
   isLoading?: boolean;
 }
 
-export const LoginForm = ({
-  onSuccess,
-  onForgotPassword,
-  onSignup,
-  onGoogleLogin,
-  isLoading = false,
-}: LoginFormProps) => {
+export const LoginForm = ({ onSuccess, onForgotPassword, onSignup, isLoading = false }: LoginFormProps) => {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -37,7 +33,6 @@ export const LoginForm = ({
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-    reset,
   } = useForm<LoginFormData>({
     defaultValues: {
       email: "",
@@ -46,53 +41,44 @@ export const LoginForm = ({
     },
   });
 
-  const validateForm = (data: LoginFormData): boolean => {
-    if (!data.email) {
-      setServerError("Email is required");
-      return false;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(data.email)) {
-      setServerError("Please enter a valid email address");
-      return false;
-    }
-    if (!data.password) {
-      setServerError("Password is required");
-      return false;
-    }
-    if (data.password.length < 6) {
-      setServerError("Password must be at least 6 characters");
-      return false;
-    }
-    return true;
+
+  const getCallbackUrl = () => {
+    if (typeof window === "undefined") return "/dashboard";
+    const params = new URLSearchParams(window.location.search);
+    return params.get("callbackUrl") ?? "/dashboard";
   };
 
   const onSubmit = async (data: LoginFormData) => {
     setServerError(null);
-    
-    if (!validateForm(data)) return;
-    
-    try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      
-      // Demo validation
-      if (data.email === "demo@example.com" && data.password === "password") {
-        localStorage.setItem("nomeo_token", "demo_token");
-        localStorage.setItem("user_email", data.email);
-        onSuccess?.(data);
-        reset();
-      } else {
+
+    const { error } = await authClient.signIn.email({
+      email: data.email,
+      password: data.password,
+    });
+
+    if (error) {
+      if (error.code === "EMAIL_NOT_VERIFIED") {
+        setServerError("Please verify your email before signing in.");
+      } else if (error.code === "INVALID_EMAIL_OR_PASSWORD") {
         setServerError("Invalid email or password. Please try again.");
+      } else {
+        setServerError(error.message ?? "Something went wrong. Please try again.");
       }
-    } catch (error) {
-      setServerError("An error occurred. Please try again.");
+      return;
     }
+
+    onSuccess?.();
+    toast.success("Logged in successfully!");
+    router.push(getCallbackUrl());
   };
 
   const handleGoogleLogin = () => {
-    console.log("Google login clicked");
-    onGoogleLogin?.();
+
+    toast.loading("Redirecting to Google...");
+    authClient.signIn.social({
+      provider: "google",
+      callbackURL: getCallbackUrl(),
+    });
   };
 
   return (
@@ -109,13 +95,19 @@ export const LoginForm = ({
             </div>
             <input
               type="email"
-              {...register("email")}
+              {...register("email", {
+                required: "Email is required",
+                pattern: {
+                  value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                  message: "Please enter a valid email address",
+                },
+              })}
               className={`w-full pl-10 pr-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition ${
                 errors.email
                   ? "border-red-500 dark:border-red-500"
                   : "border-gray-300 dark:border-gray-700"
               }`}
-              placeholder="demo@example.com"
+              placeholder="you@example.com"
               disabled={isLoading || isSubmitting}
             />
           </div>
@@ -137,7 +129,9 @@ export const LoginForm = ({
             </div>
             <input
               type={showPassword ? "text" : "password"}
-              {...register("password")}
+              {...register("password", {
+                required: "Password is required",
+              })}
               className={`w-full pl-10 pr-10 py-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition ${
                 errors.password
                   ? "border-red-500 dark:border-red-500"
@@ -207,7 +201,7 @@ export const LoginForm = ({
           whileTap={{ scale: 0.98 }}
           type="submit"
           disabled={isLoading || isSubmitting}
-          className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed relative flex items-center justify-center gap-2"
+          className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {isSubmitting ? (
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -220,10 +214,11 @@ export const LoginForm = ({
         </motion.button>
       </form>
 
-      {/* Social Login */}
-      <SocialButtons onGoogleClick={handleGoogleLogin} isLoading={isLoading || isSubmitting} />
+      <SocialButtons
+        onGoogleClick={handleGoogleLogin}
+        isLoading={isLoading || isSubmitting}
+      />
 
-      {/* Sign Up Link */}
       <div className="text-center">
         <p className="text-sm text-gray-600 dark:text-gray-400">
           Don't have an account?{" "}
