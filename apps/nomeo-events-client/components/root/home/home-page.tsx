@@ -18,7 +18,7 @@ const HomePage = () => {
 
   const router = useRouter();
 
-  const { data: session } = authClient.useSession();
+  const { data: session , isPending} = authClient.useSession();
 
   const handleOpenSignupModal = () => {
     openModal({
@@ -35,22 +35,29 @@ const HomePage = () => {
     router.push('/dashboard')
   }
 
+  const handleCTAClick = () => {
+    
+    if (isPending) return;
+    if (session?.user) {
+      routeToDashboard();
+    } else {
+      handleOpenSignupModal();
+    }
+  };
+
   const handleScrollToFeatures = () => {
     document.getElementById("features")?.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
     <>
-      <Hero
-        onGetStarted={handleOpenSignupModal}
-        onSeeHowItWorks={handleScrollToFeatures}
-      />
+      <Hero onGetStarted={handleCTAClick} onSeeHowItWorks={handleScrollToFeatures}/>
       <Stats/>
       <Features />
       <UserJourneyGuide/>
       <EventsSection />
       <HowItWorks />
-      <CTA onGetStarted={session?.user ? routeToDashboard :  handleOpenSignupModal} />
+      <CTA onGetStarted={handleCTAClick} />
     </>
   );
 };

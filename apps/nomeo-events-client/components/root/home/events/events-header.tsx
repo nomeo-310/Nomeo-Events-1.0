@@ -29,7 +29,7 @@ const EventsHeader = ({ activeTab, setActiveTab, viewMode, setViewMode, onTabCha
           <button
             key={tab.id}
             onClick={() => handleTabClick(tab.id)}
-            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
+            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
               activeTab === tab.id
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-indigo-900/30'
                 : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'

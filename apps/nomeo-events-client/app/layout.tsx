@@ -7,6 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { ThemeWatcher } from "@/components/ui/theme-watcher";
 import { ScrollToTop } from "@/components/ui/scroll-to-top";
 import { Toaster } from "sonner";
+import QueryProvider from "@/providers/query-provider";
 
 const figtree = Figtree({subsets:['latin'],variable:'--font-sans'});
 
@@ -41,6 +42,7 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{children: React.ReactNode }>) {
+
   return (
     <html lang="en" className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-sans", figtree.variable)} suppressHydrationWarning >
       <body className="min-h-full flex flex-col">
@@ -50,12 +52,14 @@ export default function RootLayout({ children }: Readonly<{children: React.React
           enableSystem
           disableTransitionOnChange
         >
-          <Toaster position="top-center" richColors />
-          <ThemeWatcher/>
-          <ModalProvider>
-            {children}
-          </ModalProvider>
-          <ScrollToTop/>
+          <QueryProvider>
+            <Toaster position="top-center" richColors />
+            <ThemeWatcher/>
+            <ModalProvider>
+              {children}
+            </ModalProvider>
+            <ScrollToTop/>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

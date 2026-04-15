@@ -20,7 +20,7 @@ const Hero = ({ onGetStarted, onSeeHowItWorks }: HeroProps) => {
 
         <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-gray-900 dark:text-white mb-6 leading-tight">
           Where Moments
-          <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+          <span className="bg-indigo-600 bg-clip-text text-transparent">
             {" "}Meet Magic
           </span>
         </h1>
@@ -33,7 +33,7 @@ const Hero = ({ onGetStarted, onSeeHowItWorks }: HeroProps) => {
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
           <button
             onClick={onGetStarted}
-            className="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold text-lg shadow-md hover:opacity-90 transition-opacity duration-200"
+            className="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-indigo-600 text-white rounded-xl font-semibold text-lg shadow-md hover:opacity-90 transition-opacity duration-200"
           >
             Get Started Free
             <HugeiconsIcon icon={ArrowRightIcon} size={20} />

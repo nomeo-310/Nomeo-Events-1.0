@@ -28,33 +28,25 @@ import NotificationDropdown from "./notification-dropdown";
 import AvatarButton from "./avatar-button";
 import UserDropdown from "./user-dropdown";
 import MobileDrawer from "./mobile-drawer";
+import { useNotificationSummary } from "@/hooks/use-notification";
 
 const Navigation = () => {
   const router = useRouter();
   const pathname = usePathname();
   const { openModal, closeModal } = useModal();
   const { scrolled, navHidden } = useScrollBehavior();
-  const {
-    mobileOpen,
-    setMobileOpen,
-    userMenuOpen,
-    setUserMenuOpen,
-    notifOpen,
-    setNotifOpen,
-    notifCount,
-    setNotifCount,
-  } = useNavigationState();
+  const { mobileOpen, setMobileOpen, userMenuOpen, setUserMenuOpen, notifOpen, setNotifOpen, notifCount, setNotifCount } = useNavigationState();
 
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending } = authClient.useSession();
+
+  const { counts, recentUnread, isLoading: notifLoading } = useNotificationSummary();
+
+  const realNotifCount = counts.unread;
+  
   const isLoggedIn = !!session?.user;
   const userName = session?.user?.name ?? "";
   const userEmail = session?.user?.email ?? "";
-  const initials = userName
-    .split(" ")
-    .map((n: string) => n[0] ?? "")
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  const initials = userName.split(" ").map((n: string) => n[0] ?? "").join("").toUpperCase().slice(0, 2);
 
   const navItems: NavItem[] = [
     { name: "Discover", href: "/", icon: Home01Icon },
@@ -69,12 +61,6 @@ const Navigation = () => {
     href: "/dashboard",
     icon: DashboardSquareIcon,
   };
-
-  const notifications: NotificationItem[] = [
-    { id: 1, title: "New webinar registration", time: "2 minutes ago", read: false },
-    { id: 2, title: "Seminar reminder tomorrow", time: "1 hour ago", read: false },
-    { id: 3, title: "New attendee joined your event", time: "3 hours ago", read: false },
-  ];
 
   const isActive = (href: string): boolean =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -99,16 +85,22 @@ const Navigation = () => {
 
   // FIXED: Use arrow function that returns the opposite boolean value
   const handleNotifClick = (): void => {
-    setNotifOpen(!notifOpen);  // Pass boolean directly, not a function
+    setNotifOpen(!notifOpen);
     setUserMenuOpen(false);
-    if (notifCount > 0) setNotifCount(0);
   };
 
   // FIXED: Use arrow function that returns the opposite boolean value
   const handleUserClick = (): void => {
-    setUserMenuOpen(!userMenuOpen);  // Pass boolean directly, not a function
+    setUserMenuOpen(!userMenuOpen);
     setNotifOpen(false);
   };
+
+  const mappedNotifications = recentUnread.map((n) => ({
+    id: n._id,
+    title: n.title,
+    time: n.timeAgo,
+    read: n.status !== "unread",
+  }));
 
   return (
     <>
@@ -125,16 +117,33 @@ const Navigation = () => {
           <div className="h-14 flex items-center gap-3">
             <Logo/>
 
-            <nav className="hidden md:flex items-center gap-0.5 flex-1 justify-center">
+            <nav className="hidden md:flex items-center gap-1.5 flex-1 justify-center">
               {navItems.map((item) => (
                 <DesktopNavLink key={item.name} item={item} isActive={isActive(item.href)} />
               ))}
+
+              {isLoggedIn &&
+                <Link
+                  href="/dashboard"
+                  className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 ${
+                    isActive("/dashboard")
+                      ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-white/5"
+                  }`}
+                >
+                  <HugeiconsIcon icon={DashboardSquareIcon} size={16} />
+                  Dashboard
+                </Link>
+              }
             </nav>
 
-            <div className="flex items-center gap-1 ml-auto">
+            <div className="flex items-center gap-3 ml-auto">
               <ThemeToggle />
 
-              {!isLoggedIn ? (
+              {isPending ? (
+                // Skeleton placeholder — matches the size of the sign-in button
+                <div className="w-20 h-8 rounded-lg bg-gray-200 dark:bg-gray-800 animate-pulse ml-1" />
+              ) : !isLoggedIn ? (
                 <button
                   onClick={handleOpenLogin}
                   className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-[13px] font-semibold transition-all duration-150 shadow-sm ml-1"
@@ -145,26 +154,14 @@ const Navigation = () => {
               ) : (
                 <>
                   <div className="relative">
-                    <NotificationBell count={notifCount} onClick={handleNotifClick} />
+                    <NotificationBell count={realNotifCount} onClick={handleNotifClick} />
                     <NotificationDropdown
                       isOpen={notifOpen}
                       onClose={() => setNotifOpen(false)}
-                      notifications={notifications}
-                      count={notifCount}
+                      notifications={mappedNotifications}
+                      count={realNotifCount}
                     />
                   </div>
-
-                  <Link
-                    href="/dashboard"
-                    className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors duration-150 ${
-                      isActive("/dashboard")
-                        ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50"
-                        : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-white/5"
-                    }`}
-                  >
-                    <HugeiconsIcon icon={DashboardSquareIcon} size={14} />
-                    Dashboard
-                  </Link>
 
                   <div className="relative">
                     <AvatarButton initials={initials} isOpen={userMenuOpen} onClick={handleUserClick} />
@@ -205,7 +202,7 @@ const Navigation = () => {
         userName={userName}
         userEmail={userEmail}
         initials={initials}
-        notifCount={notifCount}
+        notifCount={realNotifCount}
       />
     </>
   );

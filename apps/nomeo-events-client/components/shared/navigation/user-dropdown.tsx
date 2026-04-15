@@ -14,7 +14,7 @@ const UserDropdown = ({ isOpen, onClose, userName, userEmail, onLogout }: UserDr
         <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{userEmail}</p>
       </div>
       <div className="p-1.5 space-y-0.5">
-        <Link href="/profile" onClick={onClose} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
+        <Link href="/dashboard/profile" onClick={onClose} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
           <HugeiconsIcon icon={UserIcon} size={14} />Profile
         </Link>
         <Link href="/dashboard" onClick={onClose} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">

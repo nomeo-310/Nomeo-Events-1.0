@@ -24,7 +24,7 @@ const NotificationDropdown = ({ isOpen, onClose, notifications, count }: Notific
         ))}
       </div>
       <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-800">
-        <Link href="/notifications" onClick={onClose} className="text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:underline block text-center">
+        <Link href="/dashboard" onClick={onClose} className="text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:underline block text-center">
           View all notifications
         </Link>
       </div>

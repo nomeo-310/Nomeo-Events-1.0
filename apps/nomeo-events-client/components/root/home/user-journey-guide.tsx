@@ -29,7 +29,7 @@ const attendeeSteps: JourneyStep[] = [
     title: "Discover Events",
     description: "Browse through our curated collection of seminars, webinars, and entertainment events",
     icon: Calendar02Icon,
-    color: "bg-blue-500",
+    color: "bg-indigo-600",
     detailedDescription: "Explore events by category, date, or popularity. Each event page has complete details about what to expect, who's speaking, and what you'll learn. Filter events to find exactly what interests you."
   },
   {
@@ -37,7 +37,7 @@ const attendeeSteps: JourneyStep[] = [
     title: "Choose Your Event",
     description: "Select the event that matches your interests and schedule",
     icon: EyeIcon,
-    color: "bg-purple-500",
+    color: "bg-indigo-600",
     detailedDescription: "Review event details including date, time, speaker information, agenda, and pricing. Check if it's online or in-person. Make sure it fits your calendar and learning goals."
   },
   {
@@ -45,7 +45,7 @@ const attendeeSteps: JourneyStep[] = [
     title: "Register Instantly",
     description: "Fill in your details - no account needed!",
     icon: UserAddIcon,
-    color: "bg-indigo-500",
+    color: "bg-indigo-600",
     detailedDescription: "Simply provide your name and email address to register. That's it! No account creation required. You'll receive an instant confirmation email with all event details and access instructions."
   },
   {
@@ -53,7 +53,7 @@ const attendeeSteps: JourneyStep[] = [
     title: "Attend & Enjoy",
     description: "Access your event and have an amazing experience",
     icon: CheckCircleIcon,
-    color: "bg-green-500",
+    color: "bg-indigo-600",
     detailedDescription: "For webinars: Click the joining link in your confirmation email. For in-person events: Show your QR code at check-in. Add to calendar for reminders! Your ticket is always in your email."
   }
 ];
@@ -77,7 +77,7 @@ const UserJourneyGuide = () => {
           </span>
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
             Your Journey to{" "}
-            <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            <span className="bg-indigo-600 bg-clip-text text-transparent">
               Amazing Events
             </span>
           </h2>

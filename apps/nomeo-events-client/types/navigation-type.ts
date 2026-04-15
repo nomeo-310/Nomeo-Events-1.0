@@ -7,9 +7,9 @@ export interface NavItem {
 }
 
 export interface NotificationItem {
-  id: number;
+  id: string;
   title: string;
-  time: string;
+  time: string | undefined;
   read: boolean;
 }
 

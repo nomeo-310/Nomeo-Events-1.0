@@ -88,7 +88,7 @@ const MobileDrawer = ({
           </div>
         )}
 
-        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1.5">
           <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
             Menu
           </p>

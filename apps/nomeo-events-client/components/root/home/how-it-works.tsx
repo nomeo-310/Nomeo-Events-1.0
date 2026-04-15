@@ -54,7 +54,7 @@ const HowItWorks = () => {
           </span>
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
             Create Events in{" "}
-            <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            <span className="bg-indigo-600 bg-clip-text text-transparent">
               3 Simple Steps
             </span>
           </h2>

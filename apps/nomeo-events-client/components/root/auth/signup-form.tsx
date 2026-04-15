@@ -20,7 +20,7 @@ import { TermsOfUseContent } from "../consent/terms-of-use";
 import { PrivacyPolicyContent } from "../consent/privacy-policy";
 import { authClient } from "@/lib/auth-client";
 import { PasswordStrength } from "@/components/ui/password-strength";
-import axios from "axios";
+import { toast } from "sonner";
 
 interface SignupFormProps {
   onSuccess?: (email: string) => void;
@@ -95,6 +95,12 @@ export const SignupForm = ({ onSuccess, onLogin, isLoading = false }: SignupForm
   const doPasswordsMatch = password === confirmPassword;
   const isFormValid = isPasswordStrong && doPasswordsMatch && !errors.name && !errors.email;
 
+  const getCallbackUrl = () => {
+    if (typeof window === "undefined") return "/dashboard";
+    const params = new URLSearchParams(window.location.search);
+    return params.get("callbackUrl") ?? "/dashboard";
+  };
+
   const onSubmit = async (data: SignupFormData) => {
     setServerError(null);
 
@@ -137,7 +143,12 @@ export const SignupForm = ({ onSuccess, onLogin, isLoading = false }: SignupForm
   };
 
   const handleGoogleSignup = () => {
-    authClient.signIn.social({ provider: "google", callbackURL: "/dashboard" });
+
+    toast.loading("Redirecting to Google...");
+    authClient.signIn.social({
+      provider: "google",
+      callbackURL: getCallbackUrl(),
+    });
   };
 
   const viewTermsOfUse = () => {
