@@ -138,7 +138,9 @@ export async function PATCH(request: Request) {
     }
 
     // Verify notification belongs to user
-    const notification = await Notification.findOne({ _id: notificationId, recipientId: loggedInUser.id });
+    console.log(notificationId),
+    console.log(loggedInUser.id)
+    const notification = await Notification.findOne({ _id: notificationId, receiverId: loggedInUser.id });
 
     if (!notification) {
       return Response.json(

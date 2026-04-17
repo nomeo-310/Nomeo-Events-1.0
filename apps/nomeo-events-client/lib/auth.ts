@@ -57,7 +57,7 @@ export function createAuth() {
                 fullName: user.name,
                 accountType: "individual",
                 location: {
-                  state: "Lagos",
+                  state: "Not provided",
                   city: "Not provided",
                   address: "Not provided",
                 },

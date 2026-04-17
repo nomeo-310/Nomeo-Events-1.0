@@ -1,3 +1,10 @@
+// types/profile-type.ts
+
+export interface ProfilePicture {
+  secure_url: string;
+  public_id: string;
+}
+
 export interface ProfileLocation {
   state: string;
   city: string;
@@ -7,9 +14,9 @@ export interface ProfileLocation {
 }
 
 export interface ProfileContact {
-  phoneNumber?: string;
+  phoneNumber: string;
   officeNumber?: string;
-  email?: string;
+  email: string;
   supportEmail?: string;
   website?: string;
   socialMedia?: {
@@ -57,20 +64,31 @@ export interface VerificationDocument {
   verified?: boolean;
 }
 
-// ─── Base profile (fields always present) ────────────────────────────────────
+export interface ProfileMetadata {
+  ipAddress?: string;
+  userAgent?: string;
+  signupSource?: string;
+  referrer?: string;
+}
+
+// Base profile (fields always present)
 export interface BaseProfile {
   _id: string;
+  userId?: string;
   fullName: string;
   displayName?: string;
   accountType: "individual" | "organization";
   organizationName?: string;
   organizationType?: "individual" | "company" | "nonprofit" | "agency" | "government";
+  organizationRegistrationNumber?: string;
+  taxId?: string;
   verificationStatus: "pending" | "verified" | "rejected" | "suspended";
   verifiedAt?: string;
   activeStatus: "active" | "deactivated" | "pending" | "suspended";
-  profilePicture?: { secure_url: string; public_id: string };
-  coverPicture?: { secure_url: string; public_id: string };
+  profilePicture?: ProfilePicture;
+  coverPicture?: ProfilePicture;
   contact: ProfileContact;
+  location: ProfileLocation;
   bio?: string;
   shortBio?: string;
   specialties?: string[];
@@ -82,51 +100,38 @@ export interface BaseProfile {
   averageRating: number;
   totalReviews: number;
   publicProfile: ProfilePublicSettings;
+  paymentMethod?: "manual" | "online" | "transfer" | "auto";
+  accountDetails?: ProfileAccountDetails;
   createdAt: string;
   updatedAt: string;
   lastActiveAt?: string;
-
+  suspendedAt?: string;
+  suspensionReason?: string;
+  deactivatedAt?: string;
+  
   // Computed by API
   completionPercentage: number;
   fullAddress?: string;
 }
 
-// ─── Private profile (own user, full data) ───────────────────────────────────
+// Private profile (own user, full data)
 export interface PrivateProfile extends BaseProfile {
   userId: string;
-  location: ProfileLocation;
-  paymentMethod: "manual" | "online" | "transfer" | "auto";
-  accountDetails?: ProfileAccountDetails;
   verificationDocuments?: VerificationDocument[];
-  taxId?: string;
-  organizationRegistrationNumber?: string;
-  suspendedAt?: string;
-  suspensionReason?: string;
-  deactivatedAt?: string;
   analytics?: ProfileAnalytics;
-  metadata?: {
-    ipAddress?: string;
-    userAgent?: string;
-    signupSource?: string;
-    referrer?: string;
-  };
+  metadata?: ProfileMetadata;
 }
 
-// ─── Public profile (other users, privacy-filtered) ──────────────────────────
+// Public profile (other users, privacy-filtered)
 export type PublicProfile = Omit<
   BaseProfile,
-  "totalRevenue" // revenue is never public
+  "totalRevenue" | "paymentMethod" | "accountDetails"
 > & {
-  location?: ProfileLocation; // optional — depends on showLocation
+  location?: ProfileLocation;
 };
 
-// ─── API response wrappers ────────────────────────────────────────────────────
+// API response wrappers
 export interface ProfileApiResponse<T> {
   success: boolean;
   data: T;
-}
-
-export interface ProfileApiError {
-  error: string;
-  message?: string;
 }

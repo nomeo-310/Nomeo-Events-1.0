@@ -348,10 +348,10 @@ ProfileSchema.methods.getCompletionPercentage = function (this: IProfile): numbe
   if (this.profilePicture?.secure_url) completed++;
   if (this.coverPicture?.secure_url) completed++;
   if (this.fullName) completed++;
-  if (this.location?.address) completed++;
-  if (this.location?.city) completed++;
-  if (this.location?.state) completed++;
-  if (this.contact?.phoneNumber) completed++;
+  if (this.location?.address && this.location?.address !== 'Not provided') completed++;
+  if (this.location?.city && this.location?.city !== 'Not provided') completed++;
+  if (this.location?.state && this.location.state !== 'Not provided') completed++;
+  if (this.contact?.phoneNumber && this.contact?.phoneNumber !== 'Not provided') completed++;
   if (this.contact?.email) completed++;
   if (this.bio) completed++;
   if (this.specialties?.length) completed++;

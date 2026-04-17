@@ -1,35 +1,41 @@
-"use client"
+'use client';
 
-import { useGetNotifications } from "@/hooks/use-notification";
-import { useMyProfile } from "@/hooks/use-profile";
+import { NotificationPanel } from "./notification-panel";
+import { ProfileCard } from "./profile-card";
+import { StatsRow } from "./stats-row";
+import { UpcomingEvents } from "./upcoming-events";
 
-interface DashboardPageProps {
+
+export interface DashboardPageProps {
   user: {
-    id: string
-    name: string
-    email: string
-    emailVerified: boolean
-    role: string
-    avatar: string
-    createdAt: Date
-  }
+    id: string;
+    name: string;
+    email: string;
+    emailVerified: boolean;
+    role: string;
+    avatar: string;
+    createdAt: Date;
+  };
 }
 
-const DashboardPage = ({user}:DashboardPageProps) => {
-
-  const { data:profile } = useMyProfile();
-  const { data:notifications } = useGetNotifications();
-  console.log(user)
-
-
-  console.log(profile)
-  console.log(notifications);
-
+const DashboardPage = ({ user }: DashboardPageProps) => {
   return (
-    <div>
-      dashboard page
+    <div className="container mx-auto py-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-5">
+        {/* Left column */}
+        <div className="flex flex-col gap-6 md:gap-5">
+          <ProfileCard user={user} />
+          <StatsRow />
+          <UpcomingEvents />
+        </div>
+
+        {/* Right column — notifications */}
+        <div className="flex flex-col min-h-[600px] lg:min-h-0">
+          <NotificationPanel />
+        </div>
+      </div>
     </div>
-  )
-}
+  );
+};
 
 export default DashboardPage;
