@@ -1,5 +1,3 @@
-import { HugeiconsIconProps } from "@hugeicons/react";
-
 export interface EventType {
   name: string;
   icon: any;
@@ -20,6 +18,7 @@ export interface Stat {
 export interface BaseEvent {
   id: number;
   title: string;
+  shortDescription: string;
   description: string;
   date: string;
   time: string;

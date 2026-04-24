@@ -3,6 +3,9 @@
 import { useState, useEffect } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 interface ProfessionalTabProps {
   specialties: string[];
@@ -11,11 +14,11 @@ interface ProfessionalTabProps {
   onYearsChange: (years: number) => void;
 }
 
-export const ProfessionalTab = ({ 
-  specialties, 
-  yearsOfExperience, 
-  onSpecialtiesChange, 
-  onYearsChange 
+export const ProfessionalTab = ({
+  specialties,
+  yearsOfExperience,
+  onSpecialtiesChange,
+  onYearsChange,
 }: ProfessionalTabProps) => {
   const [newSpecialty, setNewSpecialty] = useState("");
   const [localSpecialties, setLocalSpecialties] = useState<string[]>(specialties || []);
@@ -26,21 +29,21 @@ export const ProfessionalTab = ({
 
   const handleAddSpecialty = () => {
     if (newSpecialty.trim()) {
-      const updatedSpecialties = [...localSpecialties, newSpecialty.trim()];
-      setLocalSpecialties(updatedSpecialties);
-      onSpecialtiesChange(updatedSpecialties);
+      const updated = [...localSpecialties, newSpecialty.trim()];
+      setLocalSpecialties(updated);
+      onSpecialtiesChange(updated);
       setNewSpecialty("");
     }
   };
 
   const handleRemoveSpecialty = (indexToRemove: number) => {
-    const updatedSpecialties = localSpecialties.filter((_, index) => index !== indexToRemove);
-    setLocalSpecialties(updatedSpecialties);
-    onSpecialtiesChange(updatedSpecialties);
+    const updated = localSpecialties.filter((_, i) => i !== indexToRemove);
+    setLocalSpecialties(updated);
+    onSpecialtiesChange(updated);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       e.preventDefault();
       handleAddSpecialty();
     }
@@ -48,41 +51,35 @@ export const ProfessionalTab = ({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Specialties
-        </label>
-        
+      <div className="space-y-1.5">
+        <Label>Specialties</Label>
+
         <div className="flex gap-2 mb-3">
-          <input
+          <Input
             type="text"
             value={newSpecialty}
             onChange={(e) => setNewSpecialty(e.target.value)}
             onKeyPress={handleKeyPress}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
             placeholder="e.g., Wedding Planning"
+            className="flex-1"
           />
-          <button
-            type="button"
-            onClick={handleAddSpecialty}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm"
-          >
+          <Button type="button" onClick={handleAddSpecialty} variant="default" className={'h-10 lg:h-11 rounded-lg px-6 bg-indigo-600 hover:bg-indigo-500'}>
             Add
-          </button>
+          </Button>
         </div>
-        
+
         {localSpecialties.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {localSpecialties.map((specialty, index) => (
               <div
                 key={index}
-                className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-sm"
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-violet-50 dark:bg-violet-950 text-violet-700 dark:text-violet-300 rounded-full text-sm border border-violet-200 dark:border-violet-800"
               >
                 <span>{specialty}</span>
                 <button
                   type="button"
                   onClick={() => handleRemoveSpecialty(index)}
-                  className="hover:text-indigo-900 ml-1"
+                  className="hover:text-violet-900 dark:hover:text-violet-100 ml-1"
                 >
                   <HugeiconsIcon icon={Cancel01Icon} className="w-3 h-3" />
                 </button>
@@ -90,23 +87,24 @@ export const ProfessionalTab = ({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-500">No specialties added yet. Add your first specialty above.</p>
+          <p className="text-sm text-muted-foreground">
+            No specialties added yet. Add your first specialty above.
+          </p>
         )}
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-muted-foreground mt-2">
           Add your areas of expertise one at a time. Press Enter or click Add to save each specialty.
         </p>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Years of Experience
-        </label>
-        <input
+      <div className="space-y-1.5">
+        <Label htmlFor="yearsOfExperience">Years of Experience</Label>
+        <Input
+          id="yearsOfExperience"
           type="number"
           value={yearsOfExperience || ""}
           onChange={(e) => onYearsChange(parseInt(e.target.value) || 0)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
           min="0"
+          className="max-w-[160px]"
         />
       </div>
     </div>

@@ -9,6 +9,7 @@ const webinars: WebinarEvent[] = [
   {
     id: 1,
     title: "Mastering Digital Marketing in 2026",
+    shortDescription: "Join us for an in-depth webinar on the latest digital marketing trends and strategies for 2026. Learn how to leverage AI, social media, and content marketing to grow your business online.",
     description: "Learn the latest strategies for social media, SEO, and content marketing from industry experts. This comprehensive webinar covers everything from AI-powered marketing tools to creating viral content that converts.",
     date: "May 15, 2026",
     time: "2:00 PM - 4:00 PM WAT",
@@ -27,6 +28,7 @@ const webinars: WebinarEvent[] = [
   {
     id: 2,
     title: "AI for Business Leaders",
+    shortDescription: "Discover how artificial intelligence is transforming business operations and decision-making. Learn practical AI applications that can streamline your workflow and boost productivity.",
     description: "Discover how artificial intelligence is transforming business operations and decision-making. Learn practical AI applications that can streamline your workflow and boost productivity.",
     date: "May 22, 2026",
     time: "11:00 AM - 1:00 PM WAT",
@@ -44,6 +46,7 @@ const webinars: WebinarEvent[] = [
   {
     id: 3,
     title: "Remote Work Best Practices",
+    shortDescription: "Tools and techniques for managing distributed teams effectively in 2026. From async communication to building remote culture, get actionable insights from companies that have mastered remote work.",
     description: "Tools and techniques for managing distributed teams effectively in 2026. From async communication to building remote culture, get actionable insights from companies that have mastered remote work.",
     date: "June 5, 2026",
     time: "3:00 PM - 4:30 PM WAT",
@@ -64,6 +67,7 @@ const seminars: InPersonEvent[] = [
   {
     id: 4,
     title: "Financial Planning Workshop",
+    shortDescription: "Learn how to manage your finances, invest wisely, and plan for retirement. This hands-on workshop includes personalized financial assessment and one-on-one consultation with certified financial advisors.",
     description: "Learn how to manage your finances, invest wisely, and plan for retirement. This hands-on workshop includes personalized financial assessment and one-on-one consultation with certified financial advisors.",
     date: "May 18, 2026",
     time: "10:00 AM - 3:00 PM WAT",
@@ -82,6 +86,7 @@ const seminars: InPersonEvent[] = [
   {
     id: 5,
     title: "Leadership Excellence Summit",
+    shortDescription: "Develop essential leadership skills for the modern workplace with hands-on workshops and networking opportunities with C-level executives from leading companies.",
     description: "Develop essential leadership skills for the modern workplace with hands-on workshops and networking opportunities with C-level executives from leading companies.",
     date: "May 25, 2026",
     time: "9:00 AM - 4:00 PM WAT",
@@ -99,6 +104,7 @@ const seminars: InPersonEvent[] = [
   {
     id: 6,
     title: "Career Transition Bootcamp",
+    shortDescription: "Practical strategies for pivoting to a new career path in tech or creative fields. Includes resume workshop, portfolio review, and mock interviews with industry professionals.",
     description: "Practical strategies for pivoting to a new career path in tech or creative fields. Includes resume workshop, portfolio review, and mock interviews with industry professionals.",
     date: "June 10, 2026",
     time: "10:00 AM - 2:00 PM WAT",
@@ -119,6 +125,7 @@ const entertainment: InPersonEvent[] = [
   {
     id: 7,
     title: "Afrobeats Summer Festival",
+    shortDescription: "Experience the best of Afrobeats with live performances from top artists including Burna Boy, Wizkid, Davido, and special guest appearances. Food, drinks, and an unforgettable atmosphere await!",
     description: "Experience the best of Afrobeats with live performances from top artists including Burna Boy, Wizkid, Davido, and special guest appearances. Food, drinks, and an unforgettable atmosphere await!",
     date: "June 20, 2026",
     time: "4:00 PM - 11:00 PM WAT",
@@ -137,6 +144,7 @@ const entertainment: InPersonEvent[] = [
   {
     id: 8,
     title: "Comedy Night Special",
+    shortDescription: "An evening of laughter with Nigeria's funniest comedians. Featuring Basketmouth, Bovi, Kenny Blaq, and emerging talents from the comedy scene.",
     description: "An evening of laughter with Nigeria's funniest comedians. Featuring Basketmouth, Bovi, Kenny Blaq, and emerging talents from the comedy scene.",
     date: "May 30, 2026",
     time: "7:00 PM - 10:00 PM WAT",
@@ -154,6 +162,7 @@ const entertainment: InPersonEvent[] = [
   {
     id: 9,
     title: "Jazz & Wine Evening",
+    shortDescription: "Smooth jazz performances paired with fine wines in an intimate setting. Featuring the Lagos Jazz Quartet and special guest vocalists. Wine tasting included.",
     description: "Smooth jazz performances paired with fine wines in an intimate setting. Featuring the Lagos Jazz Quartet and special guest vocalists. Wine tasting included.",
     date: "June 12, 2026",
     time: "6:00 PM - 9:00 PM WAT",

@@ -81,7 +81,7 @@ const isMenuItemActive = (path: string): boolean => {
 
           <div className="pt-14">
             <div className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-              <Breadcrumb pathname={pathname} isMenuItemActive={isMenuItemActive} menuItems={menuItems} />
+              <Breadcrumb pathname={pathname} menuItems={menuItems} />
 
               <AnimatePresence mode="wait">
                 <motion.div

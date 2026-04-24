@@ -6,9 +6,9 @@ import { Cancel01Icon, Camera02Icon } from "@hugeicons/core-free-icons";
 
 export const ImageGuidanceNote = () => {
   const [isVisible, setIsVisible] = useState(true);
-  
+
   if (!isVisible) return null;
-  
+
   return (
     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 relative">
       <button

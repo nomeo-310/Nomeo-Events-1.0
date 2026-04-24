@@ -1,5 +1,8 @@
 "use client";
 
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
 interface ContactTabProps {
   phoneNumber: string;
   email: string;
@@ -42,113 +45,113 @@ export const ContactTab = ({
   onCountryChange,
 }: ContactTabProps) => {
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Phone Number *
-          </label>
-          <input
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6">
+        {/* Phone Number */}
+        <div className="space-y-1.5">
+          <Label htmlFor="phone-number">Phone Number *</Label>
+          <Input
+            id="phone-number"
             type="tel"
             value={phoneNumber || ""}
             onChange={(e) => onPhoneChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
+            placeholder="+234 801 234 5678"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Email *
-          </label>
-          <input
+        {/* Email */}
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email *</Label>
+          <Input
+            id="email"
             type="email"
             value={email || ""}
             onChange={(e) => onEmailChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
+            placeholder="your@email.com"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Office Number
-          </label>
-          <input
+        {/* Office Number */}
+        <div className="space-y-1.5">
+          <Label htmlFor="office-number">Office Number</Label>
+          <Input
+            id="office-number"
             type="tel"
             value={officeNumber || ""}
             onChange={(e) => onOfficeNumberChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
+            placeholder="+234 809 876 5432"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Support Email
-          </label>
-          <input
+        {/* Support Email */}
+        <div className="space-y-1.5">
+          <Label htmlFor="support-email">Support Email</Label>
+          <Input
+            id="support-email"
             type="email"
             value={supportEmail || ""}
             onChange={(e) => onSupportEmailChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
+            placeholder="support@yourcompany.com"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Address *
-          </label>
-          <input
+        {/* Address */}
+        <div className="space-y-1.5">
+          <Label htmlFor="address">Address *</Label>
+          <Input
+            id="address"
             type="text"
             value={address || ""}
             onChange={(e) => onAddressChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
+            placeholder="123 Business Street"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            City *
-          </label>
-          <input
+        {/* City */}
+        <div className="space-y-1.5">
+          <Label htmlFor="city">City *</Label>
+          <Input
+            id="city"
             type="text"
             value={city || ""}
             onChange={(e) => onCityChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
+            placeholder="Lagos"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            State *
-          </label>
-          <input
+        {/* State */}
+        <div className="space-y-1.5">
+          <Label htmlFor="state">State *</Label>
+          <Input
+            id="state"
             type="text"
             value={state || ""}
             onChange={(e) => onStateChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
+            placeholder="Lagos State"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Postal Code
-          </label>
-          <input
+        {/* Postal Code */}
+        <div className="space-y-1.5">
+          <Label htmlFor="postal-code">Postal Code</Label>
+          <Input
+            id="postal-code"
             type="text"
             value={postalCode || ""}
             onChange={(e) => onPostalCodeChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
+            placeholder="100001"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Country
-          </label>
-          <input
+        {/* Country */}
+        <div className="space-y-1.5">
+          <Label htmlFor="country">Country</Label>
+          <Input
+            id="country"
             type="text"
             value={country || "Nigeria"}
             onChange={(e) => onCountryChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
+            placeholder="Nigeria"
           />
         </div>
       </div>

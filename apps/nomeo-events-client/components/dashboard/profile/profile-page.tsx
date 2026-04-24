@@ -230,21 +230,21 @@ const ProfilePage = () => {
   if (profileLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <HugeiconsIcon icon={Loading03Icon} className="w-8 h-8 animate-spin text-indigo-600" />
+        <HugeiconsIcon icon={Loading03Icon} className="w-8 h-8 animate-spin text-violet-600" />
       </div>
     );
   }
 
   if (!profile) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen px-4">
+      <div className="flex flex-col items-center justify-center min-h-screen px-4 bg-background">
         <div className="text-center">
           <HugeiconsIcon icon={AlertCircleIcon} className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 mb-2">No Profile Found</h2>
-          <p className="text-gray-600 mb-4 text-sm sm:text-base">Please complete your registration to set up your profile.</p>
+          <h2 className="text-xl sm:text-2xl font-semibold text-foreground mb-2">No Profile Found</h2>
+          <p className="text-muted-foreground mb-4 text-sm sm:text-base">Please complete your registration to set up your profile.</p>
           <button
             onClick={() => router.push("/profile/setup")}
-            className="px-4 sm:px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm sm:text-base"
+            className="px-4 sm:px-6 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition text-sm sm:text-base"
           >
             Complete Registration
           </button>
@@ -389,7 +389,7 @@ const ProfilePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-16 md:pb-0">
+    <div className="min-h-screen pb-16 md:pb-0">
       <div className="w-full pt-4">
         <ImageGuidanceNote />
       </div>
@@ -403,7 +403,7 @@ const ProfilePage = () => {
 
       <div className="w-full">
         <div className="relative">
-          <div className="absolute -translate-y-1/2 left-0 md:left-4 z-20">
+          <div className="absolute -translate-y-1/2 left-0 md:left-10 z-20">
             <ProfileImageUpload
               currentImage={avatar}
               onImageUpload={(file) => handleImageUpload(file, "profile")}
@@ -416,23 +416,23 @@ const ProfilePage = () => {
       </div>
 
       <div className="w-full pt-16 sm:pt-20 pb-8 sm:pb-12">
-        <div className="bg-white rounded-xl border p-4 sm:p-6 mb-4 sm:mb-6 mt-6 sm:mt-8">
+        <div className="bg-background rounded-xl border border-border p-4 sm:p-6 mb-4 sm:mb-6 mt-6 sm:mt-8">
           <div className="flex flex-col md:flex-row justify-between items-start gap-4">
             <div className="w-full md:w-auto">
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">{name}</h1>
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">{name}</h1>
                 {isVerified ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 text-xs font-medium rounded-full">
                     <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3 h-3" />
                     Verified
                   </span>
                 ) : verificationPending ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 text-xs font-medium rounded-full">
                     <HugeiconsIcon icon={AlertCircleIcon} className="w-3 h-3" />
                     Pending
                   </span>
                 ) : verificationRejected ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded-full">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 text-xs font-medium rounded-full">
                     <HugeiconsIcon icon={CancelCircleIcon} className="w-3 h-3" />
                     Rejected
                   </span>
@@ -442,19 +442,19 @@ const ProfilePage = () => {
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${
                   profile.accountType === "organization" 
-                    ? "bg-purple-100 text-purple-700" 
-                    : "bg-indigo-100 text-indigo-700"
+                    ? "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-200" 
+                    : "bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-200"
                 }`}>
                   {profile.accountType === "organization" ? "Organization" : "Individual"}
                 </span>
                 {profile.organizationType && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-foreground">
                     {profile.organizationType}
                   </span>
                 )}
               </div>
               
-              <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-gray-600">
+              <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-muted-foreground">
                 <HugeiconsIcon icon={Globe02Icon} className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                 {slugEditMode ? (
                   <div className="flex flex-wrap items-center gap-2">
@@ -462,12 +462,12 @@ const ProfilePage = () => {
                       type="text"
                       value={newSlug}
                       onChange={(e) => setNewSlug(e.target.value)}
-                      className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                      className="px-2 py-1 border border-border rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500 bg-background text-foreground"
                       placeholder="your-profile-slug"
                     />
                     <button
                       onClick={handleSlugUpdate}
-                      className="text-green-600 hover:text-green-700 text-xs"
+                      className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 text-xs"
                     >
                       Save
                     </button>
@@ -476,7 +476,7 @@ const ProfilePage = () => {
                         setSlugEditMode(false);
                         setNewSlug(profile.publicProfile?.slug || "");
                       }}
-                      className="text-gray-500 hover:text-gray-700 text-xs"
+                      className="text-muted-foreground hover:text-foreground text-xs"
                     >
                       Cancel
                     </button>
@@ -486,7 +486,7 @@ const ProfilePage = () => {
                     <span className="break-all">yourdomain.com/@{profile.publicProfile?.slug || "not-set"}</span>
                     <button
                       onClick={() => setSlugEditMode(true)}
-                      className="text-indigo-600 hover:text-indigo-700 text-xs flex-shrink-0"
+                      className="text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 text-xs flex-shrink-0"
                     >
                       Edit
                     </button>
@@ -494,27 +494,27 @@ const ProfilePage = () => {
                 )}
               </div>
 
-              <div className="flex flex-wrap gap-3 sm:gap-4 mt-3 text-xs sm:text-sm">
-                <div className="flex items-center gap-1 text-gray-600">
+              <div className="flex flex-wrap gap-3 sm:gap-4 mt-3 text-xs sm:text-sm text-muted-foreground">
+                <div className="flex items-center gap-1">
                   <HugeiconsIcon icon={Calendar03Icon} className="w-3 h-3 sm:w-4 sm:h-4" />
                   <span>{profile.totalEvents || 0} Events</span>
                 </div>
-                <div className="flex items-center gap-1 text-gray-600">
+                <div className="flex items-center gap-1">
                   <HugeiconsIcon icon={UserGroup03Icon} className="w-3 h-3 sm:w-4 sm:h-4" />
                   <span>{profile.totalAttendees || 0} Attendees</span>
                 </div>
-                <div className="flex items-center gap-1 text-gray-600">
+                <div className="flex items-center gap-1">
                   <HugeiconsIcon icon={StarIcon} className="w-3 h-3 sm:w-4 sm:h-4" />
                   <span>{profile.averageRating?.toFixed(1) || 0} ★ ({profile.totalReviews || 0})</span>
                 </div>
               </div>
             </div>
 
-            <div className="bg-indigo-50 rounded-lg p-3 sm:p-4 text-center w-full md:w-auto min-w-[120px] sm:min-w-[150px]">
-              <div className="text-xl sm:text-2xl font-bold text-indigo-600">{completionPercentage}%</div>
-              <div className="text-xs text-gray-600">Profile Complete</div>
+            <div className="bg-violet-50 dark:bg-violet-950 rounded-lg p-3 sm:p-4 text-center w-full md:w-auto min-w-[120px] sm:min-w-[150px]">
+              <div className="text-xl sm:text-2xl font-bold text-violet-600 dark:text-violet-400">{completionPercentage}%</div>
+              <div className="text-xs text-muted-foreground">Profile Complete</div>
               {incompleteItems.length > 0 && (
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-muted-foreground mt-1">
                   {incompleteItems.length} items remaining
                 </div>
               )}
@@ -524,8 +524,8 @@ const ProfilePage = () => {
 
         {/* Desktop View */}
         <div className="hidden md:block">
-          <div className="bg-white rounded-xl border overflow-hidden">
-            <div className="border-b border-gray-200 overflow-x-auto">
+          <div className="bg-background rounded-xl border border-border overflow-hidden">
+            <div className="border-b border-border overflow-x-auto">
               <nav className="flex px-4 gap-1">
                 {TABS.map((tab) => (
                   <button
@@ -534,8 +534,8 @@ const ProfilePage = () => {
                     className={`
                       flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all relative whitespace-nowrap
                       ${activeTab === tab.id
-                        ? "text-indigo-600 border-b-2 border-indigo-600"
-                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                        ? "text-violet-600 dark:text-violet-400 border-b-2 border-violet-600 dark:border-violet-400"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
                       }
                     `}
                   >
@@ -548,17 +548,17 @@ const ProfilePage = () => {
             <div className="p-6">
               {renderTabContent(activeTab)}
               
-              <div className="flex justify-end gap-4 mt-8 pt-6 border-t border-gray-200">
+              <div className="flex justify-end gap-4 mt-8 pt-6 border-t border-border">
                 <button
                   onClick={handleCancel}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition text-sm"
+                  className="px-4 py-2 text-foreground bg-muted rounded-lg hover:bg-muted/80 transition text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={updateProfile.isPending}
-                  className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                  className="px-6 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
                 >
                   {updateProfile.isPending ? (
                     <>
@@ -579,7 +579,7 @@ const ProfilePage = () => {
 
         {/* Mobile View */}
         <div className="md:hidden w-full">
-          <div className="bg-white rounded-xl border overflow-hidden">
+          <div className="bg-background rounded-xl border border-border overflow-hidden">
             {TABS.map((tab) => (
               <MobileAccordion
                 key={tab.id}
@@ -591,17 +591,17 @@ const ProfilePage = () => {
               </MobileAccordion>
             ))}
             
-            <div className="flex justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex justify-end gap-3 p-4 border-t border-border">
               <button
                 onClick={handleCancel}
-                className="px-3 py-1.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm"
+                className="px-3 py-1.5 text-foreground bg-background border border-border rounded-lg hover:bg-muted transition text-sm"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={updateProfile.isPending}
-                className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                className="px-4 py-1.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
               >
                 {updateProfile.isPending ? (
                   <>

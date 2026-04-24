@@ -102,6 +102,14 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
+      if (profile && profile.profilePicture?.secure_url) {
+        await User.findByIdAndUpdate(
+        profile.userId,
+        { image: profile.profilePicture.secure_url, avatar: profile.profilePicture.secure_url },
+        { new: true }
+      );
+    }
+
     const completionPercentage = profile.getCompletionPercentage();
     const fullAddress = profile.getFullAddress();
     const profileObj = profile.toObject({ virtuals: true });

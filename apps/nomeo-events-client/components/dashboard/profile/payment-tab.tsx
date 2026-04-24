@@ -1,6 +1,8 @@
 "use client";
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface PaymentTabProps {
   paymentMethod: string;
@@ -39,128 +41,44 @@ export const PaymentTab = ({
   onSwiftCodeChange,
   onCurrencyChange,
 }: PaymentTabProps) => {
-  const handlePaymentMethodChange = (value: string | null) => {
-    if (value) {
-      onPaymentMethodChange(value);
-    }
-  };
-
-  const handleCurrencyChange = (value: string | null) => {
-    if (value) {
-      onCurrencyChange(value);
-    }
-  };
-
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 sm:p-4">
-        <p className="text-xs sm:text-sm text-yellow-800">
+    <div className="space-y-6">
+      {/* Warning Box */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <p className="text-sm text-yellow-800">
           Payment details are required for receiving payouts from events.
         </p>
       </div>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Payment Method
-        </label>
-        <Select
-          value={paymentMethod || "manual"}
-          onValueChange={handlePaymentMethodChange}
-        >
-          <SelectTrigger className="w-full h-10 lg:h-11">
-            <SelectValue placeholder="Select payment method" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="manual">Manual</SelectItem>
-            <SelectItem value="online">Online</SelectItem>
-            <SelectItem value="transfer">Transfer</SelectItem>
-            <SelectItem value="auto">Auto</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Bank Name
-          </label>
-          <input
-            type="text"
-            value={bankName || ""}
-            onChange={(e) => onBankNameChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
-          />
+      {/* Payment Method & Currency - Side by side on md and above */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Payment Method */}
+        <div className="space-y-1.5">
+          <Label htmlFor="payment-method">Payment Method</Label>
+          <Select
+            value={paymentMethod || "manual"}
+            onValueChange={(value) => onPaymentMethodChange(value || "manual")}
+          >
+            <SelectTrigger id="payment-method" className="h-11 w-full">
+              <SelectValue placeholder="Select payment method" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="manual">Manual</SelectItem>
+              <SelectItem value="online">Online</SelectItem>
+              <SelectItem value="transfer">Transfer</SelectItem>
+              <SelectItem value="auto">Auto</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Account Name
-          </label>
-          <input
-            type="text"
-            value={accountName || ""}
-            onChange={(e) => onAccountNameChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Account Number
-          </label>
-          <input
-            type="text"
-            value={accountNumber || ""}
-            onChange={(e) => onAccountNumberChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Bank Code
-          </label>
-          <input
-            type="text"
-            value={bankCode || ""}
-            onChange={(e) => onBankCodeChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Routing Number
-          </label>
-          <input
-            type="text"
-            value={routingNumber || ""}
-            onChange={(e) => onRoutingNumberChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            SWIFT Code
-          </label>
-          <input
-            type="text"
-            value={swiftCode || ""}
-            onChange={(e) => onSwiftCodeChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Currency
-          </label>
+        {/* Currency */}
+        <div className="space-y-1.5">
+          <Label htmlFor="currency">Currency</Label>
           <Select
             value={currency || "NGN"}
-            onValueChange={handleCurrencyChange}
+            onValueChange={(value) => onCurrencyChange(value || "NGN")}
           >
-            <SelectTrigger className="w-full h-10 lg:h-11">
+            <SelectTrigger id="currency" className="h-11 w-full">
               <SelectValue placeholder="Select currency" />
             </SelectTrigger>
             <SelectContent>
@@ -170,6 +88,77 @@ export const PaymentTab = ({
               <SelectItem value="GBP">British Pound (GBP)</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+      </div>
+
+      {/* Other Bank Fields - Full width on all screens */}
+      <div className="grid grid-cols-1 gap-6">
+        <div className="space-y-1.5">
+          <Label htmlFor="bank-name">Bank Name</Label>
+          <Input
+            id="bank-name"
+            type="text"
+            value={bankName || ""}
+            onChange={(e) => onBankNameChange(e.target.value)}
+            placeholder="e.g. GTBank, Zenith Bank"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="account-name">Account Name</Label>
+          <Input
+            id="account-name"
+            type="text"
+            value={accountName || ""}
+            onChange={(e) => onAccountNameChange(e.target.value)}
+            placeholder="Account holder full name"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="account-number">Account Number</Label>
+          <Input
+            id="account-number"
+            type="text"
+            value={accountNumber || ""}
+            onChange={(e) => onAccountNumberChange(e.target.value)}
+            placeholder="0123456789"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="space-y-1.5">
+            <Label htmlFor="bank-code">Bank Code</Label>
+            <Input
+              id="bank-code"
+              type="text"
+              value={bankCode || ""}
+              onChange={(e) => onBankCodeChange(e.target.value)}
+              placeholder="e.g. 058"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="routing-number">Routing Number</Label>
+            <Input
+              id="routing-number"
+              type="text"
+              value={routingNumber || ""}
+              onChange={(e) => onRoutingNumberChange(e.target.value)}
+              placeholder="Routing number (if applicable)"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="swift-code">SWIFT Code</Label>
+          <Input
+            id="swift-code"
+            type="text"
+            value={swiftCode || ""}
+            onChange={(e) => onSwiftCodeChange(e.target.value)}
+            placeholder="e.g. GTBINGLA"
+          />
         </div>
       </div>
     </div>

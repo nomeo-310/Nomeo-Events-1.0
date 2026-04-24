@@ -1,7 +1,19 @@
 "use client";
 
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Globe02Icon, Facebook02Icon, InstagramIcon, NewTwitterIcon, Linkedin02Icon, YoutubeIcon, TiktokIcon, ThreadsIcon, WhatsappIcon } from "@hugeicons/core-free-icons";
+import { 
+  Globe02Icon, 
+  Facebook02Icon, 
+  InstagramIcon, 
+  NewTwitterIcon, 
+  Linkedin02Icon, 
+  YoutubeIcon, 
+  TiktokIcon, 
+  ThreadsIcon, 
+  WhatsappIcon 
+} from "@hugeicons/core-free-icons";
 
 interface SocialTabProps {
   website: string;
@@ -45,133 +57,144 @@ export const SocialTab = ({
   onWhatsAppChange,
 }: SocialTabProps) => {
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 inline mr-2" />
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6">
+        
+        {/* Website */}
+        <div className="space-y-1.5">
+          <Label htmlFor="website" className="flex items-center gap-2">
+            <HugeiconsIcon icon={Globe02Icon} className="w-4 h-4 text-muted-foreground" />
             Website
-          </label>
-          <input
+          </Label>
+          <Input
+            id="website"
             type="url"
             value={website || ""}
             onChange={(e) => onWebsiteChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
             placeholder="https://your-website.com"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <HugeiconsIcon icon={Facebook02Icon} className="w-4 h-4 inline mr-2" />
+        {/* Facebook */}
+        <div className="space-y-1.5">
+          <Label htmlFor="facebook" className="flex items-center gap-2">
+            <HugeiconsIcon icon={Facebook02Icon} className="w-4 h-4 text-muted-foreground" />
             Facebook
-          </label>
-          <input
+          </Label>
+          <Input
+            id="facebook"
             type="url"
             value={facebook || ""}
             onChange={(e) => onFacebookChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
             placeholder="https://facebook.com/username"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <HugeiconsIcon icon={InstagramIcon} className="w-4 h-4 inline mr-2" />
+        {/* Instagram */}
+        <div className="space-y-1.5">
+          <Label htmlFor="instagram" className="flex items-center gap-2">
+            <HugeiconsIcon icon={InstagramIcon} className="w-4 h-4 text-muted-foreground" />
             Instagram
-          </label>
-          <input
+          </Label>
+          <Input
+            id="instagram"
             type="url"
             value={instagram || ""}
             onChange={(e) => onInstagramChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
             placeholder="https://instagram.com/username"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <HugeiconsIcon icon={NewTwitterIcon} className="w-4 h-4 inline mr-2" />
+        {/* X (Twitter) */}
+        <div className="space-y-1.5">
+          <Label htmlFor="twitter" className="flex items-center gap-2">
+            <HugeiconsIcon icon={NewTwitterIcon} className="w-4 h-4 text-muted-foreground" />
             X (Twitter)
-          </label>
-          <input
+          </Label>
+          <Input
+            id="twitter"
             type="url"
             value={twitter || ""}
             onChange={(e) => onTwitterChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
             placeholder="https://twitter.com/username"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <HugeiconsIcon icon={Linkedin02Icon} className="w-4 h-4 inline mr-2" />
+        {/* LinkedIn */}
+        <div className="space-y-1.5">
+          <Label htmlFor="linkedin" className="flex items-center gap-2">
+            <HugeiconsIcon icon={Linkedin02Icon} className="w-4 h-4 text-muted-foreground" />
             LinkedIn
-          </label>
-          <input
+          </Label>
+          <Input
+            id="linkedin"
             type="url"
             value={linkedin || ""}
             onChange={(e) => onLinkedinChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
             placeholder="https://linkedin.com/in/username"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <HugeiconsIcon icon={YoutubeIcon} className="w-4 h-4 inline mr-2" />
+        {/* YouTube */}
+        <div className="space-y-1.5">
+          <Label htmlFor="youtube" className="flex items-center gap-2">
+            <HugeiconsIcon icon={YoutubeIcon} className="w-4 h-4 text-muted-foreground" />
             YouTube
-          </label>
-          <input
+          </Label>
+          <Input
+            id="youtube"
             type="url"
             value={youtube || ""}
             onChange={(e) => onYoutubeChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
             placeholder="https://youtube.com/@username"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <HugeiconsIcon icon={TiktokIcon} className="w-4 h-4 inline mr-2" />
+        {/* TikTok */}
+        <div className="space-y-1.5">
+          <Label htmlFor="tiktok" className="flex items-center gap-2">
+            <HugeiconsIcon icon={TiktokIcon} className="w-4 h-4 text-muted-foreground" />
             TikTok
-          </label>
-          <input
+          </Label>
+          <Input
+            id="tiktok"
             type="url"
             value={tiktok || ""}
             onChange={(e) => onTiktokChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
             placeholder="https://tiktok.com/@username"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <HugeiconsIcon icon={ThreadsIcon} className="w-4 h-4 inline mr-2" />
+        {/* Threads */}
+        <div className="space-y-1.5">
+          <Label htmlFor="threads" className="flex items-center gap-2">
+            <HugeiconsIcon icon={ThreadsIcon} className="w-4 h-4 text-muted-foreground" />
             Threads
-          </label>
-          <input
+          </Label>
+          <Input
+            id="threads"
             type="url"
             value={threads || ""}
             onChange={(e) => onThreadsChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
             placeholder="https://threads.net/@username"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <HugeiconsIcon icon={WhatsappIcon} className="w-4 h-4 inline mr-2" />
+        {/* WhatsApp */}
+        <div className="space-y-1.5">
+          <Label htmlFor="whatsapp" className="flex items-center gap-2">
+            <HugeiconsIcon icon={WhatsappIcon} className="w-4 h-4 text-muted-foreground" />
             WhatsApp
-          </label>
-          <input
+          </Label>
+          <Input
+            id="whatsapp"
             type="url"
             value={whatsApp || ""}
             onChange={(e) => onWhatsAppChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
             placeholder="https://wa.me/1234567890"
           />
         </div>
+
       </div>
     </div>
   );

@@ -1,5 +1,9 @@
 "use client";
 
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+
 interface BasicInfoTabProps {
   fullName: string;
   displayName: string;
@@ -24,60 +28,52 @@ export const BasicInfoTab = ({
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Full Name *
-          </label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="fullName">Full Name *</Label>
+          <Input
+            id="fullName"
             type="text"
             value={fullName || ""}
             onChange={(e) => onFullNameChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Display Name
-          </label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="displayName">Display Name</Label>
+          <Input
+            id="displayName"
             type="text"
             value={displayName || ""}
             onChange={(e) => onDisplayNameChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
             placeholder="How you want to be seen publicly"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Bio
-          </label>
-          <textarea
+        <div className="space-y-1.5">
+          <Label htmlFor="bio">Bio</Label>
+          <Textarea
+            id="bio"
             rows={4}
             value={bio || ""}
             onChange={(e) => onBioChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
             placeholder="Tell the world about yourself..."
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-muted-foreground">
             {bio?.length || 0}/500 characters
           </p>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Short Bio
-          </label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="shortBio">Short Bio</Label>
+          <Input
+            id="shortBio"
             type="text"
             value={shortBio || ""}
             onChange={(e) => onShortBioChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base"
             placeholder="A short tagline or one-liner"
             maxLength={100}
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-muted-foreground">
             {shortBio?.length || 0}/100 characters
           </p>
         </div>

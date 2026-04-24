@@ -4,21 +4,19 @@ import { useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Home01Icon,
-  UserGroup03Icon as SeminarIcon,
-  Video01Icon,
+import { UserGroup03Icon as SeminarIcon,
   LibraryIcon as AboutIcon,
   DashboardSquare01Icon as DashboardSquareIcon,
   Login01Icon as LoginIcon,
-  MusicNote03Icon,
   Menu02Icon,
+  CompassIcon,
+  CreditCardPosIcon,
 } from "@hugeicons/core-free-icons";
 import { useModal } from "@/hooks/use-modal";
 import { useScrollBehavior } from "@/hooks/use-scroll-behaviour";
 import { useNavigationState } from "@/hooks/use-navigation-state";
 import { authClient } from "@/lib/auth-client";
-import { NavItem, NotificationItem } from "@/types/navigation-type";
+import { NavItem } from "@/types/navigation-type";
 import { AuthWrapper } from "@/components/root/auth/auth-wrapper";
 import Logo from "./logo";
 import DesktopNavLink from "./desktop-navlink";
@@ -49,10 +47,9 @@ const Navigation = () => {
   const initials = userName.split(" ").map((n: string) => n[0] ?? "").join("").toUpperCase().slice(0, 2);
 
   const navItems: NavItem[] = [
-    { name: "Discover", href: "/", icon: Home01Icon },
-    { name: "Seminars", href: "/seminars", icon: SeminarIcon },
-    { name: "Webinars", href: "/webinars", icon: Video01Icon },
-    { name: "Entertainment", href: "/entertainment", icon: MusicNote03Icon },
+    { name: "Discover", href: "/", icon: CompassIcon},
+    { name: "Events", href: "/events", icon: SeminarIcon },
+    { name: "Pricing", href: "/pricing", icon: CreditCardPosIcon },
     { name: "About", href: "/about", icon: AboutIcon },
   ];
 

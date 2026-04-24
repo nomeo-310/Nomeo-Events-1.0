@@ -145,7 +145,7 @@ const ProfileSchema = new Schema<IProfile, IProfileModel>(
   {
     userId: { 
       type: Schema.Types.ObjectId, 
-      ref: "user", 
+      ref: "User", 
       required: true, 
       unique: true,
       index: true 
@@ -293,12 +293,13 @@ ProfileSchema.index({ "contact.email": 1 });
 ProfileSchema.index({ activeStatus: 1 });
 ProfileSchema.index({ verificationStatus: 1 });
 ProfileSchema.index({ accountType: 1 });
+ProfileSchema.index({ "publicProfile.slug": 1 });
 ProfileSchema.index({ createdAt: -1 });
 
-// ====================== PRE-SAVE MIDDLEWARE (FIXED) ======================
+// ====================== PRE-SAVE MIDDLEWARE (Improved Slug Logic) ======================
 ProfileSchema.pre("save", async function (this: IProfile) {
   try {
-    // Initialize publicProfile if it doesn't exist
+    // Initialize publicProfile object if it doesn't exist
     if (!this.publicProfile) {
       this.publicProfile = {
         slug: "",
@@ -310,8 +311,8 @@ ProfileSchema.pre("save", async function (this: IProfile) {
       };
     }
 
-    // Generate unique slug
-    if (!this.publicProfile.slug && this.fullName) {
+    // Generate slug for new documents or when slug is missing
+    if (this.fullName && (!this.publicProfile.slug || this.isNew)) {
       let baseSlug = this.fullName
         .toLowerCase()
         .trim()
@@ -322,11 +323,19 @@ ProfileSchema.pre("save", async function (this: IProfile) {
 
       let slug = baseSlug;
       let counter = 1;
+      const maxAttempts = 30;
 
-      // Check for existing slug
+      // Keep checking until we find a unique slug
       while (await models.Profile?.exists({ "publicProfile.slug": slug })) {
         slug = `${baseSlug}-${counter}`;
         counter++;
+
+        // Fallback with random identifier if too many collisions
+        if (counter > maxAttempts) {
+          const randomSuffix = Math.floor(100000 + Math.random() * 900000);
+          slug = `${baseSlug}-${randomSuffix}`;
+          break;
+        }
       }
 
       this.publicProfile.slug = slug;
@@ -334,9 +343,10 @@ ProfileSchema.pre("save", async function (this: IProfile) {
 
     // Update last active timestamp
     this.lastActiveAt = new Date();
-    
+
   } catch (error: any) {
-    throw error; // Mongoose will handle this as a middleware error
+    console.error("Profile pre-save error:", error);
+    throw error;
   }
 });
 
@@ -348,17 +358,18 @@ ProfileSchema.methods.getCompletionPercentage = function (this: IProfile): numbe
   if (this.profilePicture?.secure_url) completed++;
   if (this.coverPicture?.secure_url) completed++;
   if (this.fullName) completed++;
-  if (this.location?.address && this.location?.address !== 'Not provided') completed++;
-  if (this.location?.city && this.location?.city !== 'Not provided') completed++;
-  if (this.location?.state && this.location.state !== 'Not provided') completed++;
-  if (this.contact?.phoneNumber && this.contact?.phoneNumber !== 'Not provided') completed++;
+  if (this.location?.address) completed++;
+  if (this.location?.city) completed++;
+  if (this.location?.state) completed++;
+  if (this.contact?.phoneNumber) completed++;
   if (this.contact?.email) completed++;
   if (this.bio) completed++;
   if (this.specialties?.length) completed++;
   if (this.accountDetails?.accountNumber) completed++;
   if (this.publicProfile?.slug) completed++;
   if (this.verificationStatus === "verified") completed++;
-  if (this.contact?.socialMedia?.twitter || this.contact?.socialMedia?.instagram) completed++;
+  if (this.contact?.socialMedia && 
+      (this.contact.socialMedia.twitter || this.contact.socialMedia.instagram)) completed++;
   if (this.contact?.website) completed++;
 
   return Math.floor((completed / total) * 100);
@@ -366,14 +377,14 @@ ProfileSchema.methods.getCompletionPercentage = function (this: IProfile): numbe
 
 ProfileSchema.methods.getFullAddress = function (this: IProfile): string {
   const loc = this.location || {};
-  return `${loc.address}, ${loc.city}, ${loc.state}, ${loc.country || "Nigeria"}`;
+  return `${loc.address || ''}, ${loc.city || ''}, ${loc.state || ''}, ${loc.country || "Nigeria"}`.replace(/, ,/g, ',');
 };
 
-ProfileSchema.methods.incrementProfileViews = async function (this: IProfile, viewerId?: Types.ObjectId | string ): Promise<void> {
-  
-  if (viewerId && this.userId.toString() === viewerId.toString()) {
-    return;
-  }
+ProfileSchema.methods.incrementProfileViews = async function (
+  this: IProfile, 
+  viewerId?: string
+): Promise<void> {
+  if (viewerId && this.userId.toString() === viewerId.toString()) return;
 
   if (!this.analytics) {
     this.analytics = {
@@ -386,7 +397,6 @@ ProfileSchema.methods.incrementProfileViews = async function (this: IProfile, vi
 
   this.analytics.profileViews += 1;
   this.analytics.lastAnalyticsUpdate = new Date();
-
   await this.save();
 };
 
