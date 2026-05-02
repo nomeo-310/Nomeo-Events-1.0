@@ -22,14 +22,14 @@ const BrandColumn = ({ onContactClick }: BrandColumnProps) => {
           className="flex items-center space-x-2 text-sm text-gray-400 hover:text-indigo-400 transition-colors"
         >
           <HugeiconsIcon icon={Mail01Icon} size={16} />
-          <span>hello@nomeoevents.com</span>
+          <span>support@nomeoevents.com</span>
         </a>
         <a
           href="tel:+1234567890"
           className="flex items-center space-x-2 text-sm text-gray-400 hover:text-indigo-400 transition-colors"
         >
           <HugeiconsIcon icon={TelephoneIcon} size={16} />
-          <span>+1 (234) 567-890</span>
+          <span>+2347037575894</span>
         </a>
       </div>
 

@@ -29,7 +29,15 @@ export interface VerificationStatus {
   isVerified: boolean;
   isPending: boolean;
   isRejected: boolean;
+  isUnverified: boolean;
   isLoading: boolean;
+}
+
+// Types for verification request - matches the schema's verificationDocuments array
+export interface VerificationDocument {
+  documentType: "id_card" | "passport" | "drivers_license" | "voters_card" | "proof_of_address" | "cac_document";
+  secure_url: string;
+  public_id: string;
 }
 
 // Query Keys
@@ -71,15 +79,14 @@ const profileApi = {
     return data.data;
   },
 
-  requestVerification: async (): Promise<{ status: string }> => {
-    const { data } = await axios.post('/api/user/profile/verify/request');
+  requestVerification: async (documents: VerificationDocument[]): Promise<{ status: string }> => {
+    const { data } = await axios.post('/api/user/profile/verify/request', { documents });
     if (!data.success) throw new Error(data.error || 'Failed to request verification');
     return data.data;
   },
 };
 
-// Hooks
-
+// Hooks remain the same as before...
 export function useMyProfile() {
   return useQuery({
     queryKey: profileKeys.me(),
@@ -152,13 +159,14 @@ export function useRequestVerification() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => profileApi.requestVerification(),
+    mutationFn: (documents: VerificationDocument[]) => 
+      profileApi.requestVerification(documents),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: profileKeys.me() });
-      toast.success('Verification request submitted');
+      toast.success('Verification request submitted successfully! Our team will review your documents.');
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to submit request');
+      toast.error(error.response?.data?.error || 'Failed to submit verification request');
     },
   });
 }
@@ -222,6 +230,7 @@ export function useProfileVerificationStatus(): VerificationStatus {
   
   return {
     status: status as VerificationStatus['status'],
+    isUnverified: status === 'unverified',
     isVerified: status === 'verified',
     isPending: status === 'pending',
     isRejected: status === 'rejected',

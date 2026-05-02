@@ -1,18 +1,20 @@
+// data/footer-links.ts
 import { FooterLinksData } from "@/types/footer-type";
 
 export const footerLinks: FooterLinksData = {
   platform: [
     { name: "Discover Events", href: "/" },
-    { name: "Seminars", href: "/seminars" },
-    { name: "Webinars", href: "/webinars" },
-    { name: "Entertainment", href: "/entertainment" },
+    { name: "Events", href: "/events" },
+    { name: "Pricing", href: "/pricing" },
+    { name: "About", href: "/about" },
+    { name: "Contact", href: "/about#contact" },
   ],
   resources: [
-    { name: "How It Works", href: "/how-it-works" },
-    { name: "Pricing", href: "/pricing" },
-    { name: "Help Center", href: "/help" },
-    { name: "Blog", href: "/blog" },
-    { name: "Community", href: "/community" },
+    { name: "How It Works", href: "/about#how-it-works" },
+    { name: "FAQs", href: "/about#faq" },
+    { name: "Help Center", href: "/help-center" },
+    { name: "Community", href: "/help-center#community" },
+    { name: "Ticket Support", href: "/help-center#ticket" },
   ],
   legal: [
     { name: "Privacy Policy", href: "/privacy", isModal: true },

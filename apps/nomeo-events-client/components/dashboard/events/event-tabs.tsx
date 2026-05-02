@@ -87,7 +87,7 @@ export function EventTabs({basePath = "/dashboard/events", showBackButton = true
           <div className="flex-shrink-0 pr-6">
             <button
               onClick={handleBackClick}
-              className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors duration-200 py-3 px-2 rounded-lg hover:bg-muted focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors duration-200 py-3 px-2 rounded-lg hover:bg-background focus:outline-none focus:ring-2 focus:ring-violet-500"
               aria-label="Go back"
             >
               <HugeiconsIcon icon={ArrowLeft02Icon} className="w-4 h-4" />

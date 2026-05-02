@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useMyProfile, useUpdateProfile, useUpdateProfileSlug, useRequestVerification, useProfileCompletion, useProfileHeader, useProfileVerificationStatus } from "@/hooks/use-profile";
+import { useMyProfile, useUpdateProfile, useUpdateProfileSlug, useProfileCompletion, useProfileHeader, useProfileVerificationStatus } from "@/hooks/use-profile";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { StarIcon, UserGroup03Icon, SaveIcon, CheckmarkCircle02Icon, CancelCircleIcon, AlertCircleIcon, Globe02Icon, Calendar03Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { BaseProfile } from "@/types/profile-type";
@@ -46,7 +46,6 @@ const ProfilePage = () => {
   
   const updateProfile = useUpdateProfile();
   const updateSlug = useUpdateProfileSlug();
-  const requestVerification = useRequestVerification();
   
   const [activeTab, setActiveTab] = useState<TabId>("basic");
   const [formData, setFormData] = useState<Partial<BaseProfile>>({});
@@ -181,15 +180,9 @@ const ProfilePage = () => {
     }
   };
 
-  const handleVerificationRequest = async () => {
-    try {
-      await requestVerification.mutateAsync();
-      setShowVerificationModal(false);
-      await refetch();
-      toast.success("Verification request submitted");
-    } catch (error: any) {
-      // Error is already handled in the hook
-    }
+  const handleVerificationSuccess = () => {
+    refetch(); // Refresh profile data to update verification status
+    toast.success("Verification request submitted successfully!");
   };
 
   const toggleAccordion = (tabId: TabId) => {
@@ -548,31 +541,33 @@ const ProfilePage = () => {
             <div className="p-6">
               {renderTabContent(activeTab)}
               
-              <div className="flex justify-end gap-4 mt-8 pt-6 border-t border-border">
-                <button
-                  onClick={handleCancel}
-                  className="px-4 py-2 text-foreground bg-muted rounded-lg hover:bg-muted/80 transition text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={updateProfile.isPending}
-                  className="px-6 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
-                >
-                  {updateProfile.isPending ? (
-                    <>
-                      <HugeiconsIcon icon={Loading03Icon} className="w-4 h-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <HugeiconsIcon icon={SaveIcon} className="w-4 h-4" />
-                      Save Changes
-                    </>
-                  )}
-                </button>
-              </div>
+              {activeTab !== "verification" && (
+                <div className="flex justify-end gap-4 mt-8 pt-6 border-t border-border">
+                  <button
+                    onClick={handleCancel}
+                    className="px-4 py-2 text-foreground bg-muted rounded-lg hover:bg-muted/80 transition text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={updateProfile.isPending}
+                    className="px-6 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                  >
+                    {updateProfile.isPending ? (
+                      <>
+                        <HugeiconsIcon icon={Loading03Icon} className="w-4 h-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <HugeiconsIcon icon={SaveIcon} className="w-4 h-4" />
+                        Save Changes
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -591,31 +586,33 @@ const ProfilePage = () => {
               </MobileAccordion>
             ))}
             
-            <div className="flex justify-end gap-3 p-4 border-t border-border">
-              <button
-                onClick={handleCancel}
-                className="px-3 py-1.5 text-foreground bg-background border border-border rounded-lg hover:bg-muted transition text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={updateProfile.isPending}
-                className="px-4 py-1.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
-              >
-                {updateProfile.isPending ? (
-                  <>
-                    <HugeiconsIcon icon={Loading03Icon} className="w-3 h-3 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <HugeiconsIcon icon={SaveIcon} className="w-3 h-3" />
-                    Save
-                  </>
-                )}
-              </button>
-            </div>
+            {activeTab !== "verification" && (
+              <div className="flex justify-end gap-3 p-4 border-t border-border">
+                <button
+                  onClick={handleCancel}
+                  className="px-3 py-1.5 text-foreground bg-background border border-border rounded-lg hover:bg-muted transition text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={updateProfile.isPending}
+                  className="px-4 py-1.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                >
+                  {updateProfile.isPending ? (
+                    <>
+                      <HugeiconsIcon icon={Loading03Icon} className="w-3 h-3 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <HugeiconsIcon icon={SaveIcon} className="w-3 h-3" />
+                      Save
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -628,8 +625,9 @@ const ProfilePage = () => {
       <VerificationModal
         isOpen={showVerificationModal}
         onClose={() => setShowVerificationModal(false)}
-        onSubmit={handleVerificationRequest}
-        isPending={requestVerification.isPending}
+        accountType={profile.accountType}
+        userId={profile.userId}
+        onSuccess={handleVerificationSuccess}
       />
     </div>
   );

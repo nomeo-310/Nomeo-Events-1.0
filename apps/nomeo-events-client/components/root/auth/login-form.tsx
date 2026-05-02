@@ -16,6 +16,7 @@ import { LoginFormData } from "@/types/auth-type";
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { getAndClearReturnUrl, clearReturnUrl } from "@/lib/return-url";
 
 interface LoginFormProps {
   onSuccess?: () => void;
@@ -41,15 +42,24 @@ export const LoginForm = ({ onSuccess, onForgotPassword, onSignup, isLoading = f
     },
   });
 
-
   const getCallbackUrl = () => {
     if (typeof window === "undefined") return "/dashboard";
+    
+    // First check if there's a saved return URL from localStorage
+    const savedReturnUrl = getAndClearReturnUrl();
+    if (savedReturnUrl) {
+      return savedReturnUrl;
+    }
+    
+    // Fallback to URL parameter or dashboard
     const params = new URLSearchParams(window.location.search);
     return params.get("callbackUrl") ?? "/dashboard";
   };
 
   const onSubmit = async (data: LoginFormData) => {
     setServerError(null);
+
+    const callbackUrl = getCallbackUrl();
 
     const { error } = await authClient.signIn.email({
       email: data.email,
@@ -69,15 +79,15 @@ export const LoginForm = ({ onSuccess, onForgotPassword, onSignup, isLoading = f
 
     onSuccess?.();
     toast.success("Logged in successfully!");
-    router.push(getCallbackUrl());
+    router.push(callbackUrl);
   };
 
   const handleGoogleLogin = () => {
-
+    const callbackUrl = getCallbackUrl();
     toast.loading("Redirecting to Google...");
     authClient.signIn.social({
       provider: "google",
-      callbackURL: getCallbackUrl(),
+      callbackURL: callbackUrl,
     });
   };
 

@@ -21,6 +21,8 @@ export default function EventDetailPage(): JSX.Element {
 
   const { data: event, isLoading, isError } = useGetEvent(eventId);
 
+  console.log(event)
+
   const publishMutation = usePublishEvent();
   const archiveMutation = useArchiveEvent();
   const deleteMutation  = useSoftDeleteEvent();

@@ -10,30 +10,43 @@ import {
   ArrowRightIcon,
   ArrowLeftIcon,
   Calendar03Icon as CalendarIcon,
+  UserAdd01Icon as UserAddIcon,
+  Delete02Icon as DeleteIcon,
+  UserGroupIcon,
+  Building04Icon as BuildingIcon,
+  ArrowDown01Icon as ChevronDownIcon,
+  ArrowUp01Icon as ChevronUpIcon,
+  Edit02Icon as EditIcon,
+  InformationCircleIcon as InfoCircleIcon,
+  Alert02Icon as AlertIcon,
 } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { PaystackButton } from "react-paystack";
+
+const PaystackButton = dynamic(
+  () => import('react-paystack').then((mod) => mod.PaystackButton),
+  { ssr: false },
+);
 
 // ── shadcn/ui form controls ────────────────────────────────────────────────────
 import { Input }      from "@/components/ui/input";
 import { Label }      from "@/components/ui/label";
 import { Textarea }   from "@/components/ui/textarea";
-import { Checkbox }   from "@/components/ui/checkbox";
 import { Badge }      from "@/components/ui/badge";
 import { Separator }  from "@/components/ui/separator";
 import { Button }     from "@/components/ui/button";
 import { Calendar }   from "@/components/ui/calendar";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  Popover, PopoverContent, PopoverTrigger,
-} from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Card, CardContent } from "@/components/ui/card";
 
 import { formatDate, formatDateTime, formatTime, toTitleCase } from "./public-event-helpers";
 import { toast } from "sonner";
 import { RegistrationConfirmModal } from "./registration-confirm-modal";
+import { useRegistration, type RegisterInput } from "@/hooks/use-registration";
+import dynamic from "next/dynamic";
+import { useParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,8 +65,20 @@ interface AgeRequirement {
   required: boolean;
   minAge?: number;
   maxAge?: number;
+  allowedAgeGroups?: string[];
   requiresParentalConsent?: boolean;
   parentalConsentMessage?: string;
+  ageVerificationRequired?: boolean;
+  ageVerificationMethod?: string;
+}
+
+interface GroupMember {
+  id: string;
+  name: string;
+  email: string;
+  age?: number;
+  phone?: string;
+  dob?: Date;
 }
 
 export interface RegistrationModalProps {
@@ -97,9 +122,13 @@ function getAgeFromDob(dob: Date | undefined): number | null {
   return age;
 }
 
+function generateMemberId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
-function StepIndicator({ current }: { current: Step }): JSX.Element {
+function StepIndicator({ current, isFree }: { current: Step; isFree?: boolean }): JSX.Element {
   const visibleSteps = STEPS.filter((s) => s !== "success");
   const currentIdx   = STEPS.indexOf(current);
 
@@ -109,6 +138,7 @@ function StepIndicator({ current }: { current: Step }): JSX.Element {
         const stepIdx = STEPS.indexOf(step);
         const done    = stepIdx < currentIdx;
         const active  = step === current;
+        const label = step === "payment" && isFree ? "Review & Confirm" : STEP_META[step].label;
 
         return (
           <div key={step} className="flex items-center flex-1 last:flex-none">
@@ -127,7 +157,7 @@ function StepIndicator({ current }: { current: Step }): JSX.Element {
                 : done  ? "text-green-500"
                         : "text-gray-400"
               )}>
-                {STEP_META[step].label}
+                {label}
               </span>
             </div>
             {i < visibleSteps.length - 1 && (
@@ -164,6 +194,266 @@ function SectionHeading({ children }: { children: React.ReactNode }): JSX.Elemen
     <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">
       {children}
     </p>
+  );
+}
+
+// ─── Collapsible Member Card ────────────────────────────────────────────────────
+
+function MemberCard({ member, index, onEdit, onRemove, isExpanded, onToggle, isPrimary = false }: {
+  member: GroupMember;
+  index: number;
+  onEdit: () => void;
+  onRemove: () => void;
+  isExpanded: boolean;
+  onToggle: () => void;
+  isPrimary?: boolean;
+}): JSX.Element {
+  const age = member.age || (member.dob ? getAgeFromDob(member.dob) : null);
+  
+  return (
+    <Card className={cn(
+      "border overflow-hidden",
+      isPrimary 
+        ? "border-indigo-300 dark:border-indigo-700 bg-indigo-50/30 dark:bg-indigo-950/20"
+        : "border-gray-200 dark:border-gray-700"
+    )}>
+      <div 
+        className="px-4 py-3 bg-gray-50 dark:bg-gray-800/40 flex items-center justify-between cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800/60 transition-colors"
+        onClick={onToggle}
+      >
+        <div className="flex items-center gap-3 flex-1">
+          <div className={cn(
+            "w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold",
+            isPrimary
+              ? "bg-indigo-600 text-white"
+              : "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400"
+          )}>
+            {index + 1}
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                {member.name || (isPrimary ? "Primary Contact" : "Unnamed Member")}
+              </p>
+              {isPrimary && (
+                <Badge variant="secondary" className="text-[10px] bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400">
+                  Primary
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-gray-500">{member.email || "No email"}</p>
+          </div>
+          {age && (
+            <Badge variant="secondary" className="text-xs">
+              Age: {age}
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {!isPrimary && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+                className="p-1 rounded-md text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
+              >
+                <HugeiconsIcon icon={EditIcon} size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+                className="p-1 rounded-md text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
+              >
+                <HugeiconsIcon icon={DeleteIcon} size={16} />
+              </button>
+            </>
+          )}
+          <HugeiconsIcon 
+            icon={isExpanded ? ChevronUpIcon : ChevronDownIcon} 
+            size={16} 
+            className="text-gray-400"
+          />
+        </div>
+      </div>
+      
+      {isExpanded && (
+        <CardContent className="px-4 py-3 space-y-2 border-t border-gray-100 dark:border-gray-800">
+          {member.phone && (
+            <div className="flex gap-2 text-sm">
+              <span className="text-gray-500 text-xs min-w-[70px]">Phone:</span>
+              <span className="text-gray-700 dark:text-gray-300 text-xs">{member.phone}</span>
+            </div>
+          )}
+          {member.dob && (
+            <div className="flex gap-2 text-sm">
+              <span className="text-gray-500 text-xs min-w-[70px]">Date of Birth:</span>
+              <span className="text-gray-700 dark:text-gray-300 text-xs">{format(member.dob, "PPP")}</span>
+            </div>
+          )}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+// ─── Add Member Form ───────────────────────────────────────────────────────────
+
+function AddMemberForm({ onAdd, onCancel, needsAge }: {
+  onAdd: (member: Omit<GroupMember, 'id'>) => void;
+  onCancel: () => void;
+  needsAge: boolean;
+}): JSX.Element {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [dob, setDob] = useState<Date | undefined>(undefined);
+  
+  const age = getAgeFromDob(dob);
+  
+  const handleSubmit = () => {
+    if (!name.trim() || !email.trim()) {
+      toast.error("Please fill in name and email");
+      return;
+    }
+    if (needsAge && !dob) {
+      toast.error("Please provide date of birth");
+      return;
+    }
+    
+    onAdd({
+      name: name.trim(),
+      email: email.trim(),
+      phone: phone.trim() || undefined,
+      dob,
+      age: age || undefined,
+    });
+    
+    setName("");
+    setEmail("");
+    setPhone("");
+    setDob(undefined);
+  };
+  
+  return (
+    <Card className="border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50/30 dark:bg-indigo-950/20">
+      <CardContent className="p-4 space-y-3">
+        <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 mb-2">
+          Add New Member
+        </p>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Full Name" required>
+            <Input
+              placeholder="Full name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+            />
+          </Field>
+          
+          <Field label="Email Address" required>
+            <Input
+              type="email"
+              placeholder="email@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </Field>
+          
+          <Field label="Phone Number">
+            <Input
+              type="tel"
+              placeholder="Phone number"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </Field>
+          
+          {needsAge && (
+            <Field
+              label="Date of Birth"
+              required
+              hint={age !== null ? `Age: ${age} years old` : undefined}
+            >
+              <Popover>
+                <PopoverTrigger className={cn("w-full justify-start text-left font-normal flex items-center border h-10 lg:h-11 px-3 rounded-lg", !dob && "text-muted-foreground")}>
+                  <HugeiconsIcon icon={CalendarIcon} size={16} className="mr-2 text-gray-400 shrink-0" />
+                  {dob ? format(dob, "PPP") : "Pick a date"}
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={dob}
+                    onSelect={setDob}
+                    disabled={(date) => date > new Date()}
+                    captionLayout="dropdown"
+                    fromYear={1920}
+                    toYear={new Date().getFullYear()}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </Field>
+          )}
+        </div>
+        
+        <div className="flex gap-2 pt-2">
+          <Button onClick={handleSubmit} size="sm" className="gap-1">
+            <HugeiconsIcon icon={UserAddIcon} size={14} />
+            Add Member
+          </Button>
+          <Button onClick={onCancel} variant="ghost" size="sm">
+            Cancel
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Registration Type Selector ───────────────────────────────────────────────
+
+type RegistrationType = "individual" | "group" | "corporate";
+
+interface RegistrationTypeSelectorProps {
+  value: RegistrationType;
+  onChange: (type: RegistrationType) => void;
+}
+
+function RegistrationTypeSelector({ value, onChange }: RegistrationTypeSelectorProps): JSX.Element {
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      {[
+        { type: "individual" as const, label: "Individual", icon: UserAddIcon, description: "Single attendee" },
+        { type: "group" as const, label: "Group", icon: UserGroupIcon, description: "Multiple attendees (you + members)" },
+        { type: "corporate" as const, label: "Corporate", icon: BuildingIcon, description: "Company registration (you + team)" },
+      ].map(({ type, label, icon: Icon, description }) => (
+        <button
+          key={type}
+          type="button"
+          onClick={() => onChange(type)}
+          className={cn(
+            "p-3 rounded-lg border-2 text-left transition-all",
+            value === type
+              ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40"
+              : "border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700"
+          )}
+        >
+          <HugeiconsIcon icon={Icon} size={20} className={cn(
+            "mb-2",
+            value === type ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"
+          )} />
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">{label}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{description}</p>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -274,28 +564,170 @@ interface AttendeeForm {
   specialRequests: string;
   dietary: string[];
   accessibility: string;
-  isGroup: boolean;
-  groupSize: string;
+  registrationType: RegistrationType;
   groupName: string;
+  groupMembers: GroupMember[];
+  showingAddMember: boolean;
+  corporateName: string;
+  corporateMembers: GroupMember[];
+  showingAddCorporateMember: boolean;
   parentalConsentByName: string;
   parentalConsentByEmail: string;
 }
 
-function AttendeeStep({ form, onChange, ageReq, needsAge }: {
+function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
   form: AttendeeForm;
   onChange: <K extends keyof AttendeeForm>(k: K, v: AttendeeForm[K]) => void;
-  ageReq: AgeRequirement | null;
+  ageRequirement: AgeRequirement | null;
   needsAge: boolean;
 }): JSX.Element {
   const age = getAgeFromDob(form.dob);
-  const requiresConsent = ageReq?.requiresParentalConsent && age !== null && age < 18;
+  
+  const minAge = ageRequirement?.minAge;
+  const maxAge = ageRequirement?.maxAge;
+  const isUnderMinAge = minAge !== undefined && age !== null && age < minAge;
+  const isOverMaxAge = maxAge !== undefined && age !== null && age > maxAge;
+  const isAgeInvalid = isUnderMinAge || isOverMaxAge;
+  
+  const requiresParentalConsent = ageRequirement?.requiresParentalConsent === true;
+  const showParentalConsent = requiresParentalConsent && age !== null && !isAgeInvalid;
+  
+  const isGroup = form.registrationType === "group";
+  const isCorporate = form.registrationType === "corporate";
+  
+  const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
+  
+  const toggleMemberExpand = (memberId: string) => {
+    const newSet = new Set(expandedMembers);
+    if (newSet.has(memberId)) {
+      newSet.delete(memberId);
+    } else {
+      newSet.add(memberId);
+    }
+    setExpandedMembers(newSet);
+  };
+  
+  const handleAddMember = (memberData: Omit<GroupMember, 'id'>) => {
+    const newMember = {
+      ...memberData,
+      id: generateMemberId(),
+    };
+    
+    if (isGroup) {
+      onChange("groupMembers", [...form.groupMembers, newMember]);
+      onChange("showingAddMember", false);
+    } else if (isCorporate) {
+      onChange("corporateMembers", [...form.corporateMembers, newMember]);
+      onChange("showingAddCorporateMember", false);
+    }
+  };
+  
+  const handleEditMember = (memberId: string) => {
+    if (isGroup) {
+      const member = form.groupMembers.find(m => m.id === memberId);
+      if (member) {
+        handleRemoveMember(memberId);
+        onChange("showingAddMember", true);
+      }
+    } else if (isCorporate) {
+      const member = form.corporateMembers.find(m => m.id === memberId);
+      if (member) {
+        handleRemoveMember(memberId);
+        onChange("showingAddCorporateMember", true);
+      }
+    }
+  };
+  
+  const handleRemoveMember = (memberId: string) => {
+    if (isGroup) {
+      onChange("groupMembers", form.groupMembers.filter(m => m.id !== memberId));
+    } else if (isCorporate) {
+      onChange("corporateMembers", form.corporateMembers.filter(m => m.id !== memberId));
+    }
+    setExpandedMembers(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(memberId);
+      return newSet;
+    });
+  };
+  
+  const getMembers = () => isGroup ? form.groupMembers : isCorporate ? form.corporateMembers : [];
+  const showingAddForm = isGroup ? form.showingAddMember : isCorporate ? form.showingAddCorporateMember : false;
+  
+  const startAddMember = () => {
+    if (isGroup) {
+      onChange("showingAddMember", true);
+    } else if (isCorporate) {
+      onChange("showingAddCorporateMember", true);
+    }
+  };
+  
+  const cancelAddMember = () => {
+    if (isGroup) {
+      onChange("showingAddMember", false);
+    } else if (isCorporate) {
+      onChange("showingAddCorporateMember", false);
+    }
+  };
+  
+  const additionalMembersCount = getMembers().length;
+  const totalPeopleCount = 1 + additionalMembersCount;
+
+  const getAgeErrorMessage = (): string | null => {
+    if (!age) return null;
+    if (minAge && age < minAge) {
+      return `Minimum age requirement is ${minAge} years old.`;
+    }
+    if (maxAge && age > maxAge) {
+      return `Maximum age allowed is ${maxAge} years old.`;
+    }
+    return null;
+  };
 
   return (
     <div className="space-y-6">
-
-      {/* Personal */}
       <div>
-        <SectionHeading>Personal Information</SectionHeading>
+        <SectionHeading>Registration Type</SectionHeading>
+        <RegistrationTypeSelector 
+          value={form.registrationType} 
+          onChange={(type) => {
+            onChange("registrationType", type);
+            if (type === "individual") {
+              onChange("groupMembers", []);
+              onChange("corporateMembers", []);
+              onChange("showingAddMember", false);
+              onChange("showingAddCorporateMember", false);
+            } else if (type === "group") {
+              onChange("corporateMembers", []);
+              onChange("showingAddCorporateMember", false);
+            } else if (type === "corporate") {
+              onChange("groupMembers", []);
+              onChange("showingAddMember", false);
+            }
+          }} 
+        />
+      </div>
+      
+      <Separator />
+
+      <div>
+        <SectionHeading>
+          {isGroup ? "Primary Contact (Group Organizer)" : isCorporate ? "Primary Contact (Company Representative)" : "Your Information"}
+        </SectionHeading>
+        
+        {(isGroup || isCorporate) && (
+          <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+            <div className="flex items-start gap-2">
+              <HugeiconsIcon icon={InfoCircleIcon} size={16} className="text-blue-500 mt-0.5 shrink-0" />
+              <div className="text-xs text-blue-700 dark:text-blue-300">
+                <p className="font-medium mb-1">Important Note:</p>
+                <p>You are registering as the {isGroup ? "group organizer" : "company representative"}. 
+                Your ticket is included in the total count. Add additional {isGroup ? "group members" : "team members"} below.</p>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Full Name" required>
             <Input
@@ -363,11 +795,21 @@ function AttendeeStep({ form, onChange, ageReq, needsAge }: {
             </Field>
           )}
         </div>
+        
+        {needsAge && age !== null && isAgeInvalid && (
+          <div className="mt-3 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800">
+            <div className="flex items-start gap-2">
+              <HugeiconsIcon icon={AlertIcon} size={16} className="text-red-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-red-600 dark:text-red-400">
+                {getAgeErrorMessage()}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <Separator />
 
-      {/* Professional */}
       <div>
         <SectionHeading>Professional (Optional)</SectionHeading>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -388,17 +830,127 @@ function AttendeeStep({ form, onChange, ageReq, needsAge }: {
         </div>
       </div>
 
-      {/* Parental consent */}
-      {requiresConsent && (
+      {(isGroup || isCorporate) && (
+        <>
+          <Separator />
+          <div>
+            <SectionHeading>
+              {isGroup ? "Additional Group Members" : "Additional Team Members"}
+            </SectionHeading>
+            
+            {isGroup && (
+              <div className="mb-4">
+                <Field label="Group Name" required>
+                  <Input
+                    placeholder="Team Acme"
+                    value={form.groupName}
+                    onChange={(e) => onChange("groupName", e.target.value)}
+                  />
+                </Field>
+              </div>
+            )}
+            
+            {isCorporate && (
+              <div className="mb-4">
+                <Field label="Company Name" required>
+                  <Input
+                    placeholder="Acme Corporation"
+                    value={form.corporateName}
+                    onChange={(e) => onChange("corporateName", e.target.value)}
+                  />
+                </Field>
+              </div>
+            )}
+            
+            <div className="mb-4 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+              <div className="flex items-start gap-2">
+                <HugeiconsIcon icon={TicketIcon} size={16} className="text-green-500 mt-0.5 shrink-0" />
+                <div className="text-xs text-green-700 dark:text-green-300">
+                  <p className="font-medium">Total Tickets: {totalPeopleCount}</p>
+                  <p>Total includes you + {additionalMembersCount} {additionalMembersCount === 1 ? 'member' : 'members'}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Primary Contact (You)
+              </p>
+              <MemberCard
+                member={{
+                  id: "primary",
+                  name: form.name || "Not provided",
+                  email: form.email || "Not provided",
+                  phone: form.phone,
+                  dob: form.dob,
+                  age: age || undefined,
+                }}
+                index={0}
+                onEdit={() => {}}
+                onRemove={() => {}}
+                isExpanded={false}
+                onToggle={() => {}}
+                isPrimary={true}
+              />
+            </div>
+            
+            {getMembers().length > 0 && (
+              <div className="space-y-2 mb-4">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Additional {isGroup ? "Group Members" : "Team Members"} ({getMembers().length})
+                </p>
+                {getMembers().map((member, idx) => (
+                  <MemberCard
+                    key={member.id}
+                    member={member}
+                    index={idx + 1}
+                    onEdit={() => handleEditMember(member.id)}
+                    onRemove={() => handleRemoveMember(member.id)}
+                    isExpanded={expandedMembers.has(member.id)}
+                    onToggle={() => toggleMemberExpand(member.id)}
+                    isPrimary={false}
+                  />
+                ))}
+              </div>
+            )}
+            
+            {showingAddForm ? (
+              <AddMemberForm
+                onAdd={handleAddMember}
+                onCancel={cancelAddMember}
+                needsAge={needsAge}
+              />
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={startAddMember}
+                className="w-full gap-2"
+              >
+                <HugeiconsIcon icon={UserAddIcon} size={16} />
+                Add {isGroup ? "Group Member" : "Team Member"}
+              </Button>
+            )}
+          </div>
+        </>
+      )}
+
+      {showParentalConsent && (
         <>
           <Separator />
           <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-4 space-y-4">
             <div className="flex items-start gap-2">
               <span className="text-amber-500 text-base mt-0.5">⚠</span>
-              <p className="text-xs text-amber-700 dark:text-amber-300 font-medium leading-relaxed">
-                {ageReq?.parentalConsentMessage ??
-                  "Parental consent is required for attendees under 18."}
-              </p>
+              <div className="space-y-1">
+                <p className="text-xs text-amber-700 dark:text-amber-300 font-medium leading-relaxed">
+                  {ageRequirement?.parentalConsentMessage || "Parental consent is required for this registration."}
+                </p>
+                {age !== null && age < 18 && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    You are {age} years old. Please have a parent or guardian complete this section.
+                  </p>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Parent / Guardian Name" required>
@@ -417,13 +969,19 @@ function AttendeeStep({ form, onChange, ageReq, needsAge }: {
                 />
               </Field>
             </div>
+            {(isGroup || isCorporate) && (
+              <div className="mt-2 p-2 rounded bg-amber-100 dark:bg-amber-900/30">
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  Note: This parental consent applies to both you and all members in your {isGroup ? "group" : "corporate"} registration.
+                </p>
+              </div>
+            )}
           </div>
         </>
       )}
 
       <Separator />
 
-      {/* Preferences */}
       <div>
         <SectionHeading>Preferences &amp; Needs</SectionHeading>
         <div className="space-y-4">
@@ -476,43 +1034,6 @@ function AttendeeStep({ form, onChange, ageReq, needsAge }: {
           </Field>
         </div>
       </div>
-
-      <Separator />
-
-      {/* Group */}
-      <div>
-        <SectionHeading>Group Registration</SectionHeading>
-        <div className="flex items-center gap-3 mb-4">
-          <Checkbox
-            id="isGroup"
-            checked={form.isGroup}
-            onCheckedChange={(v) => onChange("isGroup", Boolean(v))}
-          />
-          <Label htmlFor="isGroup" className="text-sm cursor-pointer font-normal text-gray-700 dark:text-gray-300">
-            Register as a group
-          </Label>
-        </div>
-        {form.isGroup && (
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Group Name">
-              <Input
-                placeholder="Team Acme"
-                value={form.groupName}
-                onChange={(e) => onChange("groupName", e.target.value)}
-              />
-            </Field>
-            <Field label="Group Size">
-              <Input
-                type="number"
-                min={2}
-                placeholder="e.g. 5"
-                value={form.groupSize}
-                onChange={(e) => onChange("groupSize", e.target.value)}
-              />
-            </Field>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -525,29 +1046,110 @@ interface PaymentStepProps {
   event: any;
   onRegistrationComplete: (paymentData?: any) => Promise<void>;
   isLoading: boolean;
+  needsAge: boolean;
 }
 
-function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading }: PaymentStepProps): JSX.Element {
-  const isFree = plan.price === 0;
-  const price = isFree ? "Free" : `${plan.currency ?? "USD"} ${plan.price.toLocaleString()}`;
-  const amountInKobo = plan.price * 100;
+function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, needsAge }: PaymentStepProps): JSX.Element {
+  const additionalMembersCount = form.registrationType === "group" 
+    ? form.groupMembers.length 
+    : form.registrationType === "corporate"
+    ? form.corporateMembers.length
+    : 0;
+  
+  const numberOfTickets = 1 + additionalMembersCount;
+  const totalPrice = plan.price * numberOfTickets;
+  const isFree = totalPrice === 0;
+  const priceDisplay = isFree ? "Free" : `${plan.currency ?? "NGN"} ${totalPrice.toLocaleString()}`;
+  const amountInKobo = totalPrice * 100;
   const age = getAgeFromDob(form.dob);
+
+  const formatMembersList = (members: GroupMember[], startIndex: number): string => {
+    return members.map((member, idx) => {
+      const details = [`${startIndex + idx + 1}. ${member.name} (${member.email})`];
+      if (needsAge && member.age) {
+        details.push(`Age: ${member.age}`);
+      }
+      if (member.phone) {
+        details.push(`Phone: ${member.phone}`);
+      }
+      return details.join(' | ');
+    }).join('\n');
+  };
 
   const handleFreeRegistration = async () => {
     await onRegistrationComplete();
   };
 
   const handlePaystackSuccess = async (response: any) => {
-    await onRegistrationComplete({
+    const paymentData = {
       reference: response.reference,
       transactionId: response.transaction,
-      status: "success",
-    });
+      status: response.status || "success",
+    };
+    await onRegistrationComplete(paymentData);
   };
 
   const handlePaystackClose = () => {
     console.log("Paystack modal closed");
   };
+
+  const customFields = [
+    { display_name: "Event ID", variable_name: "event_id", value: event._id },
+    { display_name: "Event Name", variable_name: "event_name", value: event.title },
+    { display_name: "Event Start", variable_name: "event_start", value: `${formatDate(event.startDate)} - ${formatTime(event.startDate)}` },
+    { display_name: "Event End", variable_name: "event_end", value: `${formatDate(event.endDate)} - ${formatTime(event.endDate)}` },
+    { display_name: "Plan Type", variable_name: "plan_type", value: plan.type },
+    { display_name: "Plan Name", variable_name: "plan_name", value: plan.name },
+    { display_name: "Primary Contact Name", variable_name: "primary_name", value: form.name },
+    { display_name: "Primary Contact Email", variable_name: "primary_email", value: form.email },
+    { display_name: "Primary Contact Phone", variable_name: "primary_phone", value: form.phone || "Not provided" },
+  ];
+
+  if (needsAge && age !== null) {
+    customFields.push({ display_name: "Primary Contact Age", variable_name: "primary_age", value: age.toString() });
+  }
+
+  customFields.push(
+    { display_name: "Registration Type", variable_name: "registration_type", value: form.registrationType === "group" ? "Group Registration" : form.registrationType === "corporate" ? "Corporate Registration" : "Individual" },
+    { display_name: "Number of Tickets", variable_name: "ticket_count", value: numberOfTickets.toString() },
+    { display_name: "Additional Members Count", variable_name: "additional_members_count", value: additionalMembersCount.toString() },
+    { display_name: "Total Amount", variable_name: "total_amount", value: totalPrice.toString() },
+    { display_name: "Currency", variable_name: "currency", value: plan.currency || "USD" }
+  );
+
+  if (form.registrationType === "group") {
+    customFields.push({ display_name: "Group Name", variable_name: "group_name", value: form.groupName || "Not provided" });
+    if (form.groupMembers.length > 0) {
+      customFields.push({ display_name: "Group Members Details", variable_name: "group_members", value: formatMembersList(form.groupMembers, 1) });
+      form.groupMembers.forEach((member, idx) => {
+        customFields.push({ display_name: `Group Member ${idx + 1} Name`, variable_name: `group_member_${idx + 1}_name`, value: member.name });
+        customFields.push({ display_name: `Group Member ${idx + 1} Email`, variable_name: `group_member_${idx + 1}_email`, value: member.email });
+        if (needsAge && member.age) customFields.push({ display_name: `Group Member ${idx + 1} Age`, variable_name: `group_member_${idx + 1}_age`, value: member.age.toString() });
+        if (member.phone) customFields.push({ display_name: `Group Member ${idx + 1} Phone`, variable_name: `group_member_${idx + 1}_phone`, value: member.phone });
+      });
+    }
+  }
+  
+  if (form.registrationType === "corporate") {
+    customFields.push({ display_name: "Company Name", variable_name: "company_name", value: form.corporateName || "Not provided" });
+    if (form.corporateMembers.length > 0) {
+      customFields.push({ display_name: "Team Members Details", variable_name: "team_members", value: formatMembersList(form.corporateMembers, 1) });
+      form.corporateMembers.forEach((member, idx) => {
+        customFields.push({ display_name: `Team Member ${idx + 1} Name`, variable_name: `team_member_${idx + 1}_name`, value: member.name });
+        customFields.push({ display_name: `Team Member ${idx + 1} Email`, variable_name: `team_member_${idx + 1}_email`, value: member.email });
+        if (needsAge && member.age) customFields.push({ display_name: `Team Member ${idx + 1} Age`, variable_name: `team_member_${idx + 1}_age`, value: member.age.toString() });
+        if (member.phone) customFields.push({ display_name: `Team Member ${idx + 1} Phone`, variable_name: `team_member_${idx + 1}_phone`, value: member.phone });
+      });
+    }
+  }
+
+  if (form.dietary.length > 0) customFields.push({ display_name: "Dietary Restrictions", variable_name: "dietary_restrictions", value: form.dietary.join(", ") });
+  if (form.specialRequests) customFields.push({ display_name: "Special Requests", variable_name: "special_requests", value: form.specialRequests });
+  if (form.accessibility) customFields.push({ display_name: "Accessibility Needs", variable_name: "accessibility_needs", value: form.accessibility });
+  if (form.parentalConsentByName && form.parentalConsentByEmail) {
+    customFields.push({ display_name: "Parental Consent By", variable_name: "parental_consent_by_name", value: form.parentalConsentByName });
+    customFields.push({ display_name: "Parental Consent Email", variable_name: "parental_consent_by_email", value: form.parentalConsentByEmail });
+  }
 
   const OrderSummary = () => (
     <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -559,27 +1161,28 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading }: P
           <div>
             <p className="text-sm font-semibold text-gray-900 dark:text-white">{plan.name}</p>
             <p className="text-xs text-gray-500 mt-0.5">{toTitleCase(plan.type)}</p>
-            {form.isGroup && form.groupSize && (
-              <p className="text-xs text-gray-400 mt-1">
-                Group: {form.groupName || "Unnamed"} · {form.groupSize} attendees
-              </p>
+            {form.registrationType === "group" && (
+              <p className="text-xs text-gray-400 mt-1">Group: {form.groupName || "Unnamed"} · {numberOfTickets} tickets total</p>
+            )}
+            {form.registrationType === "corporate" && (
+              <p className="text-xs text-gray-400 mt-1">Corporate: {form.corporateName || "Unnamed"} · {numberOfTickets} tickets total</p>
+            )}
+            {numberOfTickets > 1 && (
+              <div className="text-xs text-gray-400 mt-1 space-y-0.5">
+                <p>{plan.price} × {numberOfTickets} tickets</p>
+                <p className="text-[10px] text-gray-400">(Includes primary contact + {additionalMembersCount} {additionalMembersCount === 1 ? 'member' : 'members'})</p>
+              </div>
             )}
           </div>
-          <span className={cn(
-            "text-xl font-bold shrink-0",
-            isFree ? "text-green-600 dark:text-green-400" : "text-gray-900 dark:text-white"
-          )}>
-            {price}
+          <span className={cn("text-xl font-bold shrink-0", isFree ? "text-green-600 dark:text-green-400" : "text-gray-900 dark:text-white")}>
+            {priceDisplay}
           </span>
         </div>
         <Separator />
         <div className="flex justify-between items-center">
           <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total</span>
-          <span className={cn(
-            "text-sm font-bold",
-            isFree ? "text-green-600 dark:text-green-400" : "text-indigo-600 dark:text-indigo-400"
-          )}>
-            {price}
+          <span className={cn("text-sm font-bold", isFree ? "text-green-600 dark:text-green-400" : "text-indigo-600 dark:text-indigo-400")}>
+            {priceDisplay}
           </span>
         </div>
       </div>
@@ -589,24 +1192,53 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading }: P
   const AttendeeSummary = () => (
     <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
       <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Attendee Details</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+          {form.registrationType === "group" ? "Group Registration Details" : form.registrationType === "corporate" ? "Corporate Registration Details" : "Attendee Details"}
+        </p>
       </div>
-      <div className="px-4 py-4 space-y-2.5">
-        {[
-          { label: "Name", value: form.name },
-          { label: "Email", value: form.email },
-          { label: "Phone", value: form.phone },
-          { label: "Age", value: age !== null ? `${age} years old` : undefined },
-          { label: "Gender", value: GENDER_OPTIONS.find((g) => g.value === form.gender)?.label },
-          { label: "Dietary", value: form.dietary.length ? form.dietary.join(", ") : undefined },
-        ]
-          .filter((r) => r.value)
-          .map(({ label, value }) => (
+      <div className="px-4 py-4 space-y-3">
+        <div className="pb-2 border-b border-gray-100 dark:border-gray-800">
+          <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-2">Primary Contact (You)</p>
+          {[
+            { label: "Name", value: form.name },
+            { label: "Email", value: form.email },
+            { label: "Phone", value: form.phone },
+            { label: "Age", value: age !== null ? `${age} years old` : undefined },
+            { label: "Gender", value: GENDER_OPTIONS.find((g) => g.value === form.gender)?.label },
+          ].filter((r) => r.value).map(({ label, value }) => (
             <div key={label} className="flex gap-4 text-sm">
               <span className="text-gray-400 text-xs w-14 shrink-0 pt-px">{label}</span>
               <span className="text-gray-800 dark:text-gray-200 text-xs">{value}</span>
             </div>
           ))}
+        </div>
+        
+        {additionalMembersCount > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-2">
+              Additional {form.registrationType === "group" ? "Group Members" : "Team Members"} ({additionalMembersCount})
+            </p>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {(form.registrationType === "group" ? form.groupMembers : form.corporateMembers).map((member) => {
+                const memberAge = member.age || (member.dob ? getAgeFromDob(member.dob) : null);
+                return (
+                  <div key={member.id} className="text-sm p-2 bg-gray-50 dark:bg-gray-800/40 rounded-lg">
+                    <p className="font-medium text-gray-900 dark:text-white text-xs">{member.name}</p>
+                    <p className="text-gray-500 text-xs">{member.email}</p>
+                    {memberAge && <p className="text-gray-400 text-xs">Age: {memberAge}</p>}
+                    {member.phone && <p className="text-gray-400 text-xs">Phone: {member.phone}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        
+        {form.dietary.length > 0 && (
+          <div className="pt-2">
+            <p className="text-gray-400 text-xs">Dietary: <span className="text-gray-600 dark:text-gray-300">{form.dietary.join(", ")}</span></p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -620,71 +1252,18 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading }: P
           type="button"
           onClick={handleFreeRegistration}
           disabled={isLoading}
-          className="w-full h-11 font-semibold gap-2"
+          className="w-full h-11 font-semibold gap-2 bg-green-600 hover:bg-green-700"
         >
           {isLoading ? (
             <HugeiconsIcon icon={Loading03Icon} size={16} className="animate-spin" />
           ) : (
-            <HugeiconsIcon icon={TicketIcon} size={16} />
+            <HugeiconsIcon icon={CheckmarkCircle02Icon} size={16} />
           )}
-          {isLoading ? "Processing…" : "Complete Registration"}
+          {isLoading ? "Processing…" : "Confirm Registration"}
         </Button>
       </div>
     );
   }
-
-  const customFields = [
-    {
-      display_name: "Event ID",
-      variable_name: "event_id",
-      value: event._id,
-    },
-    {
-      display_name: "Event Name",
-      variable_name: "event_name",
-      value: event.title,
-    },
-    {
-      display_name: "Event Start",
-      variable_name: "event_start",
-      value: `${formatDate(event.startDate)} - ${formatTime(event.startDate)}`,
-    },
-    {
-      display_name: "Event End",
-      variable_name: "event_end",
-      value: `${formatDate(event.endDate)} - ${formatTime(event.endDate)}`,
-    },
-    {
-      display_name: "Plan Type",
-      variable_name: "plan_type",
-      value: plan.type,
-    },
-    {
-      display_name: "Plan Name",
-      variable_name: "plan_name",
-      value: plan.name,
-    },
-    {
-      display_name: "Attendee Name",
-      variable_name: "attendee_name",
-      value: form.name,
-    },
-    {
-      display_name: "Is Group Registration",
-      variable_name: "is_group",
-      value: String(form.isGroup),
-    },
-    ...(form.isGroup && form.groupSize ? [{
-      display_name: "Group Size",
-      variable_name: "group_size",
-      value: form.groupSize,
-    }] : []),
-    ...(form.isGroup && form.groupName ? [{
-      display_name: "Group Name",
-      variable_name: "group_name",
-      value: form.groupName,
-    }] : []),
-  ];
 
   const paystackConfig = {
     publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
@@ -692,9 +1271,7 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading }: P
     amount: amountInKobo,
     currency: "NGN",
     reference: `REG-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-    metadata: {
-      custom_fields: customFields,
-    },
+    metadata: { custom_fields: customFields },
     onSuccess: handlePaystackSuccess,
     onClose: handlePaystackClose,
   };
@@ -706,7 +1283,7 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading }: P
       
       <PaystackButton
         {...paystackConfig}
-        text={isLoading ? "Processing…" : `Pay ${price}`}
+        text={isLoading ? "Processing…" : `Pay ${priceDisplay}`}
         className="w-full h-11 font-semibold gap-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
         disabled={isLoading}
       />
@@ -716,9 +1293,25 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading }: P
 
 // ─── Step 4 — Success ─────────────────────────────────────────────────────────
 
-function SuccessStep({ form, plan, onClose }: {
-  form: AttendeeForm; plan: Plan; onClose: () => void;
-}): JSX.Element {
+function SuccessStep({ form, plan, onClose }: {form: AttendeeForm; plan: Plan; onClose: () => void }): JSX.Element {
+  const additionalMembersCount = form.registrationType === "group" 
+    ? form.groupMembers.length 
+    : form.registrationType === "corporate"
+    ? form.corporateMembers.length
+    : 0;
+  
+  const numberOfTickets = 1 + additionalMembersCount;
+  const totalPrice = plan.price * numberOfTickets;
+
+  const params = useParams();
+  const queryClient = useQueryClient();
+  const slug = params.slug as string;
+
+  const handleCloseAndRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["events", 'slug', slug] });
+    onClose();
+  }
+  
   return (
     <div className="flex flex-col items-center text-center py-4">
       <div className="relative mb-5">
@@ -738,14 +1331,16 @@ function SuccessStep({ form, plan, onClose }: {
         <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Your Ticket</p>
         {[
           { label: "Plan", value: plan.name, highlight: false },
-          { label: "Name", value: form.name, highlight: false },
-          { label: "Amount", value: plan.price === 0 ? "Free" : `${plan.currency} ${plan.price.toLocaleString()}`, highlight: true },
+          { label: "Registration Type", value: form.registrationType === "group" ? "Group Registration" : form.registrationType === "corporate" ? "Corporate Registration" : "Individual", highlight: false },
+          { label: "Total Tickets", value: `${numberOfTickets} ticket${numberOfTickets > 1 ? "s" : ""}`, highlight: false },
+          { label: "Primary Contact", value: form.name, highlight: false },
+          { label: "Total Amount", value: totalPrice === 0 ? "Free" : `${plan.currency} ${totalPrice.toLocaleString()}`, highlight: true },
         ].map(({ label, value, highlight }) => (
           <div key={label} className="flex justify-between text-sm">
             <span className="text-gray-500">{label}</span>
             <span className={cn(
               "font-semibold",
-              highlight && plan.price === 0 ? "text-green-600 dark:text-green-400"
+              highlight && totalPrice === 0 ? "text-green-600 dark:text-green-400"
               : highlight ? "text-indigo-600 dark:text-indigo-400"
               : "text-gray-900 dark:text-white"
             )}>
@@ -755,7 +1350,7 @@ function SuccessStep({ form, plan, onClose }: {
         ))}
       </div>
 
-      <Button onClick={onClose} className="w-full h-10 font-semibold">
+      <Button onClick={handleCloseAndRefresh} className="w-full h-10 font-semibold">
         Done — Close
       </Button>
     </div>
@@ -769,24 +1364,111 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
   const [plan, setPlan] = useState<Plan | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [ageError, setAgeError] = useState<string | null>(null);
 
-  const ageReq: AgeRequirement | null = (event as any).ageRequirement ?? null;
-  const needsAge = Boolean(ageReq?.required);
+  const { useRegister } = useRegistration();
+  const registerMutation = useRegister();
+
+  const ageRequirement = event?.ageRequirement;
+  const needsAge = ageRequirement?.required === true;
+  const minAge = ageRequirement?.minAge;
+  const maxAge = ageRequirement?.maxAge;
+  const requiresParentalConsent = ageRequirement?.requiresParentalConsent === true;
 
   const [form, setForm] = useState<AttendeeForm>({
     name: "", email: "", phone: "", dob: undefined,
     gender: "", company: "", title: "",
     specialRequests: "", dietary: [], accessibility: "",
-    isGroup: false, groupSize: "", groupName: "",
+    registrationType: "individual",
+    groupName: "", groupMembers: [], showingAddMember: false,
+    corporateName: "", corporateMembers: [], showingAddCorporateMember: false,
     parentalConsentByName: "", parentalConsentByEmail: "",
   });
 
   const updateForm = <K extends keyof AttendeeForm>(k: K, v: AttendeeForm[K]) =>
     setForm((prev) => ({ ...prev, [k]: v }));
 
+  const validateAge = (dob: Date | undefined): { isValid: boolean; error?: string } => {
+    if (!needsAge || !dob) {
+      return { isValid: true };
+    }
+    
+    const age = getAgeFromDob(dob);
+    if (age === null) {
+      return { isValid: true };
+    }
+    
+    if (minAge !== undefined && age < minAge) {
+      return { isValid: false, error: `Minimum age requirement is ${minAge} years old.` };
+    }
+    
+    if (maxAge !== undefined && age > maxAge) {
+      return { isValid: false, error: `Maximum age allowed is ${maxAge} years old.` };
+    }
+    
+    return { isValid: true };
+  };
+
+  const handleDobChange = (dob: Date | undefined) => {
+    updateForm("dob", dob);
+    const validation = validateAge(dob);
+    if (!validation.isValid) {
+      setAgeError(validation.error || null);
+    } else {
+      setAgeError(null);
+    }
+  };
+
   const canAdvancePlan = Boolean(plan);
-  const canAdvanceAttendee = form.name.trim() !== "" && form.email.trim() !== "" &&
-    (!needsAge || form.dob !== undefined);
+  
+  const canAdvanceAttendee = (): boolean => {
+    if (form.name.trim() === "" || form.email.trim() === "") return false;
+    
+    if (needsAge) {
+      if (form.dob === undefined) return false;
+      const validation = validateAge(form.dob);
+      if (!validation.isValid) return false;
+    }
+    
+    const age = getAgeFromDob(form.dob);
+    const needsConsent = requiresParentalConsent && age !== null;
+    
+    if (form.registrationType === "individual") {
+      if (needsConsent) {
+        if (form.parentalConsentByName.trim() === "" || form.parentalConsentByEmail.trim() === "") {
+          return false;
+        }
+      }
+    }
+    
+    if (form.registrationType === "group") {
+      if (form.groupName.trim() === "") return false;
+      if (needsConsent) {
+        if (form.parentalConsentByName.trim() === "" || form.parentalConsentByEmail.trim() === "") {
+          return false;
+        }
+      }
+      for (const member of form.groupMembers) {
+        if (member.name.trim() === "" || member.email.trim() === "") return false;
+        if (needsAge && !member.dob && !member.age) return false;
+      }
+    }
+    
+    if (form.registrationType === "corporate") {
+      if (form.corporateName.trim() === "") return false;
+      if (needsConsent) {
+        if (form.parentalConsentByName.trim() === "" || form.parentalConsentByEmail.trim() === "") {
+          return false;
+        }
+      }
+      for (const member of form.corporateMembers) {
+        if (member.name.trim() === "" || member.email.trim() === "") return false;
+        if (needsAge && !member.dob && !member.age) return false;
+      }
+    }
+    
+    return true;
+  };
 
   const next = () => {
     const i = STEPS.indexOf(step);
@@ -798,12 +1480,10 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
     if (i > 0) setStep(STEPS[i - 1]);
   };
 
-  // Handle "Review & Pay" button click - opens confirmation modal
   const handleReviewAndPay = () => {
     setConfirmOpen(true);
   };
 
-  // Handle confirmation - closes modal and proceeds to payment
   const handleConfirmProceed = () => {
     setConfirmOpen(false);
     setStep("payment");
@@ -813,41 +1493,131 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
     setIsLoading(true);
     
     try {
-      const response = await fetch("/api/registrations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventId: event._id,
-          plan: plan,
-          attendee: form,
-          payment: paymentData,
-        }),
-      });
-
-      if (!response.ok) throw new Error("Registration failed");
+      const additionalMembersCount = form.registrationType === "group" 
+        ? form.groupMembers.length 
+        : form.registrationType === "corporate"
+        ? form.corporateMembers.length
+        : 0;
       
-      const data = await response.json();
+      const totalTickets = 1 + additionalMembersCount;
+      const unitPrice = plan?.price || 0;
+      const totalPrice = unitPrice * totalTickets;
+      const age = getAgeFromDob(form.dob);
+      const needsConsent = requiresParentalConsent && age !== null;
+      
+      const registrationData: RegisterInput = {
+        eventId: event._id,
+        planType: plan?.type || '',
+        planName: plan?.name || '',
+        price: totalPrice,
+        attendeeName: form.name,
+        attendeeEmail: form.email,
+        attendeePhone: form.phone || undefined,
+        attendeeGender: form.gender || undefined,
+        attendeeCompany: form.company || undefined,
+        attendeeTitle: form.title || undefined,
+        specialRequests: form.specialRequests || undefined,
+        dietaryRestrictions: form.dietary.length > 0 ? form.dietary : undefined,
+        accessibilityNeeds: form.accessibility ? [form.accessibility] : undefined,
+
+        ...(paymentData && {
+          paymentReference: paymentData.reference,
+          paymentTransactionId: paymentData.transactionId,
+          paymentMessage: paymentData.message || "Approved",
+          paymentStatus: paymentData.status,
+        }),
+        
+        ...(needsAge && form.dob && {
+          attendeeAge: age || undefined,
+        }),
+        
+        ...(needsConsent && form.parentalConsentByName && form.parentalConsentByEmail && {
+          parentalConsentProvided: true,
+          parentalConsentByName: form.parentalConsentByName,
+          parentalConsentByEmail: form.parentalConsentByEmail,
+        }),
+        
+        isGroupRegistration: form.registrationType === "group",
+        isCorporateRegistration: form.registrationType === "corporate",
+        
+        ...(form.registrationType === "group" && {
+          groupSize: totalTickets,
+          groupName: form.groupName,
+          groupMembers: [
+            { 
+              name: form.name, 
+              email: form.email, 
+              age: age ?? undefined, 
+              phone: form.phone || undefined 
+            },
+            ...form.groupMembers.map(m => ({
+              name: m.name,
+              email: m.email,
+              age: m.age ?? (m.dob ? getAgeFromDob(m.dob) ?? undefined : undefined),
+              phone: m.phone || undefined,
+            }))
+          ],
+        }),
+
+        ...(form.registrationType === "corporate" && {
+          companyName: form.corporateName,
+          companySize: totalTickets,
+          companyMembers: [
+            { 
+              name: form.name, 
+              email: form.email, 
+              age: age ?? undefined, 
+              phone: form.phone || undefined 
+            },
+            ...form.corporateMembers.map(m => ({
+              name: m.name,
+              email: m.email,
+              age: m.age ?? (m.dob ? getAgeFromDob(m.dob) ?? undefined : undefined),
+              phone: m.phone || undefined,
+            }))
+          ],
+        }),
+      };
+      
+      const result = await registerMutation.mutateAsync(registrationData);
+      
       setStep("success");
-      onSuccess?.(data);
-    } catch (error) {
+      onSuccess?.(result);
+      
+    } catch (error: any) {
       console.error("Registration error:", error);
-      toast.error("Registration failed. Please try again.");
+      toast.error(error.response?.data?.message || "Registration failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  const getLocation = () => {
+    if (isVirtual) return "Online";
+    if (eventVenue) return eventVenue;
+    if (event.location?.address) return event.location.address;
+    return "To Be Announced";
+  };
+
+  const getTotalPrice = () => {
+    if (!plan) return 0;
+    const additionalCount = form.registrationType === "group" 
+      ? form.groupMembers.length 
+      : form.registrationType === "corporate"
+      ? form.corporateMembers.length
+      : 0;
+    const totalTickets = 1 + additionalCount;
+    return plan.price * totalTickets;
+  };
+
+  const isFreePlan = plan?.price === 0;
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 p-4">
-        <div
-          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-          onClick={onClose}
-        />
-
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
         <div className="relative w-full sm:max-w-4xl bg-white dark:bg-gray-900 sm:rounded-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
           
-          {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800 shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
@@ -869,16 +1639,20 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
             </button>
           </div>
 
-          {/* Scrollable body */}
           <div className="flex-1 overflow-y-auto min-h-0">
             <div className="px-5 py-5">
-              {step !== "success" && <StepIndicator current={step} />}
+              {step !== "success" && <StepIndicator current={step} isFree={isFreePlan} />}
 
               {step === "plan" && (
                 <PlanStep plans={event.plans ?? []} selected={plan} onSelect={setPlan} />
               )}
               {step === "attendee" && (
-                <AttendeeStep form={form} onChange={updateForm} ageReq={ageReq} needsAge={needsAge} />
+                <AttendeeStep 
+                  form={form} 
+                  onChange={updateForm} 
+                  ageRequirement={ageRequirement} 
+                  needsAge={needsAge} 
+                />
               )}
               {step === "payment" && plan && (
                 <PaymentStep 
@@ -886,7 +1660,8 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
                   form={form}
                   event={event}
                   onRegistrationComplete={completeRegistration}
-                  isLoading={isLoading}
+                  isLoading={isLoading || registerMutation.isPending}
+                  needsAge={needsAge}
                 />
               )}
               {step === "success" && plan && (
@@ -895,24 +1670,19 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
             </div>
           </div>
 
-          {/* Footer nav - only show for plan and attendee steps */}
           {step !== "success" && step !== "payment" && (
             <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40 shrink-0">
               {step !== "plan" ? (
-                <Button
-                  variant="ghost"
-                  onClick={back}
-                  className="gap-1.5 text-gray-600 dark:text-gray-400"
-                >
+                <Button variant="ghost" onClick={back} className="gap-1.5 text-gray-600 dark:text-gray-400">
                   <HugeiconsIcon icon={ArrowLeftIcon} size={14} /> Back
                 </Button>
               ) : <div />}
               <Button 
                 onClick={step === "attendee" ? handleReviewAndPay : next} 
-                disabled={step === "plan" ? !canAdvancePlan : !canAdvanceAttendee} 
+                disabled={step === "plan" ? !canAdvancePlan : !canAdvanceAttendee()} 
                 className="gap-1.5 px-6 bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-300"
               >
-                {step === "attendee" ? "Review & Pay" : "Continue"}
+                {step === "attendee" && isFreePlan ? "Review & Confirm" : step === "attendee" ? "Review & Pay" : "Continue"}
                 <HugeiconsIcon icon={ArrowRightIcon} size={14} />
               </Button>
             </div>
@@ -920,7 +1690,6 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
         </div> 
       </div>
 
-      {/* Registration Confirmation Modal - Anchored here */}
       <RegistrationConfirmModal 
         open={confirmOpen} 
         onClose={() => setConfirmOpen(false)} 
@@ -929,9 +1698,9 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
           title: event.title,
           startDate: event.startDate,
           endDate: event.endDate,
-          location: isVirtual ? "Online" : eventVenue ?? "To Be Announced",
-          price: plan?.price ?? 0,
-          isFree: !plan?.price || plan?.price === 0,
+          location: getLocation(),
+          price: getTotalPrice(),
+          isFree: getTotalPrice() === 0,
         }}
       />
     </>

@@ -1,4 +1,3 @@
-// models/registration.ts
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import { PlanType } from './event';
 
@@ -19,27 +18,22 @@ export enum PaymentStatus {
   PARTIAL = 'partial'
 }
 
-// Base interface for registration data
 export interface IRegistration {
   eventId: mongoose.Types.ObjectId;
-  userId: mongoose.Types.ObjectId;
-  
-  // Registration Details
+  paymentId?: mongoose.Types.ObjectId;
+  ticketId?: mongoose.Types.ObjectId;
   registrationNumber: string;
   status: RegistrationStatus;
   planType: PlanType;
   planName: string;
   price: number;
   currency: string;
-  
-  // Attendee Information
   attendeeName: string;
   attendeeEmail: string;
   attendeePhone?: string;
   attendeeGender?: string;
   attendeeCompany?: string;
   attendeeTitle?: string;
-
   attendeeAge: number;
   ageVerified: boolean;
   ageVerifiedAt?: Date;
@@ -48,14 +42,10 @@ export interface IRegistration {
   parentalConsentAt?: Date;
   parentalConsentByName?: string;
   parentalConsentByEmail?: string;
-  ageGroup?: string; // Store which age group they belong to
-  
-  // Special Requirements
+  ageGroup?: string;
   specialRequests?: string;
   dietaryRestrictions?: string[];
   accessibilityNeeds?: string[];
-  
-  // Group Registration
   isGroupRegistration: boolean;
   groupSize?: number;
   groupName?: string;
@@ -65,52 +55,37 @@ export interface IRegistration {
     age?: number;
     phone?: string;
   }[];
-  
-  // Payment Information
+  isCorporateRegistration?: boolean;
+  companyName?: string;
+  companySize?: number;
+  companyMembers?: {
+    name: string;
+    email: string;
+    age?: number;
+    phone?: string;
+  }[];
   paymentStatus: PaymentStatus;
-  paymentMethod?: string;
-  paymentId?: string;
-  amountPaid: number;
-  paymentDate?: Date;
-  transactionReference?: string;
-  
-  // Check-in
-  checkedIn: boolean;
-  checkedInAt?: Date;
-  checkedInBy?: mongoose.Types.ObjectId;
-  
-  // Tickets
-  ticketUrl?: string;
-  qrCode?: string;
-  ticketNumber?: string;
-  
-  // Certificate
   certificateIssued: boolean;
-  certificateUrl?: string;
-  
-  // Feedback
   feedbackSubmitted: boolean;
   rating?: number;
   feedback?: string;
-  
-  // Metadata
   metadata: Map<string, any>;
-  
-  // Timestamps
   registeredAt: Date;
   updatedAt: Date;
   cancelledAt?: Date;
   cancellationReason?: string;
+  cancelledBy?: "by_user" | "by_organizer";
+  cancellationOtp?: string;
+  cancellationOtpExpiresAt?: number;
 }
 
-// Document interface with methods
 export interface IRegistrationDocument extends IRegistration, Document {
-  cancel(reason?: string): Promise<IRegistrationDocument>;
-  checkIn(userId: string): Promise<IRegistrationDocument>;
+  cancel(reason?: string, cancelledBy?: "by_user" | "by_organizer"): Promise<IRegistrationDocument>;
+  checkIn(email: string): Promise<IRegistrationDocument>;
   submitFeedback(rating: number, feedback: string): Promise<IRegistrationDocument>;
+  checkAgeEligibility(event: any): { eligible: boolean; message?: string; requiresConsent?: boolean };
 }
 
-// Define Registration Model interface
 interface IRegistrationModel extends Model<IRegistrationDocument> {}
 
 const RegistrationSchema = new Schema<IRegistrationDocument>(
@@ -120,14 +95,16 @@ const RegistrationSchema = new Schema<IRegistrationDocument>(
       ref: 'Event',
       required: true
     },
-    userId: {
+    paymentId: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
+      ref: 'Payment'
+    },
+    ticketId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Ticket'
     },
     registrationNumber: {
       type: String,
-      required: true,
       unique: true
     },
     status: {
@@ -150,7 +127,7 @@ const RegistrationSchema = new Schema<IRegistrationDocument>(
     },
     currency: {
       type: String,
-      default: 'USD'
+      default: 'NGN'
     },
     attendeeName: {
       type: String,
@@ -162,11 +139,11 @@ const RegistrationSchema = new Schema<IRegistrationDocument>(
       lowercase: true
     },
     attendeePhone: String,
+    attendeeGender: String,
+    attendeeCompany: String,
+    attendeeTitle: String,
     attendeeAge: {
       type: Number,
-      required: function(this: any) {
-        return this.parent()?.ageRequirement?.required;
-      }
     },
     ageVerified: {
       type: Boolean,
@@ -185,9 +162,6 @@ const RegistrationSchema = new Schema<IRegistrationDocument>(
     parentalConsentByName: String,
     parentalConsentByEmail: String,
     ageGroup: String,
-    attendeeGender: String,
-    attendeeCompany: String,
-    attendeeTitle: String,
     specialRequests: String,
     dietaryRestrictions: [String],
     accessibilityNeeds: [String],
@@ -199,14 +173,22 @@ const RegistrationSchema = new Schema<IRegistrationDocument>(
     groupName: String,
     groupMembers: [
       {
-        name: {
-          type: String,
-          required: true
-        },
-        email: {
-          type: String,
-          required: true
-        },
+        name: { type: String, required: true },
+        email: { type: String, required: true },
+        age: Number,
+        phone: String
+      }
+    ],
+    isCorporateRegistration: {
+      type: Boolean,
+      default: false
+    },
+    companyName: String,
+    companySize: Number,
+    companyMembers: [
+      {
+        name: { type: String, required: true },
+        email: { type: String, required: true },
         age: Number,
         phone: String
       }
@@ -216,31 +198,10 @@ const RegistrationSchema = new Schema<IRegistrationDocument>(
       enum: Object.values(PaymentStatus),
       default: PaymentStatus.PENDING
     },
-    paymentMethod: String,
-    paymentId: String,
-    amountPaid: {
-      type: Number,
-      required: true
-    },
-    paymentDate: Date,
-    transactionReference: String,
-    checkedIn: {
-      type: Boolean,
-      default: false
-    },
-    checkedInAt: Date,
-    checkedInBy: {
-      type: Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    ticketUrl: String,
-    qrCode: String,
-    ticketNumber: String,
     certificateIssued: {
       type: Boolean,
       default: false
     },
-    certificateUrl: String,
     feedbackSubmitted: {
       type: Boolean,
       default: false
@@ -261,166 +222,176 @@ const RegistrationSchema = new Schema<IRegistrationDocument>(
       default: Date.now
     },
     cancelledAt: Date,
-    cancellationReason: String
+    cancellationReason: String,
+    cancelledBy: { type: String, enum: ["by_user", "by_organizer"] },
+    cancellationOtp: { type: String, select: false },
+    cancellationOtpExpiresAt: { type: Number, select: false }
   },
-  {
-    timestamps: true
-  }
+  { timestamps: true }
 );
 
-// Indexes
-RegistrationSchema.index({ eventId: 1, userId: 1 }, { unique: true });
+RegistrationSchema.index({ eventId: 1, attendeeEmail: 1 }, { unique: true, sparse: true });
 RegistrationSchema.index({ registrationNumber: 1 }, { unique: true });
 RegistrationSchema.index({ status: 1, paymentStatus: 1 });
 RegistrationSchema.index({ attendeeEmail: 1 });
-RegistrationSchema.index({ checkedIn: 1 });
-RegistrationSchema.index({ ticketNumber: 1 });
 
-// Pre-save middleware - Using function() without parameters
-RegistrationSchema.pre('save', async function() {
-  // Cast this to any to access properties
+// Pre-save: generate registration number
+RegistrationSchema.pre('save', async function () {
   const doc = this as any;
-  
-  // Generate registration number if not exists
+
   if (!doc.registrationNumber) {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-    doc.registrationNumber = `REG-${timestamp}-${random}`;
-  }
-  
-  // Generate ticket number if not exists
-  if (!doc.ticketNumber) {
-    const Event = mongoose.model('Event');
-    const event = await Event.findById(doc.eventId);
-    if (event) {
-      const prefix = event.slug.substring(0, 4).toUpperCase();
-      const randomNum = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
-      doc.ticketNumber = `${prefix}-${randomNum}`;
-    }
-  }
-});
+    let isUnique = false;
+    let registrationNumber = '';
+    let attempts = 0;
 
-// Post-save middleware - Using function() without parameters
-RegistrationSchema.post('save', function(doc) {
-  // Use setImmediate or nextTick to avoid blocking
-  setImmediate(async () => {
-    try {
-      if (doc.status === RegistrationStatus.CONFIRMED && doc.paymentStatus === PaymentStatus.COMPLETED) {
-        const Event = mongoose.model('Event');
-        await Event.findByIdAndUpdate(doc.eventId, {
-          $inc: { availableSeats: -1 }
-        });
-        
-        await Event.updateOne(
-          { _id: doc.eventId, 'plans.type': doc.planType },
-          { $inc: { 'plans.$.availableSeats': -1 } }
-        );
+    while (!isUnique && attempts < 5) {
+      const timestamp = Date.now().toString(36);
+      const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+      registrationNumber = `REG-${timestamp}-${random}`;
+
+      const existing = await Registration.findOne({ registrationNumber });
+      if (!existing) {
+        isUnique = true;
+        doc.registrationNumber = registrationNumber.toUpperCase();
       }
-    } catch (error) {
-      console.error('Error updating event seats:', error);
+      attempts++;
     }
-  });
+
+    if (!isUnique) {
+      throw new Error('Failed to generate unique registration number');
+    }
+  }
 });
 
-// Methods
-RegistrationSchema.methods.cancel = async function(reason?: string): Promise<IRegistrationDocument> {
+// ─── cancel() ────────────────────────────────────────────────────────────────
+// Owns the full cancellation lifecycle:
+//   1. Marks the registration as cancelled
+//   2. Restores global + plan-level event seats
+//   3. Cancels the linked ticket
+//   4. Marks the linked payment as reversed + sets Registration.paymentStatus
+RegistrationSchema.methods.cancel = async function (
+  reason?: string,
+  cancelledBy?: "by_user" | "by_organizer"
+): Promise<IRegistrationDocument> {
   const doc = this as IRegistrationDocument;
-  
+
+  const totalTickets = doc.isGroupRegistration
+    ? doc.groupSize || 1
+    : doc.isCorporateRegistration
+    ? doc.companySize || 1
+    : 1;
+
+  // ── 1. Update registration fields ──
   doc.status = RegistrationStatus.CANCELLED;
   doc.cancelledAt = new Date();
-  doc.cancellationReason = reason || 'User cancelled registration';
+  doc.cancellationReason = reason || 'Cancelled';
+  if (cancelledBy) doc.cancelledBy = cancelledBy;
+
+  // Sync paymentStatus on the registration document itself
+  if (doc.paymentId && doc.paymentStatus === PaymentStatus.COMPLETED) {
+    doc.paymentStatus = PaymentStatus.REFUNDED;
+  }
+
   await doc.save();
-  
-  // Return seats to event
-  const Event = mongoose.model('Event');
-  await Event.findByIdAndUpdate(doc.eventId, {
-    $inc: { availableSeats: 1 }
+
+  const EventModel = mongoose.model('Event');
+  const Ticket = mongoose.model('Ticket');
+  const Payment = mongoose.model('Payment');
+
+  // ── 2. Restore seats (global + plan) ──
+  await EventModel.findByIdAndUpdate(doc.eventId, {
+    $inc: { availableSeats: totalTickets }
   });
-  
-  await Event.updateOne(
+
+  await EventModel.updateOne(
     { _id: doc.eventId, 'plans.type': doc.planType },
-    { $inc: { 'plans.$.availableSeats': 1 } }
+    { $inc: { 'plans.$.availableSeats': totalTickets } }
   );
-  
+
+  // ── 3. Cancel the ticket ──
+  if (doc.ticketId) {
+    await Ticket.findByIdAndUpdate(doc.ticketId, {
+      $set: { status: 'cancelled' }
+    });
+  }
+
+  // ── 4. Reverse the payment (only if paid and completed) ──
+  if (doc.paymentId && doc.paymentStatus === PaymentStatus.REFUNDED) {
+    await Payment.findByIdAndUpdate(doc.paymentId, {
+      $set: {
+        gatewayStatus: 'reversed',
+        refundedAt: new Date(),
+        refundReason: reason || 'Registration cancelled',
+      }
+    });
+  }
+
   return doc;
 };
 
-RegistrationSchema.methods.checkIn = async function(userId: string): Promise<IRegistrationDocument> {
+RegistrationSchema.methods.checkIn = async function (email: string): Promise<IRegistrationDocument> {
   const doc = this as IRegistrationDocument;
-  
-  doc.checkedIn = true;
-  doc.checkedInAt = new Date();
-  doc.checkedInBy = new mongoose.Types.ObjectId(userId);
   doc.status = RegistrationStatus.ATTENDED;
   await doc.save();
-  
   return doc;
 };
 
-RegistrationSchema.methods.submitFeedback = async function(rating: number, feedback: string): Promise<IRegistrationDocument> {
+RegistrationSchema.methods.submitFeedback = async function (
+  rating: number,
+  feedback: string
+): Promise<IRegistrationDocument> {
   const doc = this as IRegistrationDocument;
-  
   doc.feedbackSubmitted = true;
   doc.rating = rating;
   doc.feedback = feedback;
   await doc.save();
-  
   return doc;
 };
 
-RegistrationSchema.methods.checkAgeEligibility = function(event: any): { eligible: boolean; message?: string; requiresConsent?: boolean } {
+RegistrationSchema.methods.checkAgeEligibility = function (
+  event: any
+): { eligible: boolean; message?: string; requiresConsent?: boolean } {
   if (!event.ageRequirement?.required) {
     return { eligible: true };
   }
-  
+
   const age = this.attendeeAge;
-  
-  // Check min age
+
   if (event.ageRequirement.minAge && age < event.ageRequirement.minAge) {
-    return { 
-      eligible: false, 
-      message: `Minimum age required is ${event.ageRequirement.minAge} years old` 
-    };
+    return { eligible: false, message: `Minimum age required is ${event.ageRequirement.minAge} years old` };
   }
-  
-  // Check max age
+
   if (event.ageRequirement.maxAge && age > event.ageRequirement.maxAge) {
-    return { 
-      eligible: false, 
-      message: `Maximum age allowed is ${event.ageRequirement.maxAge} years old` 
-    };
+    return { eligible: false, message: `Maximum age allowed is ${event.ageRequirement.maxAge} years old` };
   }
-  
-  // Check age groups
-  if (event.ageRequirement.allowedAgeGroups && event.ageRequirement.allowedAgeGroups.length > 0) {
+
+  if (event.ageRequirement.allowedAgeGroups?.length > 0) {
     let ageGroup = '';
     if (age <= 25) ageGroup = '18-25';
     else if (age <= 35) ageGroup = '26-35';
     else if (age <= 50) ageGroup = '36-50';
     else ageGroup = '50+';
-    
+
     if (!event.ageRequirement.allowedAgeGroups.includes(ageGroup)) {
-      return { 
-        eligible: false, 
-        message: `This event is only for age groups: ${event.ageRequirement.allowedAgeGroups.join(', ')}` 
+      return {
+        eligible: false,
+        message: `This event is only for age groups: ${event.ageRequirement.allowedAgeGroups.join(', ')}`
       };
     }
     this.ageGroup = ageGroup;
   }
-  
-  // Check parental consent requirement
+
   if (event.ageRequirement.requiresParentalConsent && age < 18) {
-    return { 
-      eligible: true, 
+    return {
+      eligible: true,
       requiresConsent: true,
-      message: event.ageRequirement.parentalConsentMessage || "Parental consent is required for attendees under 18"
+      message: event.ageRequirement.parentalConsentMessage || 'Parental consent is required for attendees under 18'
     };
   }
-  
+
   return { eligible: true };
 };
 
-
-// Create and export the model
-export const Registration = (mongoose.models.Registration as IRegistrationModel) || 
+export const Registration =
+  (mongoose.models.Registration as IRegistrationModel) ||
   mongoose.model<IRegistrationDocument, IRegistrationModel>('Registration', RegistrationSchema);

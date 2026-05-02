@@ -1,7 +1,10 @@
+// app/api/events/route.ts
 import { connectDB } from "@/lib/mongoose";
 import { Event, EventStatus } from "@/models/event";
 import { NextRequest, NextResponse } from "next/server";
 import { withGroupingBatch } from "@/lib/event-grouping";
+import { getCurrentUser } from "@/lib/session";
+
 
 export async function GET(request: NextRequest) {
   await connectDB();
@@ -45,8 +48,6 @@ export async function GET(request: NextRequest) {
         { 'location.city':    regex },
         { 'location.state':   regex },
         { 'location.country': regex },
-        // If your schema stores location as a plain string field instead:
-        // { location: regex },
       ];
     }
 
@@ -65,12 +66,9 @@ export async function GET(request: NextRequest) {
     }
 
     // ── Date range — narrows within the active status ──────────────────────
-    // e.g. upcoming + startDate=2025-06-01 → events starting on/after June 1
-    // These safely merge with the startDate/endDate set by status above.
     if (startDateParam) {
       const from = new Date(startDateParam);
       if (query.startDate) {
-        // Already set by `upcoming` or `ongoing` — take the stricter bound
         query.startDate.$gte = query.startDate.$gte && from > query.startDate.$gte
           ? from
           : from;
@@ -80,12 +78,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (endDateParam) {
-      // Include the full selected end day (up to 23:59:59.999)
       const to = new Date(endDateParam);
       to.setHours(23, 59, 59, 999);
 
       if (query.endDate) {
-        // Already set by `ongoing` or `completed` — take the stricter bound
         query.endDate.$lte = query.endDate.$lte && to < query.endDate.$lte
           ? to
           : to;
@@ -127,6 +123,51 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching events:', error);
     return NextResponse.json(
       { success: false, error: 'An unexpected error occurred while fetching events.' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  await connectDB();
+
+  try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      return NextResponse.json(
+        { success: false, error: "Not Authenticated" }, 
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    
+    // Create event with organizerId from session
+    const event = await Event.create({
+      ...body,
+      organizerId: currentUser.id,
+      createdBy: currentUser.id,
+      status: EventStatus.DRAFT,
+      isPublic: false,
+      isDeleted: false,
+      isArchived: false,
+    });
+
+    const populatedEvent = await Event.findById(event._id)
+      .populate('organizerId', 'name email image')
+      .populate('createdBy', 'name email');
+
+    return NextResponse.json({
+      success: true,
+      data: populatedEvent,
+      message: "Event created successfully as draft"
+    }, { status: 201 });
+
+  } catch (error: any) {
+    console.error('Error creating event:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || "Failed to create event" },
       { status: 500 }
     );
   }

@@ -32,7 +32,7 @@ const HomePage = () => {
   };
 
   const routeToDashboard = () => {
-    router.push('/dashboard')
+    router.push('/dashboard/events/create-event')
   }
 
   const handleCTAClick = () => {

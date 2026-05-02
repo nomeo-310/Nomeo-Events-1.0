@@ -116,9 +116,9 @@ export default function UpcomingEventsSection() {
           <button
             type="button"
             onClick={() => router.push("/events")}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 rounded-xl font-medium border border-gray-300 dark:border-gray-700 hover:border-indigo-500 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all duration-200"
+            className="cursor-pointer inline-flex items-center gap-2 px-8 py-3 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 rounded-full font-medium border border-gray-300 dark:border-gray-700 hover:border-indigo-500 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all duration-200"
           >
-            See All Upcoming Events
+            See More Upcoming Events
             <HugeiconsIcon icon={ArrowRightIcon} size={16} />
           </button>
         </div>

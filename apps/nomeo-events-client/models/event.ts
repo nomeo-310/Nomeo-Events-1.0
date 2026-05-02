@@ -1,7 +1,5 @@
-// models/event.ts
 import mongoose, { Schema, Document, Model, Types, Query } from 'mongoose';
 
-// ====================== ENUMS & CONSTANTS ======================
 export enum EventCategory {
   WEBINAR = 'webinar',
   SEMINAR = 'seminar',
@@ -75,7 +73,6 @@ export interface IEvent {
   endDate: Date;
   timezone: string;
   eventMode: 'physical' | 'virtual' | 'hybrid';
-
   location?: {
     venue: string;
     address: string;
@@ -86,7 +83,6 @@ export interface IEvent {
     streamUrl?: string;
     googleMapsLink?: string;
   };
-
   organizerId: Types.ObjectId;
   speakers: Array<{
     name: string;
@@ -95,7 +91,6 @@ export interface IEvent {
     company?: string;
     photo?: IEventBanner;
   }>;
-
   banner?: IEventBanner;
   gallery?: IEventBanner[];
   promoVideo?: {
@@ -103,11 +98,9 @@ export interface IEvent {
     platform?: 'youtube' | 'vimeo' | 'other';
     embedId?: string;
   };
-
   totalSeats: number;
   availableSeats: number;
   waitlistEnabled: boolean;
-
   plans?: Array<{
     type: PlanType;
     name: string;
@@ -118,7 +111,6 @@ export interface IEvent {
     availableSeats?: number;
     earlyBirdDeadline?: Date;
   }>;
-
   ageRequirement: {
     required: boolean;
     minAge?: number;
@@ -129,14 +121,11 @@ export interface IEvent {
     ageVerificationRequired: boolean;
     ageVerificationMethod?: 'id_check' | 'self_declaration' | 'guardian_confirmation';
   };
-
   isPublic: boolean;
   isDeleted: boolean;
   isArchived: boolean;
-
   deletedAt?: Date | null;
   archivedAt?: Date | null;
-
   requiresApproval: boolean;
   registrationDeadline?: Date;
   tags: string[];
@@ -144,7 +133,6 @@ export interface IEvent {
   seoTitle?: string;
   seoDescription?: string;
   slug: string;
-
   createdBy: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -152,7 +140,7 @@ export interface IEvent {
 
 export interface IEventDocument extends IEvent, Document {
   getGrouping(): 'upcoming' | 'ongoing' | 'completed';
-  grouping: 'upcoming' | 'ongoing' | 'completed'; // Virtual property
+  grouping: 'upcoming' | 'ongoing' | 'completed';
   hasAvailableSeats(): boolean;
   getAvailableSeatsForPlan(planType: PlanType): number;
   canRegister(userId: string, planType?: PlanType, age?: number): { allowed: boolean; message?: string };
@@ -166,7 +154,67 @@ interface IEventModel extends Model<IEventDocument> {
   getFeaturedEvents(limit?: number): Promise<IEventDocument[]>;
 }
 
-// ====================== SCHEMA ======================
+// ====================== SUBDOCUMENT SCHEMAS ======================
+const BannerSchema = new Schema<IEventBanner>({
+  secure_url: String,
+  public_id: String,
+  width: Number,
+  height: Number,
+  alt: String
+}, { _id: false });
+
+const SpeakerSchema = new Schema({
+  name: { type: String, required: true },
+  email: String,
+  bio: String,
+  company: String,
+  photo: BannerSchema
+}, { _id: false });
+
+const LocationSchema = new Schema({
+  venue: String,
+  address: String,
+  city: String,
+  country: { type: String, default: 'Nigeria' },
+  platform: String,
+  streamUrl: String,
+  notes: String,
+  googleMapsLink: String
+}, { _id: false });
+
+const PromoVideoSchema = new Schema({
+  url: String,
+  platform: { type: String, enum: ['youtube', 'vimeo', 'other'] },
+  embedId: String
+}, { _id: false });
+
+const PlanSchema = new Schema({
+  type: { type: String, enum: Object.values(PlanType) },
+  name: String,
+  price: { type: Number, min: 0 },
+  currency: { type: String, default: 'NGN' },
+  benefits: [String],
+  maxSeats: Number,
+  availableSeats: Number,
+  earlyBirdDeadline: Date
+}, { _id: false });
+
+const AgeRequirementSchema = new Schema({
+  required: { type: Boolean, default: false },
+  minAge: Number,
+  maxAge: Number,
+  allowedAgeGroups: [String],
+  requiresParentalConsent: { type: Boolean, default: false },
+  parentalConsentMessage: String,
+  ageVerificationRequired: { type: Boolean, default: false },
+  ageVerificationMethod: {
+    type: String,
+    enum: ['id_check', 'self_declaration', 'guardian_confirmation'],
+    default: 'self_declaration'
+  }
+}, { _id: false });
+
+// ====================== MAIN SCHEMA ======================
 const EventSchema = new Schema<IEventDocument>(
   {
     title: { type: String, required: true, trim: true, maxlength: 200 },
@@ -179,75 +227,31 @@ const EventSchema = new Schema<IEventDocument>(
       enum: Object.values(EventStatus),
       default: EventStatus.DRAFT
     },
-
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
     timezone: { type: String, default: 'UTC' },
     eventMode: { type: String, enum: ['physical', 'virtual', 'hybrid'], required: true },
 
-    location: {
-      venue: String,
-      address: String,
-      city: String,
-      country: { type: String, default: 'Nigeria' },
-      platform: String,
-      streamUrl: String,
-      notes: String,
-      googleMapsLink: String
-    },
+    location: LocationSchema,
 
     organizerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    speakers: [{
-      name: { type: String, required: true },
-      email: String,
-      bio: String,
-      company: String,
-      photo: { secure_url: String, public_id: String }
-    }],
+    speakers: [SpeakerSchema],
 
-    banner: { secure_url: String, public_id: String, width: Number, height: Number, alt: String },
-    gallery: [{ secure_url: String, public_id: String, width: Number, height: Number, alt: String }],
-
-    promoVideo: {
-      url: String,
-      platform: { type: String, enum: ['youtube', 'vimeo', 'other'] },
-      embedId: String
-    },
+    banner: BannerSchema,
+    gallery: [BannerSchema],
+    promoVideo: PromoVideoSchema,
 
     totalSeats: { type: Number, required: true, min: 1 },
     availableSeats: { type: Number, required: true, min: 0 },
     waitlistEnabled: { type: Boolean, default: false },
 
-    plans: [{
-      type: { type: String, enum: Object.values(PlanType) },
-      name: String,
-      price: { type: Number, min: 0 },
-      currency: { type: String, default: 'NGN' },
-      benefits: [String],
-      maxSeats: Number,
-      availableSeats: Number,
-      earlyBirdDeadline: Date
-    }],
+    plans: [PlanSchema],
 
-    ageRequirement: {
-      required: { type: Boolean, default: false },
-      minAge: Number,
-      maxAge: Number,
-      allowedAgeGroups: [String],
-      requiresParentalConsent: { type: Boolean, default: false },
-      parentalConsentMessage: String,
-      ageVerificationRequired: { type: Boolean, default: false },
-      ageVerificationMethod: {
-        type: String,
-        enum: ['id_check', 'self_declaration', 'guardian_confirmation'],
-        default: 'self_declaration'
-      }
-    },
+    ageRequirement: { type: AgeRequirementSchema, default: () => ({}) },
 
     isPublic: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
     isArchived: { type: Boolean, default: false },
-
     deletedAt: { type: Date, default: null },
     archivedAt: { type: Date, default: null },
 
@@ -266,21 +270,13 @@ const EventSchema = new Schema<IEventDocument>(
 );
 
 // ====================== VIRTUALS ======================
-// Add virtual property for grouping (works with lean())
-EventSchema.virtual('grouping').get(function(this: IEventDocument) {
+EventSchema.virtual('grouping').get(function (this: IEventDocument) {
   const now = new Date();
-  
-  if (now < this.startDate) {
-    return 'upcoming';
-  } else if (now >= this.startDate && now <= this.endDate) {
-    return 'ongoing';
-  } else {
-    return 'completed';
-  }
+  if (now < this.startDate) return 'upcoming';
+  if (now >= this.startDate && now <= this.endDate) return 'ongoing';
+  return 'completed';
 });
 
-// Configure schema to include virtuals when converting to JSON/Object
-// Don't add custom transform that tries to set 'id' - Mongoose already handles this
 EventSchema.set('toJSON', { virtuals: true });
 EventSchema.set('toObject', { virtuals: true });
 
@@ -289,7 +285,6 @@ EventSchema.index({ startDate: 1, endDate: 1 });
 EventSchema.index({ category: 1, type: 1 });
 EventSchema.index({ organizerId: 1 });
 EventSchema.index({ status: 1, isPublic: 1, isDeleted: 1, isArchived: 1 });
-EventSchema.index({ slug: 1 });
 EventSchema.index({ deletedAt: 1 });
 EventSchema.index({ archivedAt: 1 });
 
@@ -327,7 +322,6 @@ EventSchema.pre('save', function (this: IEventDocument) {
   }
 });
 
-// Hide deleted events by default
 EventSchema.pre(/^find/, function (this: Query<unknown, IEventDocument>) {
   if (!this.getQuery().isDeleted) {
     this.where({ isDeleted: false });
@@ -335,76 +329,48 @@ EventSchema.pre(/^find/, function (this: Query<unknown, IEventDocument>) {
 });
 
 // ====================== INSTANCE METHODS ======================
-EventSchema.methods.getGrouping = function(this: IEventDocument): 'upcoming' | 'ongoing' | 'completed' {
+EventSchema.methods.getGrouping = function (this: IEventDocument): 'upcoming' | 'ongoing' | 'completed' {
   const now = new Date();
-  
-  if (now < this.startDate) {
-    return 'upcoming';
-  } else if (now >= this.startDate && now <= this.endDate) {
-    return 'ongoing';
-  } else {
-    return 'completed';
-  }
+  if (now < this.startDate) return 'upcoming';
+  if (now >= this.startDate && now <= this.endDate) return 'ongoing';
+  return 'completed';
 };
 
-EventSchema.methods.hasAvailableSeats = function(this: IEventDocument): boolean {
+EventSchema.methods.hasAvailableSeats = function (this: IEventDocument): boolean {
   return this.availableSeats > 0;
 };
 
-EventSchema.methods.getAvailableSeatsForPlan = function(this: IEventDocument, planType: PlanType): number {
-  if (!this.plans || this.plans.length === 0) {
-    return this.availableSeats;
-  }
-  
-  const plan = this.plans.find(p => p.type === planType);
-  if (!plan) {
-    return 0;
-  }
-  
-  // If plan has its own availableSeats tracking, use that
-  if (plan.availableSeats !== undefined) {
-    return plan.availableSeats;
-  }
-  
-  // Otherwise, fall back to global available seats
+EventSchema.methods.getAvailableSeatsForPlan = function (this: IEventDocument, planType: PlanType): number {
+  if (!this.plans || this.plans.length === 0) return this.availableSeats;
+  const plan = this.plans.find((p) => p.type === planType);
+  if (!plan) return 0;
+  if (plan.availableSeats !== undefined && plan.availableSeats !== null) return plan.availableSeats;
+  if (plan.maxSeats !== undefined) return plan.maxSeats;
   return this.availableSeats;
 };
 
-EventSchema.methods.canRegister = function(
-  this: IEventDocument, 
-  userId: string, 
-  planType?: PlanType, 
+EventSchema.methods.canRegister = function (
+  this: IEventDocument,
+  userId: string,
+  planType?: PlanType,
   age?: number
 ): { allowed: boolean; message?: string } {
-  // Check if event is active
   if (this.status !== EventStatus.PUBLISHED) {
     return { allowed: false, message: 'Event is not available for registration' };
   }
-  
-  // Check if event is archived or deleted
   if (this.isArchived || this.isDeleted) {
     return { allowed: false, message: 'Event is no longer available' };
   }
-  
-  // Check registration deadline
   if (this.registrationDeadline && new Date() > this.registrationDeadline) {
     return { allowed: false, message: 'Registration deadline has passed' };
   }
-  
-  // Check if event has started (optional - you might allow registration until event ends)
   if (new Date() > this.startDate) {
     return { allowed: false, message: 'Event has already started' };
   }
-  
-  // Check seat availability
   if (!this.hasAvailableSeats()) {
-    if (this.waitlistEnabled) {
-      return { allowed: true, message: 'No seats available, but you can join waitlist' };
-    }
+    if (this.waitlistEnabled) return { allowed: true, message: 'No seats available, but you can join waitlist' };
     return { allowed: false, message: 'Event is sold out' };
   }
-  
-  // Check plan-specific seat availability
   if (planType) {
     const availableSeatsForPlan = this.getAvailableSeatsForPlan(planType);
     if (availableSeatsForPlan <= 0) {
@@ -414,55 +380,36 @@ EventSchema.methods.canRegister = function(
       return { allowed: false, message: 'Selected ticket type is sold out' };
     }
   }
-  
-  // Check age requirements
   if (this.ageRequirement.required && age !== undefined) {
     if (this.ageRequirement.minAge && age < this.ageRequirement.minAge) {
-      return { 
-        allowed: false, 
-        message: `Minimum age requirement is ${this.ageRequirement.minAge} years` 
-      };
+      return { allowed: false, message: `Minimum age requirement is ${this.ageRequirement.minAge} years` };
     }
-    
     if (this.ageRequirement.maxAge && age > this.ageRequirement.maxAge) {
-      return { 
-        allowed: false, 
-        message: `Maximum age limit is ${this.ageRequirement.maxAge} years` 
-      };
+      return { allowed: false, message: `Maximum age limit is ${this.ageRequirement.maxAge} years` };
     }
-    
-    if (this.ageRequirement.ageVerificationRequired && 
-        this.ageRequirement.ageVerificationMethod === 'id_check') {
-      return { 
-        allowed: true, 
-        message: 'Age verification will be required at check-in' 
-      };
+    if (this.ageRequirement.ageVerificationRequired && this.ageRequirement.ageVerificationMethod === 'id_check') {
+      return { allowed: true, message: 'Age verification will be required at check-in' };
     }
-    
     if (this.ageRequirement.requiresParentalConsent && age < 18) {
-      return { 
-        allowed: true, 
-        message: this.ageRequirement.parentalConsentMessage || 'Parental consent required for registration' 
-      };
+      return { allowed: true, message: this.ageRequirement.parentalConsentMessage || 'Parental consent required for registration' };
     }
   }
-  
   return { allowed: true };
 };
 
-EventSchema.methods.softDelete = async function(this: IEventDocument) {
+EventSchema.methods.softDelete = async function (this: IEventDocument) {
   this.isDeleted = true;
   this.deletedAt = new Date();
   return this.save();
 };
 
-EventSchema.methods.restore = async function(this: IEventDocument) {
+EventSchema.methods.restore = async function (this: IEventDocument) {
   this.isDeleted = false;
   this.deletedAt = null;
   return this.save();
 };
 
-EventSchema.methods.archive = async function(this: IEventDocument) {
+EventSchema.methods.archive = async function (this: IEventDocument) {
   this.isArchived = true;
   this.archivedAt = new Date();
   this.status = EventStatus.ARCHIVED;
@@ -470,8 +417,8 @@ EventSchema.methods.archive = async function(this: IEventDocument) {
 };
 
 // ====================== STATIC METHODS ======================
-EventSchema.statics.getUpcomingEvents = async function(
-  limit: number = 10, 
+EventSchema.statics.getUpcomingEvents = async function (
+  limit: number = 10,
   category?: string
 ): Promise<IEventDocument[]> {
   const query: any = {
@@ -480,18 +427,11 @@ EventSchema.statics.getUpcomingEvents = async function(
     isArchived: false,
     startDate: { $gt: new Date() }
   };
-  
-  if (category) {
-    query.category = category;
-  }
-  
-  return this.find(query)
-    .sort({ startDate: 1 })
-    .limit(limit)
-    .exec();
+  if (category) query.category = category;
+  return this.find(query).sort({ startDate: 1 }).limit(limit).exec();
 };
 
-EventSchema.statics.getFeaturedEvents = async function(
+EventSchema.statics.getFeaturedEvents = async function (
   limit: number = 10
 ): Promise<IEventDocument[]> {
   return this.find({
@@ -500,10 +440,7 @@ EventSchema.statics.getFeaturedEvents = async function(
     isDeleted: false,
     isArchived: false,
     startDate: { $gt: new Date() }
-  })
-    .sort({ startDate: 1 })
-    .limit(limit)
-    .exec();
+  }).sort({ startDate: 1 }).limit(limit).exec();
 };
 
 // ====================== EXPORT ======================

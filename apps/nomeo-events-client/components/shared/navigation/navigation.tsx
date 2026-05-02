@@ -6,11 +6,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { UserGroup03Icon as SeminarIcon,
   LibraryIcon as AboutIcon,
-  DashboardSquare01Icon as DashboardSquareIcon,
   Login01Icon as LoginIcon,
   Menu02Icon,
   CompassIcon,
-  CreditCardPosIcon,
+  DashboardSquare02Icon,
+  CreditCardIcon
 } from "@hugeicons/core-free-icons";
 import { useModal } from "@/hooks/use-modal";
 import { useScrollBehavior } from "@/hooks/use-scroll-behaviour";
@@ -49,14 +49,14 @@ const Navigation = () => {
   const navItems: NavItem[] = [
     { name: "Discover", href: "/", icon: CompassIcon},
     { name: "Events", href: "/events", icon: SeminarIcon },
-    { name: "Pricing", href: "/pricing", icon: CreditCardPosIcon },
+    { name: "Pricing", href: "/pricing", icon: CreditCardIcon },
     { name: "About", href: "/about", icon: AboutIcon },
   ];
 
   const dashboardItem: NavItem = {
     name: "Dashboard",
     href: "/dashboard",
-    icon: DashboardSquareIcon,
+    icon: DashboardSquare02Icon,
   };
 
   const isActive = (href: string): boolean =>
@@ -110,7 +110,7 @@ const Navigation = () => {
             : "bg-white dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800/40"
         }`}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="h-14 flex items-center gap-3">
             <Logo/>
 
@@ -128,7 +128,7 @@ const Navigation = () => {
                       : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-white/5"
                   }`}
                 >
-                  <HugeiconsIcon icon={DashboardSquareIcon} size={16} />
+                  <HugeiconsIcon icon={DashboardSquare02Icon} size={16} />
                   Dashboard
                 </Link>
               }

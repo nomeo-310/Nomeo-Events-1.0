@@ -26,9 +26,6 @@ export const TopBar = ({ firstName, userName, userAvatar, unreadCount, onLogout,
             <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
               Welcome {firstName}!
             </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-              Ready to manage your events?
-            </p>
           </div>
 
           <div className="flex items-center gap-4">

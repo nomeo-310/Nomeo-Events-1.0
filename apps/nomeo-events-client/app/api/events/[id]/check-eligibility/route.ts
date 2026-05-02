@@ -32,17 +32,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     
     // Check existing registration
     if (email) {
-      const existing = await Registration.findOne({
-        eventId: id,
-        attendeeEmail: email.toLowerCase(),
-        status: { $ne: 'cancelled' }
-      });
+      const existing = await Registration.findOne({ eventId: id, attendeeEmail: email.toLowerCase(), status: { $ne: 'cancelled' }});
       
       if (existing) {
         checks.eligible = false;
         checks.errors.push("This email is already registered for this event");
         checks.existingRegistration = {
-          ticketNumber: existing.ticketNumber,
           status: existing.status
         };
       }

@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import { emailOTP } from "better-auth/plugins";
 import mongoose from "mongoose";
-import { sendOTPEmail } from "./mailer";
+import { sendOTPEmail } from "./send-otp-email";
 import { ObjectId } from "mongodb";
 import { Profile } from "@/models/profile";
 import { Setting } from "@/models/setting";
@@ -73,7 +73,7 @@ export function createAuth() {
                   showPhone: false,
                   showLocation: true,
                 },
-                verificationStatus: "pending",
+                verificationStatus: "unverified",
                 activeStatus: "active",
               }),
               Setting.create({ userId: user.id }),

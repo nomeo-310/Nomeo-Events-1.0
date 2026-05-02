@@ -4,12 +4,7 @@ export interface FooterLink {
   name: string;
   href: string;
   isModal?: boolean;
-}
-
-export interface SocialLink {
-  name: string;
-  icon: any;
-  href: string;
+  type?: 'page' | 'section';
 }
 
 export interface FooterLinksData {
@@ -18,15 +13,22 @@ export interface FooterLinksData {
   legal: FooterLink[];
 }
 
+export interface FooterLinksProps {
+  links: FooterLink[];
+  title: string;
+  onLegalClick?: (modalName: LegalModalName) => void;
+}
+
+export interface SocialLink {
+  name: string;
+  icon: any;
+  href: string;
+}
+
 export interface BrandColumnProps {
   onContactClick?: () => void;
 }
 
-export interface FooterLinksProps {
-  links: FooterLink[];
-  title: string;
-  onLegalClick?: (linkName: LegalModalName) => void;
-}
 
 export interface NewsletterSectionProps {
   onSubscribe?: (email: string) => void;

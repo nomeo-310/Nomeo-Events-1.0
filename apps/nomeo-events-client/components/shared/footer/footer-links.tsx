@@ -1,15 +1,13 @@
+// components/FooterLinks.tsx
 "use client";
 
 import Link from "next/link";
 import { FooterLinksProps } from "@/types/footer-type";
 import { LegalModalName } from "@/hooks/use-legal";
+import { useSmoothScroll } from "@/hooks/use-smooth-scroll";
 
 const FooterLinks = ({ links, title, onLegalClick }: FooterLinksProps) => {
-  const handleClick = (link: { name: string; href: string; isModal?: boolean }) => {
-    if (link.isModal && onLegalClick) {
-      onLegalClick(link.name as LegalModalName);
-    }
-  };
+  const { handleScrollLinkClick } = useSmoothScroll();
 
   return (
     <div>
@@ -19,7 +17,7 @@ const FooterLinks = ({ links, title, onLegalClick }: FooterLinksProps) => {
           <li key={link.name}>
             {link.isModal ? (
               <button
-                onClick={() => handleClick(link)}
+                onClick={() => onLegalClick?.(link.name as LegalModalName)}
                 className="text-sm text-gray-400 hover:text-indigo-400 transition-colors cursor-pointer"
               >
                 {link.name}
@@ -27,6 +25,7 @@ const FooterLinks = ({ links, title, onLegalClick }: FooterLinksProps) => {
             ) : (
               <Link
                 href={link.href}
+                onClick={(e) => handleScrollLinkClick(e, link.href)}
                 className="text-sm text-gray-400 hover:text-indigo-400 transition-colors"
               >
                 {link.name}

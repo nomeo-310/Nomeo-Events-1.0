@@ -20,7 +20,7 @@ const CTA = ({ onGetStarted }: CTAProps) => {
 
         <button
           onClick={onGetStarted}
-          className="inline-flex items-center gap-2 px-8 py-4 bg-white text-indigo-700 font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-200"
+          className="inline-flex items-center gap-2 px-8 py-3 bg-white text-indigo-700 font-semibold text-lg rounded-full shadow-lg hover:shadow-xl transition-shadow duration-200"
         >
           Start Free — No Card Required
           <HugeiconsIcon icon={ArrowRightIcon} size={20} />

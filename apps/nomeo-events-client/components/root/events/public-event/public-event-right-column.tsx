@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import { useState, type JSX } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   UserGroup03Icon as UsersIcon,
@@ -7,10 +7,13 @@ import {
   MoneyBagIcon,
   TicketIcon,
   UserIcon,
+  LinkSquare02Icon as ExternalLinkIcon,
 } from "@hugeicons/core-free-icons";
 import { Section } from "./public-event-primitives";
-import { formatDate, formatTime, getLowestPrice } from "./public-event-helpers";
+import { formatDate, formatTime, getHoursUntilEvent, getLowestPrice, isCancellationAllowed, isEventMoreThan24HoursAway, isEventWithin24Hours } from "./public-event-helpers";
 import { cn } from "@/lib/utils";
+import { CancelRegistrationSection } from "./cancel-registration";
+import { OrganizerProfileModal } from "./organizer-profile-modal";
 
 interface PublicEventRightColumnProps {
   event:           any;
@@ -23,20 +26,28 @@ interface PublicEventRightColumnProps {
   registrationOpen: boolean;
 }
 
-export function PublicEventRightColumn({
-  event, seatsUsed, seatPct, waitlistEnabled,
-  regDeadline, ageReq, onRegister, registrationOpen,
-}: PublicEventRightColumnProps): JSX.Element {
+export function PublicEventRightColumn({ event, seatsUsed, seatPct, waitlistEnabled, regDeadline, ageReq, onRegister, registrationOpen }: PublicEventRightColumnProps): JSX.Element {
   const price    = getLowestPrice(event.plans ?? []);
   const isFree   = price === "Free";
   const seatsLeft = event.availableSeats ?? event.totalSeats;
   const soldOut   = event.totalSeats > 0 && seatsLeft <= 0;
 
+  const eventStartDate = event.startDate;
+  const containsPaidPlans = event.plans?.some((plan: any) => plan.price > 0) ?? false;
+  const startsWithin24Hours = isEventWithin24Hours(eventStartDate);
+  const startsMoreThan24Hours = isEventMoreThan24HoursAway(eventStartDate);
+  const canCancel = isCancellationAllowed(eventStartDate, 24);
+  const hoursUntilStart = getHoursUntilEvent(eventStartDate);
+
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  console.log(event.organizerProfile);
+
+
   return (
     <div className="space-y-5">
-
       {/* Sticky register CTA card */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
         <div className="p-5 space-y-4">
           <div>
             <p className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">Starting from</p>
@@ -122,21 +133,32 @@ export function PublicEventRightColumn({
       {/* Organizer */}
       {event.organizerId && (
         <Section icon={UserIcon} title="Organiser">
-          <div className="flex items-center gap-3">
-            {event.organizerId.image ? (
-              <img src={event.organizerId.image} alt={event.organizerId.name}
-                className="w-10 h-10 rounded-full object-cover shrink-0" />
-            ) : (
-              <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
-                <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
-                  {String(event.organizerId.name ?? "?").charAt(0).toUpperCase()}
-                </span>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              {event.organizerId.image ? (
+                <img src={event.organizerId.image} alt={event.organizerId.name}
+                  className="w-10 h-10 rounded-full object-cover shrink-0" />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
+                  <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
+                    {String(event.organizerId.name ?? "?").charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{event.organizerId.name}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{event.organizerProfile.displayName}</p>
               </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{event.organizerId.name}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{event.organizerId.email}</p>
             </div>
+            
+            <button
+              type="button"
+              onClick={() => setIsProfileModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-950/60 transition-colors"
+            >
+              <HugeiconsIcon icon={ExternalLinkIcon} size={14} />
+              View Profile
+            </button>
           </div>
         </Section>
       )}
@@ -164,6 +186,33 @@ export function PublicEventRightColumn({
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">at {formatTime(regDeadline)}</p>
           </div>
         </Section>
+      )}
+
+      <CancelRegistrationSection
+        visible={canCancel}
+        eventId={event._id}
+        cutoffHours={24}
+        refundEnabled={containsPaidPlans}
+        onSuccess={() => {/* refetch or invalidate your query here */}}
+      />
+
+      <OrganizerProfileModal 
+        open={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        organizerSlug={event.organizerProfile?.slug}
+      />
+
+      {/* Optional: Show warning message */}
+      {startsWithin24Hours && (
+        <div className="text-sm text-red-600 border-red-200 bg-red-50 p-3 text-center rounded-2xl border">
+          Cancellations are no longer allowed, event starts soonest.
+        </div>
+      )}
+      
+      {startsMoreThan24Hours && (
+        <div className="text-sm text-green-600 border text-center rounded-2xl py-3 bg-green-50 border-green-200">
+          You can cancel your registration. {Math.floor(hoursUntilStart)} hours remaining.
+        </div>
       )}
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { EyeIcon, Edit01Icon as EditIcon, Megaphone01Icon, Archive03Icon, CheckmarkCircle02Icon, Delete02Icon as TrashIcon, MoreHorizontalIcon } from "@hugeicons/core-free-icons";
+import { EyeIcon, Edit01Icon as EditIcon, Megaphone01Icon, Archive03Icon, CheckmarkCircle02Icon, Delete02Icon as TrashIcon, MoreHorizontalIcon, UserListIcon } from "@hugeicons/core-free-icons";
 import { Event } from "@/hooks/use-events";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -31,6 +31,12 @@ export function EventActionsMenu({ event, onPublish, onArchive, onDelete, onRest
         <DropdownMenuItem className="gap-2 cursor-pointer" onClick={(e) => stop(e, () => router.push(`/dashboard/events/${event._id}`))}>
           <HugeiconsIcon icon={EyeIcon} size={14} /> View
         </DropdownMenuItem>
+
+        {event.status === 'published' && !event.isDeleted && !event.isArchived && (
+          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={(e) => stop(e, () => router.push(`/dashboard/events/${event._id}/registrations`))}>
+            <HugeiconsIcon icon={UserListIcon} size={14} /> Registrations
+          </DropdownMenuItem>
+        )}
 
         {!event.isDeleted && !event.isArchived && (
           <DropdownMenuItem className="gap-2 cursor-pointer" onClick={(e) => stop(e, () => router.push(`/dashboard/events/create-event/${event._id}`))}>

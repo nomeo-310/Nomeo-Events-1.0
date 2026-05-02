@@ -19,10 +19,12 @@ interface EventHeroProps {
 }
 
 export function EventHero({ event, statusConfig, loc, isVirtual, isHybrid }: EventHeroProps): JSX.Element {
+  console.log(event)
   const locationLabel = isHybrid    ? "Hybrid Event"
                       : isVirtual  ? "Online Event"
                       : `${loc?.city ?? ""}, ${loc?.country ?? ""}`;
 
+                      console.log(locationLabel)
   return (
     <div className="relative rounded-2xl overflow-hidden mb-6 bg-gradient-to-br from-indigo-500 to-purple-600">
       {event.banner?.secure_url ? (

@@ -21,6 +21,7 @@ import { PrivacyPolicyContent } from "../consent/privacy-policy";
 import { authClient } from "@/lib/auth-client";
 import { PasswordStrength } from "@/components/ui/password-strength";
 import { toast } from "sonner";
+import { getAndClearReturnUrl } from "@/lib/return-url";
 
 interface SignupFormProps {
   onSuccess?: (email: string) => void;
@@ -97,6 +98,14 @@ export const SignupForm = ({ onSuccess, onLogin, isLoading = false }: SignupForm
 
   const getCallbackUrl = () => {
     if (typeof window === "undefined") return "/dashboard";
+    
+    // First check if there's a saved return URL from localStorage
+    const savedReturnUrl = getAndClearReturnUrl();
+    if (savedReturnUrl) {
+      return savedReturnUrl;
+    }
+    
+    // Fallback to URL parameter or dashboard
     const params = new URLSearchParams(window.location.search);
     return params.get("callbackUrl") ?? "/dashboard";
   };
@@ -143,11 +152,11 @@ export const SignupForm = ({ onSuccess, onLogin, isLoading = false }: SignupForm
   };
 
   const handleGoogleSignup = () => {
-
+    const callbackUrl = getCallbackUrl();
     toast.loading("Redirecting to Google...");
     authClient.signIn.social({
       provider: "google",
-      callbackURL: getCallbackUrl(),
+      callbackURL: callbackUrl,
     });
   };
 

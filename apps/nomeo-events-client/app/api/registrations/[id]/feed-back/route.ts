@@ -22,11 +22,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });
     }
     
-    // Check if user owns this registration
-    if (registration.userId?.toString() !== user.id && user.role !== 'admin') {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-    
     await registration.submitFeedback(rating, feedback);
     
     return NextResponse.json({ 

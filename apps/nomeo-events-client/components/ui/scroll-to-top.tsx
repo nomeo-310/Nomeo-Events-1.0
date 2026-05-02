@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowUp01Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import { ArrowUp02Icon, ArrowDown02Icon } from "@hugeicons/core-free-icons";
 
 export const ScrollToTop = () => {
   const [isVisible, setIsVisible] = useState(false);
@@ -116,7 +116,7 @@ export const ScrollToTop = () => {
                   transition={{ duration: 0.3 }}
                 >
                   <HugeiconsIcon 
-                    icon={isAtBottom || scrollProgress > 70 ? ArrowUp01Icon : ArrowDown01Icon} 
+                    icon={isAtBottom || scrollProgress > 70 ? ArrowUp02Icon : ArrowDown02Icon} 
                     size={24} 
                   />
                 </motion.div>

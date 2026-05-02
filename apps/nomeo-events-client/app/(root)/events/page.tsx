@@ -1,4 +1,4 @@
-import PublicEventsPage from "@/components/root/events/public-events/public-events-page";
+import PublicEventsPage from "@/components/root/events/public-events/public-events";
 import Footer from "@/components/shared/footer/footer";
 import Navigation from "@/components/shared/navigation/navigation";
 import { Metadata } from "next";

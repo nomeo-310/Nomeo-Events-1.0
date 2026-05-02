@@ -30,3 +30,35 @@ export function getLowestPrice(plans: any[]): string {
 export function toTitleCase(str: string): string {
   return str.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
 }
+
+// Check if event starts within 24 hours (less than or equal to 24 hours from now)
+export const isEventWithin24Hours = (startDate: string | Date): boolean => {
+  const now = new Date();
+  const eventStart = new Date(startDate);
+  const hoursUntilEvent = (eventStart.getTime() - now.getTime()) / (1000 * 60 * 60);
+  return hoursUntilEvent <= 24;
+};
+
+// Check if event starts more than 24 hours from now
+export const isEventMoreThan24HoursAway = (startDate: string | Date): boolean => {
+  const now = new Date();
+  const eventStart = new Date(startDate);
+  const hoursUntilEvent = (eventStart.getTime() - now.getTime()) / (1000 * 60 * 60);
+  return hoursUntilEvent > 24;
+};
+
+// Get hours until event starts
+export const getHoursUntilEvent = (startDate: string | Date): number => {
+  const now = new Date();
+  const eventStart = new Date(startDate);
+  const hoursUntilEvent = (eventStart.getTime() - now.getTime()) / (1000 * 60 * 60);
+  return Math.max(0, hoursUntilEvent);
+};
+
+// Check if cancellation is allowed (event more than 24 hours away)
+export const isCancellationAllowed = (startDate: string | Date, cutoffHours: number = 24): boolean => {
+  const now = new Date();
+  const eventStart = new Date(startDate);
+  const hoursUntilEvent = (eventStart.getTime() - now.getTime()) / (1000 * 60 * 60);
+  return hoursUntilEvent > cutoffHours;
+};
