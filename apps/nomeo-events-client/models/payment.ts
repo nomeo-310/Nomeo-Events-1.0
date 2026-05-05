@@ -162,8 +162,8 @@ const PaymentSchema = new Schema<IPaymentDocument>(
 // Enforce correct context fields per purpose
 PaymentSchema.pre('validate', function () {
   if (this.purpose === PaymentPurpose.EVENT_REGISTRATION) {
-    if (!this.registrationId || !this.eventId) {
-      throw new Error('registrationId and eventId are required for event_registration payments');
+    if (!this.eventId) {
+      throw new Error('eventId is required for event_registration payments');
     }
   }
   if (this.purpose === PaymentPurpose.SUBSCRIPTION) {
