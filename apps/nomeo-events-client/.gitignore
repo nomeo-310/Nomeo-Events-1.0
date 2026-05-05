@@ -24,11 +24,6 @@
 .DS_Store
 *.pem
 
-#cron-job
-vercel.json
-
-#cron-job-api
-/app/api/cron
 
 # debug
 npm-debug.log*
