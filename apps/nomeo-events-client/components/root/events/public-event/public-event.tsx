@@ -2,11 +2,7 @@
 
 import { useState, type JSX } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  Location01Icon as LocationIcon,
-  Video01Icon as VideoCameraIcon,
-  ArrowLeft02Icon,
-} from "@hugeicons/core-free-icons";
+import { Location01Icon as LocationIcon, Video01Icon as VideoCameraIcon, ArrowLeft02Icon } from "@hugeicons/core-free-icons";
 import { useEvents } from "@/hooks/use-events";
 import { PublicEventSkeleton, PublicEventNotFound } from "./public-event-state";
 import { PublicEventHero } from "./public-event-hero";

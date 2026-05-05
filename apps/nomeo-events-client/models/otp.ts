@@ -1,11 +1,15 @@
+// models/otp.ts
 import mongoose, { Schema, Document } from "mongoose";
+
+export type OTPType = "sign-in" | "email-verification" | "forget-password" | "change-email";
 
 export interface IOtp extends Document {
   email: string;
   otp: string;
-  type: "email-verification" | "sign-in" | "password-reset";
+  type: OTPType;
   expiresAt: Date;
   createdAt: Date;
+  attempts: number;
 }
 
 const OtpSchema = new Schema<IOtp>(
@@ -25,7 +29,7 @@ const OtpSchema = new Schema<IOtp>(
     type: {
       type: String,
       required: true,
-      enum: ["email-verification", "sign-in", "password-reset"],
+      enum: ["sign-in", "email-verification", "forget-password", "change-email"],
       index: true,
     },
     expiresAt: {
@@ -33,12 +37,19 @@ const OtpSchema = new Schema<IOtp>(
       required: true,
       index: true,        
     },
+    attempts: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
   },
   {
     timestamps: true, 
   }
 );
 
+// Indexes
 OtpSchema.index({ email: 1, type: 1 });
 OtpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 

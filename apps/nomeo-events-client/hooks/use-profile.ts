@@ -185,16 +185,17 @@ export function useProfileCompletion(): ProfileCompletion {
   }
 
   const checklist = [
-    { key: 'profilePicture', label: 'Profile picture', completed: !!profile.profilePicture?.secure_url },
-    { key: 'coverPicture', label: 'Cover photo', completed: !!profile.coverPicture?.secure_url },
-    { key: 'fullName', label: 'Full name', completed: !!profile.fullName },
-    { key: 'bio', label: 'Bio', completed: !!profile.bio },
-    { key: 'location', label: 'Address', completed: !!profile.location?.address },
-    { key: 'phoneNumber', label: 'Phone number', completed: !!profile.contact?.phoneNumber },
-    { key: 'email', label: 'Contact email', completed: !!profile.contact?.email },
-    { key: 'specialties', label: 'Specialties', completed: !!(profile.specialties?.length) },
-    { key: 'slug', label: 'Public profile URL', completed: !!profile.publicProfile?.slug },
-    { key: 'accountDetails', label: 'Payment details', completed: !!profile.accountDetails?.accountNumber },
+    { key: 'profilePicture', label: 'Profile picture', completed: !!profile.profilePicture?.secure_url , path: '/dashboard/profile'},
+    { key: 'coverPicture', label: 'Cover photo', completed: !!profile.coverPicture?.secure_url, path: '/dashboard/profile' },
+    { key: 'fullName', label: 'Full name', completed: !!profile.fullName , path: '/dashboard/profile?activeTab=basic'},
+    { key: 'bio', label: 'Bio', completed: !!profile.bio, path: '/dashboard/profile?activeTab=basic' },
+    { key: 'location', label: 'Address', completed: !!profile.location?.address, path: '/dashboard/profile?activeTab=contact' },
+    { key: 'phoneNumber', label: 'Phone number', completed: !!profile.contact?.phoneNumber, path: '/dashboard/profile?activeTab=contact' },
+    { key: 'email', label: 'Contact email', completed: !!profile.contact?.email, path: '/dashboard/profile?activeTab=contact' },
+    { key: 'specialties', label: 'Specialties', completed: !!(profile.specialties?.length), path: '/dashboard/profile?activeTab=professional'},
+    { key: 'slug', label: 'Public profile URL', completed: !!profile.publicProfile?.slug , path: '/dashboard/profile?activeTab=visibility'},
+    { key: 'accountDetails', label: 'Payment details', completed: !!profile.accountDetails?.accountNumber , path: '/dashboard/profile?activeTab=payment'},
+    { key: 'verification', label: 'Account verification', completed: profile.verificationStatus === 'verified' , path: '/dashboard/profile?activeTab=verification'},
   ];
 
   const completedItems = checklist.filter(item => item.completed);

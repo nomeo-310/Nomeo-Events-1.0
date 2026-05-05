@@ -7,7 +7,7 @@ import {
   Login01Icon as LoginIcon,
   Logout01Icon,
   User03Icon as UserIcon,
-  DashboardSquare01Icon,
+  DashboardSquare02Icon,
   Notification02Icon,
   Cancel01Icon as CloseIcon,
 } from "@hugeicons/core-free-icons";
@@ -130,14 +130,14 @@ const MobileDrawer = ({
                 }`}
               >
                 <HugeiconsIcon
-                  icon={DashboardSquare01Icon}
+                  icon={DashboardSquare02Icon}
                   size={18}
                   className={isActive(dashboardItem.href) ? "text-indigo-500" : "text-gray-400 dark:text-gray-500"}
                 />
                 Dashboard
               </Link>
               <Link
-                href="/profile"
+                href="/dashboard/profile"
                 onClick={onClose}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors duration-150"
               >
@@ -145,7 +145,7 @@ const MobileDrawer = ({
                 Profile
               </Link>
               <Link
-                href="/notifications"
+                href="/dashboard"
                 onClick={onClose}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors duration-150"
               >

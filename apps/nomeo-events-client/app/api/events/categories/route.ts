@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     const categories = Object.values(EventCategory);
     const categoriesWithCounts = await Promise.all(
       categories.map(async (category) => {
-        let query: any = { category, status: EventStatus.PUBLISHED };
+        let query: any = { category, status: EventStatus.PUBLISHED, isDeleted: false };
         
         if (upcoming) {
           query.startDate = { $gte: new Date() };

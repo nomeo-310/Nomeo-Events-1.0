@@ -385,5 +385,4 @@ ProfileSchema.statics.getIncompleteProfiles = async function (threshold = 50): P
 };
 
 // ====================== MODEL EXPORT ======================
-export const Profile = (models.Profile as IProfileModel) ||
-  model<IProfile, IProfileModel>("Profile", ProfileSchema);
+export const Profile = (models.Profile as IProfileModel) || model<IProfile, IProfileModel>("Profile", ProfileSchema);

@@ -19,7 +19,7 @@ export enum PaymentStatus {
 }
 
 export interface IRegistration {
-  eventId: mongoose.Types.ObjectId;
+  eventId?: mongoose.Types.ObjectId;
   paymentId?: mongoose.Types.ObjectId;
   ticketId?: mongoose.Types.ObjectId;
   registrationNumber: string;
@@ -93,7 +93,6 @@ const RegistrationSchema = new Schema<IRegistrationDocument>(
     eventId: {
       type: Schema.Types.ObjectId,
       ref: 'Event',
-      required: true
     },
     paymentId: {
       type: Schema.Types.ObjectId,
@@ -392,6 +391,4 @@ RegistrationSchema.methods.checkAgeEligibility = function (
   return { eligible: true };
 };
 
-export const Registration =
-  (mongoose.models.Registration as IRegistrationModel) ||
-  mongoose.model<IRegistrationDocument, IRegistrationModel>('Registration', RegistrationSchema);
+export const Registration = (mongoose.models.Registration as IRegistrationModel) || mongoose.model<IRegistrationDocument, IRegistrationModel>('Registration', RegistrationSchema);

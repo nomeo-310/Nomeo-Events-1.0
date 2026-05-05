@@ -5,6 +5,7 @@ export interface SelectedPlanForPayment {
   tier:    TierPricing;
   pricing: IntervalPricing;
   planId:  string;
+  subscriptionId: string;
 }
 
 /** Re-export for convenience so consumers import from one place */

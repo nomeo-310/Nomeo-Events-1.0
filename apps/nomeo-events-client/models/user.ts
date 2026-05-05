@@ -16,9 +16,9 @@ const UserSchema = new Schema<IUser>(
   {
     name: { type: String },
     email: { type: String },
-    emailVerified: { type: Boolean, enum: ["user", "admin", "superadmin"], default: false },
+    emailVerified: { type: Boolean, default: false },
     image: {type: String},
-    role: { type: String, default: "user" },
+    role: { type: String, enum: ["user", "admin", "superadmin"], default: "user" },
     avatar: { type: String, default: "" },
   },
   {
@@ -27,5 +27,4 @@ const UserSchema = new Schema<IUser>(
   }
 );
 
-export const User =
-  mongoose.models.User ?? mongoose.model<IUser>("User", UserSchema);
+export const User = mongoose.models.User ?? mongoose.model<IUser>("User", UserSchema);

@@ -13,9 +13,9 @@ export async function GET( request: Request,  { params }: { params: Promise<{ id
   const { id } = await params;
 
   try {
-    const logedInUser = await getCurrentUser();
+    const loggedInUser = await getCurrentUser();
 
-    if (!logedInUser) {
+    if (!loggedInUser) {
       return NextResponse.json({success: false, error: "Not Authenticated"}, { status: 403})
     };
 
@@ -35,7 +35,7 @@ export async function GET( request: Request,  { params }: { params: Promise<{ id
         }
       );
 
-    if (event?.organizerId._id.toString() !== logedInUser.id) {
+    if (event?.organizerId._id.toString() !== loggedInUser.id) {
       return NextResponse.json({success: false, error: "Not Authenticated"}, { status: 403})
     }
     

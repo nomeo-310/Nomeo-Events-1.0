@@ -1,6 +1,7 @@
 // app/api/events/upcoming/route.ts
 import { connectDB } from "@/lib/mongoose";
 import { Event, EventStatus } from "@/models/event";
+import { User } from "@/models/user";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -14,7 +15,8 @@ export async function GET(request: Request) {
     let query: any = {
       status: EventStatus.PUBLISHED,
       startDate: { $gte: new Date() },
-      isPublic: true
+      isPublic: true,
+      isDeleted: false
     };
     
     if (category) query.category = category;
@@ -22,7 +24,11 @@ export async function GET(request: Request) {
     const events = await Event.find(query)
       .sort({ startDate: 1, featured: -1 })
       .limit(limit)
-      .populate('organizerId', 'name email image');
+      .populate({
+        path: 'organizerId', 
+        model: User,
+        select: 'name email image'
+      });
     
     return NextResponse.json({
       success: true,

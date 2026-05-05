@@ -4,9 +4,35 @@ import { Types } from "mongoose";
 import { connectDB } from "@/lib/mongoose";
 import { getCurrentUser } from "@/lib/session";
 import { Profile } from "@/models/profile";
+import { User } from "@/models/user";
+import { Notification } from "@/models/notification";
+
+// ─── Constants ──────────────────────────────────────────────────────────────────
+
+const SYSTEM_USER_ID = new Types.ObjectId("000000000000000000000001");
+
+const IDENTITY_DOC_TYPES = ['id_card', 'passport', 'drivers_license', 'voters_card'];
+
+// ─── Helpers ────────────────────────────────────────────────────────────────────
+
+function formatDocType(docType: string): string {
+  return docType
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter: string) => letter.toUpperCase());
+}
+
+function getAccountTypeLabel(profile: any): string {
+  if (profile.accountType === 'organization') {
+    return `${profile.organizationName || 'Organization'} (Organization)`;
+  }
+  return 'Individual';
+}
+
+// ─── POST ───────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
+    // ── Authentication ────────────────────────────────────────────────────────
     const loggedInUser = await getCurrentUser();
 
     if (!loggedInUser) {
@@ -18,7 +44,10 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
 
-    const profile = await Profile.findOne({ userId: new Types.ObjectId(loggedInUser.id) });
+    // ── Find profile ──────────────────────────────────────────────────────────
+    const profile = await Profile.findOne({ 
+      userId: new Types.ObjectId(loggedInUser.id) 
+    });
 
     if (!profile) {
       return NextResponse.json(
@@ -27,7 +56,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check if already verified or pending
+    // ── Status checks ─────────────────────────────────────────────────────────
     if (profile.verificationStatus === 'verified') {
       return NextResponse.json(
         { success: false, error: "Profile is already verified" },
@@ -42,7 +71,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get documents from request body
+    // ── Validate documents ────────────────────────────────────────────────────
     const { documents } = await req.json();
 
     if (!documents || !Array.isArray(documents) || documents.length === 0) {
@@ -52,12 +81,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate required documents based on account type
+    // Check required document types
     const hasIdentityDoc = documents.some((doc: any) => 
-      ['id_card', 'passport', 'drivers_license', 'voters_card'].includes(doc.documentType)
+      IDENTITY_DOC_TYPES.includes(doc.documentType)
     );
     
-    const hasProofOfAddress = documents.some((doc: any) => doc.documentType === 'proof_of_address');
+    const hasProofOfAddress = documents.some((doc: any) => 
+      doc.documentType === 'proof_of_address'
+    );
     
     if (!hasIdentityDoc) {
       return NextResponse.json(
@@ -75,7 +106,9 @@ export async function POST(req: NextRequest) {
     
     // For organizations, CAC document is required
     if (profile.accountType === 'organization') {
-      const hasCacDoc = documents.some((doc: any) => doc.documentType === 'cac_document');
+      const hasCacDoc = documents.some((doc: any) => 
+        doc.documentType === 'cac_document'
+      );
       if (!hasCacDoc) {
         return NextResponse.json(
           { success: false, error: "CAC registration document is required for organizations" },
@@ -88,21 +121,21 @@ export async function POST(req: NextRequest) {
     for (const doc of documents) {
       if (!doc.documentType || !doc.secure_url || !doc.public_id) {
         return NextResponse.json(
-          { success: false, error: "Invalid document data" },
+          { success: false, error: "Invalid document data. Each document must have documentType, secure_url, and public_id." },
           { status: 400 }
         );
       }
     }
 
-    // Add verified: false to each document and update profile
-    const verificationDocuments = documents.map(doc => ({
+    // ── Prepare verification documents ────────────────────────────────────────
+    const verificationDocuments = documents.map((doc: any) => ({
       documentType: doc.documentType,
       secure_url: doc.secure_url,
       public_id: doc.public_id,
-      verified: false
+      verified: false,
     }));
 
-    // Update profile with verification documents and status
+    // ── Update profile ────────────────────────────────────────────────────────
     profile.verificationStatus = 'pending';
     profile.verificationDocuments = verificationDocuments;
     profile.verifiedAt = undefined;
@@ -110,18 +143,62 @@ export async function POST(req: NextRequest) {
     
     await profile.save();
 
+    // ── Create notifications ──────────────────────────────────────────────────
+    const docTypesList = documents.map((d: any) => formatDocType(d.documentType)).join(', ');
+    const accountTypeLabel = getAccountTypeLabel(profile);
+    const now = new Date();
+
+    // 1. Notify the user
+    await Notification.create({
+      senderId: SYSTEM_USER_ID,
+      receiverId: profile.userId,
+      title: "Verification Request Submitted",
+      message: `Your verification request has been received. We're reviewing your ${docTypesList}. This usually takes 1–2 business days. We'll notify you once the review is complete.`,
+      message_type: "verification",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // 2. Notify all admins
+    const admins = await User.find({ role: { $in: ["admin", "superadmin"] } }).select('_id');
+
+    if (admins.length > 0) {
+      const adminNotifications = admins.map((admin) => ({
+        senderId: SYSTEM_USER_ID,
+        receiverId: admin._id,
+        title: "New Verification Request",
+        message: `${profile.fullName} (${profile.contact?.email || 'No email'}) has submitted verification documents for review.\n\nAccount type: ${accountTypeLabel}\nDocuments: ${docTypesList}\n\nReview this request in the admin dashboard.`,
+        message_type: "verification",
+        metadata: {
+          profileId: profile._id.toString(),
+          userId: profile.userId.toString(),
+          verificationStatus: 'pending',
+          documentCount: documents.length,
+        },
+        createdAt: now,
+        updatedAt: now,
+      }));
+
+      await Notification.insertMany(adminNotifications);
+    }
+
+    // ── Return success ────────────────────────────────────────────────────────
     return NextResponse.json(
       { 
         success: true, 
         status: "pending",
-        message: "Verification request submitted successfully. Our team will review your documents."
+        message: "Verification request submitted successfully. Our team will review your documents.",
       },
       { status: 200 }
     );
+
   } catch (error: any) {
     console.error("[POST /api/user/profile/verify/request]", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to submit verification request" },
+      { 
+        success: false, 
+        error: error.message || "Failed to submit verification request" 
+      },
       { status: 500 }
     );
   }

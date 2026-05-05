@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type JSX } from "react";
+import { useState, useEffect, useRef, type JSX } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Cancel01Icon as XIcon,
@@ -47,6 +47,14 @@ import { useRegistration, type RegisterInput } from "@/hooks/use-registration";
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+
+// ── Payment hooks ──────────────────────────────────────────────────────────────
+import { useInitiatePayment, useVerifyPayment } from "@/hooks/use-payments";
+
+export enum PaymentPurpose {
+  EVENT_REGISTRATION = 'event_registration',
+  SUBSCRIPTION = 'subscription'
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -608,11 +616,7 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
   };
   
   const handleAddMember = (memberData: Omit<GroupMember, 'id'>) => {
-    const newMember = {
-      ...memberData,
-      id: generateMemberId(),
-    };
-    
+    const newMember = { ...memberData, id: generateMemberId() };
     if (isGroup) {
       onChange("groupMembers", [...form.groupMembers, newMember]);
       onChange("showingAddMember", false);
@@ -625,49 +629,30 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
   const handleEditMember = (memberId: string) => {
     if (isGroup) {
       const member = form.groupMembers.find(m => m.id === memberId);
-      if (member) {
-        handleRemoveMember(memberId);
-        onChange("showingAddMember", true);
-      }
+      if (member) { handleRemoveMember(memberId); onChange("showingAddMember", true); }
     } else if (isCorporate) {
       const member = form.corporateMembers.find(m => m.id === memberId);
-      if (member) {
-        handleRemoveMember(memberId);
-        onChange("showingAddCorporateMember", true);
-      }
+      if (member) { handleRemoveMember(memberId); onChange("showingAddCorporateMember", true); }
     }
   };
   
   const handleRemoveMember = (memberId: string) => {
-    if (isGroup) {
-      onChange("groupMembers", form.groupMembers.filter(m => m.id !== memberId));
-    } else if (isCorporate) {
-      onChange("corporateMembers", form.corporateMembers.filter(m => m.id !== memberId));
-    }
-    setExpandedMembers(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(memberId);
-      return newSet;
-    });
+    if (isGroup) onChange("groupMembers", form.groupMembers.filter(m => m.id !== memberId));
+    else if (isCorporate) onChange("corporateMembers", form.corporateMembers.filter(m => m.id !== memberId));
+    setExpandedMembers(prev => { const s = new Set(prev); s.delete(memberId); return s; });
   };
   
   const getMembers = () => isGroup ? form.groupMembers : isCorporate ? form.corporateMembers : [];
   const showingAddForm = isGroup ? form.showingAddMember : isCorporate ? form.showingAddCorporateMember : false;
   
   const startAddMember = () => {
-    if (isGroup) {
-      onChange("showingAddMember", true);
-    } else if (isCorporate) {
-      onChange("showingAddCorporateMember", true);
-    }
+    if (isGroup) onChange("showingAddMember", true);
+    else if (isCorporate) onChange("showingAddCorporateMember", true);
   };
   
   const cancelAddMember = () => {
-    if (isGroup) {
-      onChange("showingAddMember", false);
-    } else if (isCorporate) {
-      onChange("showingAddCorporateMember", false);
-    }
+    if (isGroup) onChange("showingAddMember", false);
+    else if (isCorporate) onChange("showingAddCorporateMember", false);
   };
   
   const additionalMembersCount = getMembers().length;
@@ -675,12 +660,8 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
 
   const getAgeErrorMessage = (): string | null => {
     if (!age) return null;
-    if (minAge && age < minAge) {
-      return `Minimum age requirement is ${minAge} years old.`;
-    }
-    if (maxAge && age > maxAge) {
-      return `Maximum age allowed is ${maxAge} years old.`;
-    }
+    if (minAge && age < minAge) return `Minimum age requirement is ${minAge} years old.`;
+    if (maxAge && age > maxAge) return `Maximum age allowed is ${maxAge} years old.`;
     return null;
   };
 
@@ -693,16 +674,12 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
           onChange={(type) => {
             onChange("registrationType", type);
             if (type === "individual") {
-              onChange("groupMembers", []);
-              onChange("corporateMembers", []);
-              onChange("showingAddMember", false);
-              onChange("showingAddCorporateMember", false);
+              onChange("groupMembers", []); onChange("corporateMembers", []);
+              onChange("showingAddMember", false); onChange("showingAddCorporateMember", false);
             } else if (type === "group") {
-              onChange("corporateMembers", []);
-              onChange("showingAddCorporateMember", false);
+              onChange("corporateMembers", []); onChange("showingAddCorporateMember", false);
             } else if (type === "corporate") {
-              onChange("groupMembers", []);
-              onChange("showingAddMember", false);
+              onChange("groupMembers", []); onChange("showingAddMember", false);
             }
           }} 
         />
@@ -730,31 +707,14 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
         
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Full Name" required>
-            <Input
-              placeholder="Jane Doe"
-              value={form.name}
-              onChange={(e) => onChange("name", e.target.value)}
-            />
+            <Input placeholder="Jane Doe" value={form.name} onChange={(e) => onChange("name", e.target.value)} />
           </Field>
-
           <Field label="Email Address" required>
-            <Input
-              type="email"
-              placeholder="jane@example.com"
-              value={form.email}
-              onChange={(e) => onChange("email", e.target.value)}
-            />
+            <Input type="email" placeholder="jane@example.com" value={form.email} onChange={(e) => onChange("email", e.target.value)} />
           </Field>
-
           <Field label="Phone Number">
-            <Input
-              type="tel"
-              placeholder="+1 234 567 8900"
-              value={form.phone}
-              onChange={(e) => onChange("phone", e.target.value)}
-            />
+            <Input type="tel" placeholder="+1 234 567 8900" value={form.phone} onChange={(e) => onChange("phone", e.target.value)} />
           </Field>
-
           <Field label="Gender">
             <Select value={form.gender} onValueChange={(v) => onChange("gender", v ?? "")}>
               <SelectTrigger className="w-full h-10 lg:h-11">
@@ -769,11 +729,7 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
           </Field>
 
           {needsAge && (
-            <Field
-              label="Date of Birth"
-              required
-              hint={age !== null ? `Age: ${age} years old` : undefined}
-            >
+            <Field label="Date of Birth" required hint={age !== null ? `Age: ${age} years old` : undefined}>
               <Popover>
                 <PopoverTrigger className={cn("w-full justify-start text-left font-normal flex items-center border h-10 lg:h-11 px-3 rounded-lg", !form.dob && "text-muted-foreground")}>
                   <HugeiconsIcon icon={CalendarIcon} size={16} className="mr-2 text-gray-400 shrink-0" />
@@ -781,14 +737,9 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
-                    mode="single"
-                    selected={form.dob}
-                    onSelect={(d) => onChange("dob", d)}
-                    disabled={(date) => date > new Date()}
-                    captionLayout="dropdown"
-                    fromYear={1920}
-                    toYear={new Date().getFullYear()}
-                    initialFocus
+                    mode="single" selected={form.dob} onSelect={(d) => onChange("dob", d)}
+                    disabled={(date) => date > new Date()} captionLayout="dropdown"
+                    fromYear={1920} toYear={new Date().getFullYear()} initialFocus
                   />
                 </PopoverContent>
               </Popover>
@@ -800,9 +751,7 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
           <div className="mt-3 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800">
             <div className="flex items-start gap-2">
               <HugeiconsIcon icon={AlertIcon} size={16} className="text-red-500 mt-0.5 shrink-0" />
-              <p className="text-xs text-red-600 dark:text-red-400">
-                {getAgeErrorMessage()}
-              </p>
+              <p className="text-xs text-red-600 dark:text-red-400">{getAgeErrorMessage()}</p>
             </div>
           </div>
         )}
@@ -814,18 +763,10 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
         <SectionHeading>Professional (Optional)</SectionHeading>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Company / Organisation">
-            <Input
-              placeholder="Acme Inc."
-              value={form.company}
-              onChange={(e) => onChange("company", e.target.value)}
-            />
+            <Input placeholder="Acme Inc." value={form.company} onChange={(e) => onChange("company", e.target.value)} />
           </Field>
           <Field label="Job Title">
-            <Input
-              placeholder="Product Manager"
-              value={form.title}
-              onChange={(e) => onChange("title", e.target.value)}
-            />
+            <Input placeholder="Product Manager" value={form.title} onChange={(e) => onChange("title", e.target.value)} />
           </Field>
         </div>
       </div>
@@ -834,30 +775,19 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
         <>
           <Separator />
           <div>
-            <SectionHeading>
-              {isGroup ? "Additional Group Members" : "Additional Team Members"}
-            </SectionHeading>
+            <SectionHeading>{isGroup ? "Additional Group Members" : "Additional Team Members"}</SectionHeading>
             
             {isGroup && (
               <div className="mb-4">
                 <Field label="Group Name" required>
-                  <Input
-                    placeholder="Team Acme"
-                    value={form.groupName}
-                    onChange={(e) => onChange("groupName", e.target.value)}
-                  />
+                  <Input placeholder="Team Acme" value={form.groupName} onChange={(e) => onChange("groupName", e.target.value)} />
                 </Field>
               </div>
             )}
-            
             {isCorporate && (
               <div className="mb-4">
                 <Field label="Company Name" required>
-                  <Input
-                    placeholder="Acme Corporation"
-                    value={form.corporateName}
-                    onChange={(e) => onChange("corporateName", e.target.value)}
-                  />
+                  <Input placeholder="Acme Corporation" value={form.corporateName} onChange={(e) => onChange("corporateName", e.target.value)} />
                 </Field>
               </div>
             )}
@@ -873,24 +803,10 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
             </div>
             
             <div className="mb-4">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Primary Contact (You)
-              </p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Primary Contact (You)</p>
               <MemberCard
-                member={{
-                  id: "primary",
-                  name: form.name || "Not provided",
-                  email: form.email || "Not provided",
-                  phone: form.phone,
-                  dob: form.dob,
-                  age: age || undefined,
-                }}
-                index={0}
-                onEdit={() => {}}
-                onRemove={() => {}}
-                isExpanded={false}
-                onToggle={() => {}}
-                isPrimary={true}
+                member={{ id: "primary", name: form.name || "Not provided", email: form.email || "Not provided", phone: form.phone, dob: form.dob, age: age || undefined }}
+                index={0} onEdit={() => {}} onRemove={() => {}} isExpanded={false} onToggle={() => {}} isPrimary={true}
               />
             </div>
             
@@ -901,13 +817,9 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
                 </p>
                 {getMembers().map((member, idx) => (
                   <MemberCard
-                    key={member.id}
-                    member={member}
-                    index={idx + 1}
-                    onEdit={() => handleEditMember(member.id)}
-                    onRemove={() => handleRemoveMember(member.id)}
-                    isExpanded={expandedMembers.has(member.id)}
-                    onToggle={() => toggleMemberExpand(member.id)}
+                    key={member.id} member={member} index={idx + 1}
+                    onEdit={() => handleEditMember(member.id)} onRemove={() => handleRemoveMember(member.id)}
+                    isExpanded={expandedMembers.has(member.id)} onToggle={() => toggleMemberExpand(member.id)}
                     isPrimary={false}
                   />
                 ))}
@@ -915,18 +827,9 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
             )}
             
             {showingAddForm ? (
-              <AddMemberForm
-                onAdd={handleAddMember}
-                onCancel={cancelAddMember}
-                needsAge={needsAge}
-              />
+              <AddMemberForm onAdd={handleAddMember} onCancel={cancelAddMember} needsAge={needsAge} />
             ) : (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={startAddMember}
-                className="w-full gap-2"
-              >
+              <Button type="button" variant="outline" onClick={startAddMember} className="w-full gap-2">
                 <HugeiconsIcon icon={UserAddIcon} size={16} />
                 Add {isGroup ? "Group Member" : "Team Member"}
               </Button>
@@ -954,19 +857,10 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Parent / Guardian Name" required>
-                <Input
-                  placeholder="Parent name"
-                  value={form.parentalConsentByName}
-                  onChange={(e) => onChange("parentalConsentByName", e.target.value)}
-                />
+                <Input placeholder="Parent name" value={form.parentalConsentByName} onChange={(e) => onChange("parentalConsentByName", e.target.value)} />
               </Field>
               <Field label="Parent / Guardian Email" required>
-                <Input
-                  type="email"
-                  placeholder="parent@example.com"
-                  value={form.parentalConsentByEmail}
-                  onChange={(e) => onChange("parentalConsentByEmail", e.target.value)}
-                />
+                <Input type="email" placeholder="parent@example.com" value={form.parentalConsentByEmail} onChange={(e) => onChange("parentalConsentByEmail", e.target.value)} />
               </Field>
             </div>
             {(isGroup || isCorporate) && (
@@ -991,21 +885,12 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
                 const active = form.dietary.includes(d);
                 return (
                   <button
-                    key={d}
-                    type="button"
-                    onClick={() =>
-                      onChange(
-                        "dietary",
-                        active
-                          ? form.dietary.filter((x) => x !== d)
-                          : [...form.dietary, d]
-                      )
-                    }
+                    key={d} type="button"
+                    onClick={() => onChange("dietary", active ? form.dietary.filter((x) => x !== d) : [...form.dietary, d])}
                     className={cn(
                       "text-xs px-3 py-1.5 rounded-full border font-medium transition-all duration-150",
-                      active
-                        ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
-                        : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-indigo-300 dark:hover:border-indigo-600"
+                      active ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
+                             : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-indigo-300 dark:hover:border-indigo-600"
                     )}
                   >
                     {d}
@@ -1014,23 +899,11 @@ function AttendeeStep({ form, onChange, ageRequirement, needsAge }: {
               })}
             </div>
           </Field>
-
           <Field label="Accessibility Needs">
-            <Input
-              placeholder="e.g. Wheelchair access, hearing loop…"
-              value={form.accessibility}
-              onChange={(e) => onChange("accessibility", e.target.value)}
-            />
+            <Input placeholder="e.g. Wheelchair access, hearing loop…" value={form.accessibility} onChange={(e) => onChange("accessibility", e.target.value)} />
           </Field>
-
           <Field label="Special Requests">
-            <Textarea
-              rows={3}
-              placeholder="Any other requests or notes…"
-              value={form.specialRequests}
-              onChange={(e) => onChange("specialRequests", e.target.value)}
-              className="resize-none"
-            />
+            <Textarea rows={3} placeholder="Any other requests or notes…" value={form.specialRequests} onChange={(e) => onChange("specialRequests", e.target.value)} className="resize-none" />
           </Field>
         </div>
       </div>
@@ -1049,7 +922,10 @@ interface PaymentStepProps {
   needsAge: boolean;
 }
 
-function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, needsAge }: PaymentStepProps): JSX.Element {
+function PaymentStep({
+  plan, form, event,
+  onRegistrationComplete, isLoading, needsAge,
+}: PaymentStepProps): JSX.Element {
   const additionalMembersCount = form.registrationType === "group" 
     ? form.groupMembers.length 
     : form.registrationType === "corporate"
@@ -1063,34 +939,94 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
   const amountInKobo = totalPrice * 100;
   const age = getAgeFromDob(form.dob);
 
-  const formatMembersList = (members: GroupMember[], startIndex: number): string => {
-    return members.map((member, idx) => {
-      const details = [`${startIndex + idx + 1}. ${member.name} (${member.email})`];
-      if (needsAge && member.age) {
-        details.push(`Age: ${member.age}`);
+  // ── Payment state ────────────────────────────────────────────────────────────
+  const [paymentReference, setPaymentReference] = useState<string | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const hasCompletedRef = useRef(false);
+
+  const { mutate: initiatePayment, isPending: isInitiating } = useInitiatePayment();
+
+  // Initiate a Payment record on the server as soon as the step mounts (paid plans only).
+  // We send only eventId — no registrationId yet, because no registration exists yet.
+  // The webhook receives the Paystack event, finds this Payment by reference,
+  // and links the newly-created registration back to it.
+  useEffect(() => {
+    if (isFree || !form.email || !event._id) return;
+
+    initiatePayment(
+      {
+        purpose: PaymentPurpose.EVENT_REGISTRATION,
+        email: form.email,
+        amount: amountInKobo,
+        eventId: event._id,
+        // registrationId is intentionally omitted — the registration does not
+        // exist yet. The webhook will link it after payment is confirmed.
+      },
+      {
+        onSuccess: ({ data }) => {
+          setPaymentReference(data.reference);
+        },
+        onError: () => {
+          toast.error("Could not prepare payment. Please try again.");
+        },
       }
-      if (member.phone) {
-        details.push(`Phone: ${member.phone}`);
-      }
-      return details.join(' | ');
-    }).join('\n');
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // runs once on mount
+
+  // Poll verify every 3s after Paystack modal closes.
+  // Stops when the gateway status resolves to a terminal state.
+  // This is the fallback safety net in case the webhook fires late or is delayed.
+  const verifyQuery = useVerifyPayment(paymentReference ?? "", {
+    enabled: !!paymentReference && !hasCompletedRef.current,
+    refetchInterval: (query) => {
+      const status = query.state.data?.data?.gatewayStatus;
+      if (status === "success" || status === "failed" || status === "abandoned") return false;
+      return 3000;
+    },
+  });
+
+  // React Query v5 removed onSuccess from useQuery — handle via useEffect instead.
+  useEffect(() => {
+    if (!verifyQuery.data || hasCompletedRef.current) return;
+    const status = verifyQuery.data.data?.gatewayStatus;
+    if (!status) return;
+
+    if (status === "success") {
+      hasCompletedRef.current = true;
+      setIsConfirming(true);
+      onRegistrationComplete({ reference: verifyQuery.data.data.reference, status: "success" })
+        .finally(() => setIsConfirming(false));
+    } else if (status === "failed" || status === "abandoned") {
+      toast.error("Payment was not completed. Please try again.");
+      setPaymentReference(null); // reset so user can retry — re-triggers initiate on next mount
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verifyQuery.data]);
+
+  // ── Paystack success callback ─────────────────────────────────────────────
+  // We do NOT call the API here. Polling via verifyQuery handles confirmation.
+  // This callback just acts as a fallback reference setter if needed.
+  const handlePaystackSuccess = (response: any) => {
+    if (!paymentReference) setPaymentReference(response.reference);
+  };
+
+  const handlePaystackClose = () => {
+    // User closed the modal without paying.
+    // If they did pay, the reference is already set and polling will catch it.
   };
 
   const handleFreeRegistration = async () => {
     await onRegistrationComplete();
   };
 
-  const handlePaystackSuccess = async (response: any) => {
-    const paymentData = {
-      reference: response.reference,
-      transactionId: response.transaction,
-      status: response.status || "success",
-    };
-    await onRegistrationComplete(paymentData);
-  };
-
-  const handlePaystackClose = () => {
-    console.log("Paystack modal closed");
+  const formatMembersList = (members: GroupMember[], startIndex: number): string => {
+    return members.map((member, idx) => {
+      const details = [`${startIndex + idx + 1}. ${member.name} (${member.email})`];
+      if (needsAge && member.age) details.push(`Age: ${member.age}`);
+      if (member.phone) details.push(`Phone: ${member.phone}`);
+      return details.join(' | ');
+    }).join('\n');
   };
 
   const customFields = [
@@ -1114,7 +1050,7 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
     { display_name: "Number of Tickets", variable_name: "ticket_count", value: numberOfTickets.toString() },
     { display_name: "Additional Members Count", variable_name: "additional_members_count", value: additionalMembersCount.toString() },
     { display_name: "Total Amount", variable_name: "total_amount", value: totalPrice.toString() },
-    { display_name: "Currency", variable_name: "currency", value: plan.currency || "USD" }
+    { display_name: "Currency", variable_name: "currency", value: plan.currency || "NGN" }
   );
 
   if (form.registrationType === "group") {
@@ -1212,7 +1148,6 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
             </div>
           ))}
         </div>
-        
         {additionalMembersCount > 0 && (
           <div>
             <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-2">
@@ -1233,7 +1168,6 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
             </div>
           </div>
         )}
-        
         {form.dietary.length > 0 && (
           <div className="pt-2">
             <p className="text-gray-400 text-xs">Dietary: <span className="text-gray-600 dark:text-gray-300">{form.dietary.join(", ")}</span></p>
@@ -1243,6 +1177,7 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
     </div>
   );
 
+  // ── Free plan ─────────────────────────────────────────────────────────────
   if (isFree) {
     return (
       <div className="space-y-5">
@@ -1254,38 +1189,63 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
           disabled={isLoading}
           className="w-full h-11 font-semibold gap-2 bg-green-600 hover:bg-green-700"
         >
-          {isLoading ? (
-            <HugeiconsIcon icon={Loading03Icon} size={16} className="animate-spin" />
-          ) : (
-            <HugeiconsIcon icon={CheckmarkCircle02Icon} size={16} />
-          )}
+          {isLoading ? <HugeiconsIcon icon={Loading03Icon} size={16} className="animate-spin" /> : <HugeiconsIcon icon={CheckmarkCircle02Icon} size={16} />}
           {isLoading ? "Processing…" : "Confirm Registration"}
         </Button>
       </div>
     );
   }
 
+  // ── Paid plan ─────────────────────────────────────────────────────────────
+  // The reference comes from useInitiatePayment (a real DB-backed reference).
+  // The button stays disabled until the reference is ready.
   const paystackConfig = {
-    publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
+    publicKey: process.env.PAYSTACK_PUBLIC_KEY!,
     email: form.email,
     amount: amountInKobo,
     currency: "NGN",
-    reference: `REG-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+    reference: paymentReference ?? "",
     metadata: { custom_fields: customFields },
     onSuccess: handlePaystackSuccess,
     onClose: handlePaystackClose,
   };
 
+  const isAwaitingConfirmation = !!paymentReference && isConfirming;
+
   return (
     <div className="space-y-5">
       <OrderSummary />
       <AttendeeSummary />
-      
+
+      {isAwaitingConfirmation && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800">
+          <HugeiconsIcon icon={Loading03Icon} size={16} className="animate-spin text-indigo-600 dark:text-indigo-400 shrink-0" />
+          <p className="text-xs text-indigo-700 dark:text-indigo-300">
+            Confirming your payment… please don't close this window.
+          </p>
+        </div>
+      )}
+
+      {/* Show a subtle loading state while we fetch the reference from the server */}
+      {isInitiating && !paymentReference && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700">
+          <HugeiconsIcon icon={Loading03Icon} size={16} className="animate-spin text-gray-400 shrink-0" />
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Preparing your payment session…
+          </p>
+        </div>
+      )}
+
       <PaystackButton
         {...paystackConfig}
-        text={isLoading ? "Processing…" : `Pay ${priceDisplay}`}
+        text={
+          isInitiating ? "Preparing payment…"
+          : isConfirming ? "Confirming payment…"
+          : isLoading    ? "Processing…"
+          : `Pay ${priceDisplay}`
+        }
         className="w-full h-11 font-semibold gap-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-        disabled={isLoading}
+        disabled={isLoading || isInitiating || isConfirming || !paymentReference}
       />
     </div>
   );
@@ -1293,7 +1253,7 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
 
 // ─── Step 4 — Success ─────────────────────────────────────────────────────────
 
-function SuccessStep({ form, plan, onClose }: {form: AttendeeForm; plan: Plan; onClose: () => void }): JSX.Element {
+function SuccessStep({ form, plan, onClose }: { form: AttendeeForm; plan: Plan; onClose: () => void }): JSX.Element {
   const additionalMembersCount = form.registrationType === "group" 
     ? form.groupMembers.length 
     : form.registrationType === "corporate"
@@ -1310,7 +1270,7 @@ function SuccessStep({ form, plan, onClose }: {form: AttendeeForm; plan: Plan; o
   const handleCloseAndRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["events", 'slug', slug] });
     onClose();
-  }
+  };
   
   return (
     <div className="flex flex-col items-center text-center py-4">
@@ -1389,84 +1349,39 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
     setForm((prev) => ({ ...prev, [k]: v }));
 
   const validateAge = (dob: Date | undefined): { isValid: boolean; error?: string } => {
-    if (!needsAge || !dob) {
-      return { isValid: true };
-    }
-    
+    if (!needsAge || !dob) return { isValid: true };
     const age = getAgeFromDob(dob);
-    if (age === null) {
-      return { isValid: true };
-    }
-    
-    if (minAge !== undefined && age < minAge) {
-      return { isValid: false, error: `Minimum age requirement is ${minAge} years old.` };
-    }
-    
-    if (maxAge !== undefined && age > maxAge) {
-      return { isValid: false, error: `Maximum age allowed is ${maxAge} years old.` };
-    }
-    
+    if (age === null) return { isValid: true };
+    if (minAge !== undefined && age < minAge) return { isValid: false, error: `Minimum age requirement is ${minAge} years old.` };
+    if (maxAge !== undefined && age > maxAge) return { isValid: false, error: `Maximum age allowed is ${maxAge} years old.` };
     return { isValid: true };
-  };
-
-  const handleDobChange = (dob: Date | undefined) => {
-    updateForm("dob", dob);
-    const validation = validateAge(dob);
-    if (!validation.isValid) {
-      setAgeError(validation.error || null);
-    } else {
-      setAgeError(null);
-    }
   };
 
   const canAdvancePlan = Boolean(plan);
   
   const canAdvanceAttendee = (): boolean => {
     if (form.name.trim() === "" || form.email.trim() === "") return false;
-    
     if (needsAge) {
       if (form.dob === undefined) return false;
-      const validation = validateAge(form.dob);
-      if (!validation.isValid) return false;
+      if (!validateAge(form.dob).isValid) return false;
     }
-    
     const age = getAgeFromDob(form.dob);
     const needsConsent = requiresParentalConsent && age !== null;
-    
-    if (form.registrationType === "individual") {
-      if (needsConsent) {
-        if (form.parentalConsentByName.trim() === "" || form.parentalConsentByEmail.trim() === "") {
-          return false;
-        }
-      }
-    }
-    
+    if (needsConsent && (form.parentalConsentByName.trim() === "" || form.parentalConsentByEmail.trim() === "")) return false;
     if (form.registrationType === "group") {
       if (form.groupName.trim() === "") return false;
-      if (needsConsent) {
-        if (form.parentalConsentByName.trim() === "" || form.parentalConsentByEmail.trim() === "") {
-          return false;
-        }
-      }
       for (const member of form.groupMembers) {
         if (member.name.trim() === "" || member.email.trim() === "") return false;
         if (needsAge && !member.dob && !member.age) return false;
       }
     }
-    
     if (form.registrationType === "corporate") {
       if (form.corporateName.trim() === "") return false;
-      if (needsConsent) {
-        if (form.parentalConsentByName.trim() === "" || form.parentalConsentByEmail.trim() === "") {
-          return false;
-        }
-      }
       for (const member of form.corporateMembers) {
         if (member.name.trim() === "" || member.email.trim() === "") return false;
         if (needsAge && !member.dob && !member.age) return false;
       }
     }
-    
     return true;
   };
 
@@ -1522,14 +1437,10 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
 
         ...(paymentData && {
           paymentReference: paymentData.reference,
-          paymentTransactionId: paymentData.transactionId,
-          paymentMessage: paymentData.message || "Approved",
           paymentStatus: paymentData.status,
         }),
         
-        ...(needsAge && form.dob && {
-          attendeeAge: age || undefined,
-        }),
+        ...(needsAge && form.dob && { attendeeAge: age || undefined }),
         
         ...(needsConsent && form.parentalConsentByName && form.parentalConsentByEmail && {
           parentalConsentProvided: true,
@@ -1544,15 +1455,9 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
           groupSize: totalTickets,
           groupName: form.groupName,
           groupMembers: [
-            { 
-              name: form.name, 
-              email: form.email, 
-              age: age ?? undefined, 
-              phone: form.phone || undefined 
-            },
+            { name: form.name, email: form.email, age: age ?? undefined, phone: form.phone || undefined },
             ...form.groupMembers.map(m => ({
-              name: m.name,
-              email: m.email,
+              name: m.name, email: m.email,
               age: m.age ?? (m.dob ? getAgeFromDob(m.dob) ?? undefined : undefined),
               phone: m.phone || undefined,
             }))
@@ -1563,15 +1468,9 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
           companyName: form.corporateName,
           companySize: totalTickets,
           companyMembers: [
-            { 
-              name: form.name, 
-              email: form.email, 
-              age: age ?? undefined, 
-              phone: form.phone || undefined 
-            },
+            { name: form.name, email: form.email, age: age ?? undefined, phone: form.phone || undefined },
             ...form.corporateMembers.map(m => ({
-              name: m.name,
-              email: m.email,
+              name: m.name, email: m.email,
               age: m.age ?? (m.dob ? getAgeFromDob(m.dob) ?? undefined : undefined),
               phone: m.phone || undefined,
             }))
@@ -1580,7 +1479,6 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
       };
       
       const result = await registerMutation.mutateAsync(registrationData);
-      
       setStep("success");
       onSuccess?.(result);
       
@@ -1606,8 +1504,7 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
       : form.registrationType === "corporate"
       ? form.corporateMembers.length
       : 0;
-    const totalTickets = 1 + additionalCount;
-    return plan.price * totalTickets;
+    return plan.price * (1 + additionalCount);
   };
 
   const isFreePlan = plan?.price === 0;
@@ -1647,12 +1544,7 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
                 <PlanStep plans={event.plans ?? []} selected={plan} onSelect={setPlan} />
               )}
               {step === "attendee" && (
-                <AttendeeStep 
-                  form={form} 
-                  onChange={updateForm} 
-                  ageRequirement={ageRequirement} 
-                  needsAge={needsAge} 
-                />
+                <AttendeeStep form={form} onChange={updateForm} ageRequirement={ageRequirement} needsAge={needsAge} />
               )}
               {step === "payment" && plan && (
                 <PaymentStep 
@@ -1679,10 +1571,16 @@ export function RegistrationModal({ event, onClose, onSuccess, isVirtual, eventV
               ) : <div />}
               <Button 
                 onClick={step === "attendee" ? handleReviewAndPay : next} 
-                disabled={step === "plan" ? !canAdvancePlan : !canAdvanceAttendee()} 
+                disabled={
+                  step === "plan" ? !canAdvancePlan
+                  : step === "attendee" ? !canAdvanceAttendee()
+                  : false
+                }
                 className="gap-1.5 px-6 bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-300"
               >
-                {step === "attendee" && isFreePlan ? "Review & Confirm" : step === "attendee" ? "Review & Pay" : "Continue"}
+                {step === "attendee" && isFreePlan ? "Review & Confirm"
+                  : step === "attendee" ? "Review & Pay"
+                  : "Continue"}
                 <HugeiconsIcon icon={ArrowRightIcon} size={14} />
               </Button>
             </div>

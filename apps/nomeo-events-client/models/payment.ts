@@ -187,6 +187,4 @@ PaymentSchema.methods.isRefunded = function (): boolean {
   return !!this.refundedAt;
 };
 
-export const Payment =
-  (mongoose.models.Payment as IPaymentModel) ||
-  mongoose.model<IPaymentDocument, IPaymentModel>('Payment', PaymentSchema);
+export const Payment = (mongoose.models.Payment as IPaymentModel) || mongoose.model<IPaymentDocument, IPaymentModel>('Payment', PaymentSchema);

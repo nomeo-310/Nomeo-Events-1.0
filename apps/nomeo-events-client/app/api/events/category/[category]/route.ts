@@ -1,6 +1,7 @@
 // app/api/events/category/[category]/route.ts
 import { connectDB } from "@/lib/mongoose";
 import { Event, EventStatus, EventCategory } from "@/models/event";
+import { User } from "@/models/user";
 import { NextResponse } from "next/server";
 
 export async function GET( req: Request, { params }: { params: Promise<{ category: string }> } ) {
@@ -25,7 +26,8 @@ export async function GET( req: Request, { params }: { params: Promise<{ categor
     
     let query: any = { 
       category: category,
-      status: status
+      status: status,
+      isDeleted: false
     };
     
     if (upcoming) {
@@ -33,7 +35,11 @@ export async function GET( req: Request, { params }: { params: Promise<{ categor
     }
     
     const events = await Event.find(query)
-      .populate('organizerId', 'name email image')
+      .populate({
+        path: 'organizerId', 
+        model: User,
+        select: 'name email image'
+      })
       .sort({ startDate: 1, createdAt: -1 })
       .limit(limit);
     

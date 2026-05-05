@@ -11,6 +11,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
+import { usePassword } from "@/hooks/use-password";
 
 interface ForgotPasswordFormProps {
   onSuccess?: (email: string) => void;
@@ -18,36 +19,25 @@ interface ForgotPasswordFormProps {
   isLoading?: boolean;
 }
 
-export const ForgotPasswordForm = ({
-  onSuccess,
-  onBackToLogin,
-  isLoading = false,
-}: ForgotPasswordFormProps) => {
+export const ForgotPasswordForm = ({ onSuccess, onBackToLogin, isLoading = false }: ForgotPasswordFormProps) => {
   const [serverError, setServerError] = useState<string | null>(null);
+  const { forgotPassword } = usePassword();
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<{ email: string }>({
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<{ email: string }>({
     defaultValues: { email: "" },
   });
 
   const onSubmit = async ({ email }: { email: string }) => {
     setServerError(null);
 
-    const { error } = await authClient.emailOtp.sendVerificationOtp({
-      email,
-      type: "forget-password",
-    });
+    const success = await forgotPassword({email})
 
-    if (error) {
-      setServerError(error.message ?? "Something went wrong. Please try again.");
-      return;
+    if (success) {
+      onSuccess?.(email);
+    } else {
+      toast.error('Error while sending reset code!!! Try again later')
     }
-
-    toast.success("A reset code has been sent to your email.");
-    onSuccess?.(email);
+    
   };
 
   return (

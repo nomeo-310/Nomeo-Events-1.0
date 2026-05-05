@@ -17,26 +17,24 @@ import {
 } from "@/components/ui/input-otp";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 import axios from "axios";
+import { usePassword } from "@/hooks/use-password";
 
 interface VerifyOtpFormProps {
   email: string;
-  onSuccess: () => void;
+  onSuccess: (email:string) => void;
   onBack: () => void;
   isLoading?: boolean;
 }
 
-export const VerifyOtpForm = ({
-  email,
-  onSuccess,
-  onBack,
-  isLoading = false,
-}: VerifyOtpFormProps) => {
+export const VerifyOtpForm = ({ email, onSuccess, onBack, isLoading = false }: VerifyOtpFormProps) => {
   const [otpValue, setOtpValue] = useState("");
   const [otpError, setOtpError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(0);
   const [resendSuccess, setResendSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { verifyOTP, forgotPassword } = usePassword();
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -55,18 +53,15 @@ export const VerifyOtpForm = ({
     setServerError(null);
     setIsSubmitting(true);
 
-    try {
-      await axios.post("/api/auth/verify-otp", { email, otp: otpValue, type: "forget-password" });
-    } catch (err: any) {
-      setServerError(
-        err.response?.data?.error || "Invalid or expired code. Please try again."
-      );
-    } finally {
-      setIsSubmitting(false);
+    const success = await verifyOTP({email, otp: otpValue, type: 'forget-password'})
+
+    if (success) {
+      onSuccess(email);
+    } else {
+      setServerError("Invalid or expired code. Please try again.");
     }
 
-    toast.success("Code verified! Set your new password.");
-    onSuccess();
+    setIsSubmitting(false);
   };
 
   const handleResend = async () => {
@@ -75,19 +70,15 @@ export const VerifyOtpForm = ({
     setOtpError(null);
     setResendSuccess(false);
 
-    const { error } = await authClient.emailOtp.sendVerificationOtp({
-      email,
-      type: "forget-password",
-    });
+    const success = await forgotPassword({email})
 
-    if (error) {
-      setServerError(error.message ?? "Failed to resend code. Please try again.");
+    if (success) {
+      setResendSuccess(true);
+      setCountdown(60);
+    } else {
+      setServerError("Failed to resend code. Please try again.");
       return;
     }
-
-    setResendSuccess(true);
-    setCountdown(60);
-    toast.success("A new code has been sent.");
   };
 
   return (

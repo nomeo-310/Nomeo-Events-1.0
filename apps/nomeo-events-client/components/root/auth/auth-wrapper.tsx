@@ -20,19 +20,25 @@ type AuthView =
 
 interface AuthWrapperProps {
   defaultView?: AuthView;
+  defaultEmail?: string;   // ← added
   onSuccess?: () => void;
   onClose?: () => void;
 }
 
-export const AuthWrapper = ({ defaultView = "login", onSuccess, onClose }: AuthWrapperProps) => {
+export const AuthWrapper = ({
+  defaultView = "login",
+  defaultEmail = "",       // ← added
+  onSuccess,
+  onClose,
+}: AuthWrapperProps) => {
   const [currentView, setCurrentView] = useState<AuthView>(defaultView);
-  const [pendingEmail, setPendingEmail] = useState("");
+  const [pendingEmail, setPendingEmail] = useState(defaultEmail); // ← seeded from prop
 
   const { data: session } = authClient.useSession();
 
-  // close modal if user is already logged in
+  // close modal if user is already logged in and verified
   useEffect(() => {
-    if (session?.user) onClose?.();
+    if (session?.user?.emailVerified) onClose?.();
   }, [session]);
 
   const handleLoginSuccess = () => {
@@ -53,7 +59,8 @@ export const AuthWrapper = ({ defaultView = "login", onSuccess, onClose }: AuthW
   };
 
   // step 2 of reset: OTP verified → new password form
-  const handleResetOtpSuccess = () => {
+  const handleResetOtpSuccess = (email:string) => {
+    setPendingEmail(email)
     setCurrentView("reset-password");
   };
 
@@ -62,12 +69,19 @@ export const AuthWrapper = ({ defaultView = "login", onSuccess, onClose }: AuthW
     setCurrentView("login");
   };
 
+  // handle unverified email caught at login
+  const handleNeedsVerification = (email: string) => {
+    setPendingEmail(email);
+    setCurrentView("verify-email");
+  };
+
   const views: Record<AuthView, React.ReactNode> = {
     login: (
       <LoginForm
         onSuccess={handleLoginSuccess}
         onForgotPassword={() => setCurrentView("forgot-password")}
         onSignup={() => setCurrentView("signup")}
+        onNeedsVerification={handleNeedsVerification}
       />
     ),
     signup: (

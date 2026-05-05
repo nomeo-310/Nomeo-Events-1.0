@@ -4,15 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Mail01Icon,
-  CircleLock02Icon as Lock01Icon,
-  ViewIcon as EyeIcon,
-  ViewOffSlashIcon as EyeOffIcon,
-  UserIcon as User03Icon,
-  UserAdd01Icon as UserPlus01Icon,
-  Pdf02Icon,
-} from "@hugeicons/core-free-icons";
+import {  Mail01Icon, CircleLock02Icon as Lock01Icon, ViewIcon as EyeIcon, ViewOffSlashIcon as EyeOffIcon, UserIcon as User03Icon, UserAdd01Icon as UserPlus01Icon, Pdf02Icon } from "@hugeicons/core-free-icons";
 import { SocialButtons } from "./social-buttons";
 import { SignupFormData } from "@/types/auth-type";
 import { useNestedModalStore } from "@/stores/nested-modal-store";
@@ -22,6 +14,7 @@ import { authClient } from "@/lib/auth-client";
 import { PasswordStrength } from "@/components/ui/password-strength";
 import { toast } from "sonner";
 import { getAndClearReturnUrl } from "@/lib/return-url";
+import { useOTP } from "@/hooks/use-otp";
 
 interface SignupFormProps {
   onSuccess?: (email: string) => void;
@@ -71,6 +64,8 @@ export const SignupForm = ({ onSuccess, onLogin, isLoading = false }: SignupForm
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [passwordStrength, setPasswordStrength] = useState<string>("weak");
+
+  const { isLoading: isOTPLoading, sendOTP } = useOTP();
 
   const {
     register,
@@ -142,7 +137,18 @@ export const SignupForm = ({ onSuccess, onLogin, isLoading = false }: SignupForm
       return;
     }
 
-    onSuccess?.(data.email);
+    const otpSent = await sendOTP({ 
+      email: data.email, 
+      type: "email-verification" 
+    });
+
+    if (otpSent) {
+      onSuccess?.(data.email);
+    } else {
+      setServerError("Account created but failed to send verification email. Please try resending the code.");
+      onSuccess?.(data.email);
+    }
+
   };
 
   // Handle name blur event to format the name

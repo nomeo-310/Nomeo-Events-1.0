@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongoose";
 import { getCurrentUser } from "@/lib/session";
 import { Event, EventStatus } from "@/models/event";
 import { NextRequest, NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 
 export async function PATCH( request: NextRequest, { params }: { params: Promise<{ id: string; }> }) {
 
@@ -21,7 +22,7 @@ export async function PATCH( request: NextRequest, { params }: { params: Promise
   }
 
   try {
-    const event = await Event.findOne({ _id: eventId, createdBy: user.id });
+    const event = await Event.findOne({ _id: new ObjectId(eventId), createdBy: new ObjectId(user.id) });
 
     if (!event) {
       return NextResponse.json({ success: false, error: "Event not found or unauthorized" }, { status: 404 });

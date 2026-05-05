@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { useMyProfile, useUpdateProfile, useUpdateProfileSlug, useProfileCompletion, useProfileHeader, useProfileVerificationStatus } from "@/hooks/use-profile";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -38,6 +38,7 @@ type TabId = typeof TABS[number]["id"];
 
 const ProfilePage = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   
   const { data: profile, isLoading: profileLoading, refetch } = useMyProfile();
   const { percentage: completionPercentage, incompleteItems } = useProfileCompletion();
@@ -47,7 +48,29 @@ const ProfilePage = () => {
   const updateProfile = useUpdateProfile();
   const updateSlug = useUpdateProfileSlug();
   
-  const [activeTab, setActiveTab] = useState<TabId>("basic");
+  // Get initial tab from URL
+  const getInitialTab = (): TabId => {
+    const tabParam = searchParams.get("activeTab");
+    if (tabParam && TABS.some(tab => tab.id === tabParam)) {
+      return tabParam as TabId;
+    }
+    return "basic";
+  };
+  
+  const [activeTab, setActiveTab] = useState<TabId>(getInitialTab);
+  
+  // Clean URL after reading the tab - only runs once on mount
+  useEffect(() => {
+    const tabParam = searchParams.get("activeTab");
+    if (tabParam) {
+      // Remove activeTab from URL, keep other params
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("activeTab");
+      const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+      router.replace(newUrl, { scroll: false });
+    }
+  }, []); // Empty deps = runs once on mount
+  
   const [formData, setFormData] = useState<Partial<BaseProfile>>({});
   const [uploadingImage, setUploadingImage] = useState<"profile" | "cover" | null>(null);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
@@ -181,7 +204,7 @@ const ProfilePage = () => {
   };
 
   const handleVerificationSuccess = () => {
-    refetch(); // Refresh profile data to update verification status
+    refetch();
     toast.success("Verification request submitted successfully!");
   };
 
@@ -631,6 +654,6 @@ const ProfilePage = () => {
       />
     </div>
   );
-};
+}; 
 
 export default ProfilePage;

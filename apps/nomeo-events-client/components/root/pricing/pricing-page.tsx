@@ -3,13 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { HugeiconsIcon } from '@hugeicons/react';
-import {
-  ChampionIcon,
-  SparklesIcon,
-  ArrowRight01Icon,
-  Tick01Icon,
-  ArrowDataTransferHorizontalIcon as CompareIcon,
-} from '@hugeicons/core-free-icons';
+import { ChampionIcon, SparklesIcon, ArrowRight01Icon, Tick01Icon, ArrowDataTransferHorizontalIcon as CompareIcon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 import { usePricing, PlanTier } from '@/hooks/use-plans';
 import { authClient } from '@/lib/auth-client';
@@ -73,21 +67,46 @@ export const PricingPage: React.FC = () => {
   }, [tiers, selectedTier]);
 
   // ── Subscribe flow ─────────────────────────────────────────────────────────
-  const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing) => {
-    if (!session) { saveReturnUrl(); handleOpenLogin(); return; }
-    try {
-      const res  = await fetch(`/api/plans/tier/${tier.tier}`);
-      const data = await res.json();
-      const planDoc = data.success
-        ? data.data.plans.find((p: any) => p.interval === pricing.interval)
-        : null;
-      setSelectedPlanForPayment({ tier, pricing, planId: planDoc?._id ?? '' });
-      setShowConfirmationModal(true);
-    } catch {
-      setSelectedPlanForPayment({ tier, pricing, planId: '' });
-      setShowConfirmationModal(true);
+const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing) => {
+  if (!session) { saveReturnUrl(); handleOpenLogin(); return; }
+
+  try {
+    // Step 1: fetch planId (existing)
+    const res     = await fetch(`/api/plans/tier/${tier.tier}`);
+    const data    = await res.json();
+    const planDoc = data.success
+      ? data.data.plans.find((p: any) => p.interval === pricing.interval)
+      : null;
+    const planId  = planDoc?._id ?? '';
+
+    // Step 2: create a pending subscription so we have an ID to link payment to
+    let subscriptionId = '';
+    if (planId && pricing.priceKobo > 0) {
+      const subRes = await fetch('/api/subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planId,
+          tier: tier.tier,
+          interval: pricing.interval,
+          amount: pricing.priceKobo / 100,
+          status: 'pending',           // ← pending until webhook confirms payment
+          trialDays: pricing.trialDays,
+        }),
+      });
+      const subData = await subRes.json();
+      subscriptionId = subData?.data?._id ?? subData?._id ?? '';
     }
-  };
+
+    setSelectedPlanForPayment({ tier, pricing, planId, subscriptionId });
+    setShowConfirmationModal(true);
+
+  } catch {
+    // Fallback — open modal without subscriptionId, free plans don't need it
+    setSelectedPlanForPayment({ tier, pricing, planId: '', subscriptionId: '' });
+    setShowConfirmationModal(true);
+  }
+};
 
   const handleConfirmSubscription = () => {
     setShowConfirmationModal(false);
@@ -173,6 +192,7 @@ export const PricingPage: React.FC = () => {
               )}
             </button>
           </div>
+
         </div>
       </div>
 
@@ -243,7 +263,7 @@ export const PricingPage: React.FC = () => {
                       </div>
                       {displayPricing.savings && (
                         <span className="inline-block mt-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900">
-                          Save {displayPricing.savings.text}
+                          {displayPricing.savings.text}
                         </span>
                       )}
                       {displayPricing.trialDays > 0 && (
@@ -348,6 +368,7 @@ export const PricingPage: React.FC = () => {
       {showPaymentModal && selectedPlanForPayment && session?.user && (
         <PaymentModal
           planId={selectedPlanForPayment.planId}
+          subscriptionId={selectedPlanForPayment.subscriptionId}  // ← add this
           tier={selectedPlanForPayment.tier}
           pricing={selectedPlanForPayment.pricing}
           interval={selectedInterval}

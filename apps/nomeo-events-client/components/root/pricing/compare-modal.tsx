@@ -123,7 +123,7 @@ export const CompareModal: React.FC<CompareModalProps> = ({
                                 <div className="text-xs text-gray-400">per {selectedInterval}</div>
                                 {pricing.savings && (
                                   <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
-                                    Save {pricing.savings.text}
+                                    {pricing.savings.text}
                                   </span>
                                 )}
                               </>

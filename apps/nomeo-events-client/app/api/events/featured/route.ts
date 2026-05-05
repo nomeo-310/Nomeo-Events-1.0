@@ -1,6 +1,7 @@
 // app/api/events/featured/route.ts
 import { connectDB } from "@/lib/mongoose";
 import { Event, EventStatus } from "@/models/event";
+import { User } from "@/models/user";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -10,15 +11,22 @@ export async function GET(request: Request) {
   const limit = parseInt(searchParams.get('limit') || '6');
   
   try {
-    const events = await Event.find({
+    let query: any = {
       status: EventStatus.PUBLISHED,
-      featured: true,
       startDate: { $gte: new Date() },
-      isPublic: true
-    })
+      isPublic: true,
+      featured: true,
+      isDeleted: false
+    };
+
+    const events = await Event.find(query)
       .sort({ startDate: 1 })
       .limit(limit)
-      .populate('organizerId', 'name email image');
+      .populate({
+        path: 'organizerId', 
+        model: User,
+        select: 'name email image'
+      });
     
     return NextResponse.json({
       success: true,

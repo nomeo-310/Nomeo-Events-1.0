@@ -2,14 +2,6 @@
 
 import Link from 'next/link'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { 
-  DashboardSquareSettingIcon as LayoutDashboard,
-  Calendar01Icon as Calendar,
-  BarChartIcon as BarChart3,
-  CreditCardIcon as CreditCard,
-  User03Icon as User,
-  ToolsIcon,
-} from '@hugeicons/core-free-icons'
 
 interface NavigationMenuProps {
   menuItems: Array<{

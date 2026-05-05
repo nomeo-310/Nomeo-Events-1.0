@@ -16,6 +16,7 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
+import { useOTP } from "@/hooks/use-otp";
 
 interface VerifyEmailFormProps {
   email: string;
@@ -34,6 +35,8 @@ export const VerifyEmailForm = ({ email, onBackToLogin, isLoading = false, onSuc
   const [otpValue, setOtpValue] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
+
+  const { isLoading: isVerifying, verifyOTP, sendOTP } = useOTP();
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -54,16 +57,19 @@ export const VerifyEmailForm = ({ email, onBackToLogin, isLoading = false, onSuc
     }
 
     setIsSubmitting(true);
-    try {
-      await axios.post("/api/auth/verify-otp", { email, otp: otpValue, type: "email-verification" });
+
+    const success = await verifyOTP({otp: otpValue, email, type: 'email-verification'})
+
+    setIsSubmitting(false);
+
+    if (success) {
       setIsVerified(true);
-      setTimeout(() => onSuccess?.(), 1800);
-    } catch (err: any) {
-      setServerError(
-        err.response?.data?.error || "Invalid or expired code. Please try again."
-      );
-    } finally {
-      setIsSubmitting(false);
+      setTimeout(() => {
+        onSuccess?.();
+        if (onBackToLogin) {
+          onBackToLogin();
+        }
+      }, 1800);
     }
   };
 
@@ -73,18 +79,19 @@ export const VerifyEmailForm = ({ email, onBackToLogin, isLoading = false, onSuc
     setServerError(null);
     setResendSuccess(false);
 
-    try {
-      await axios.post("/api/auth/send-otp", { email });
+
+    const success = await sendOTP({email, type: 'email-verification'});
+
+    if (success) {
       setResendSuccess(true);
       setCountdown(60);
       setOtpValue("");
-    } catch (err: any) {
-      setServerError(
-        err.response?.data?.error || "Failed to resend code. Please try again."
-      );
-    } finally {
-      setIsResending(false);
+    } else {
+      setServerError('Failed to resend code. Please try again.')
     }
+
+    setIsResending(false);
+
   };
 
   if (isVerified) {

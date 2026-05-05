@@ -322,12 +322,6 @@ EventSchema.pre('save', function (this: IEventDocument) {
   }
 });
 
-EventSchema.pre(/^find/, function (this: Query<unknown, IEventDocument>) {
-  if (!this.getQuery().isDeleted) {
-    this.where({ isDeleted: false });
-  }
-});
-
 // ====================== INSTANCE METHODS ======================
 EventSchema.methods.getGrouping = function (this: IEventDocument): 'upcoming' | 'ongoing' | 'completed' {
   const now = new Date();
@@ -417,10 +411,7 @@ EventSchema.methods.archive = async function (this: IEventDocument) {
 };
 
 // ====================== STATIC METHODS ======================
-EventSchema.statics.getUpcomingEvents = async function (
-  limit: number = 10,
-  category?: string
-): Promise<IEventDocument[]> {
+EventSchema.statics.getUpcomingEvents = async function ( limit: number = 10, category?: string ): Promise<IEventDocument[]> {
   const query: any = {
     status: EventStatus.PUBLISHED,
     isDeleted: false,

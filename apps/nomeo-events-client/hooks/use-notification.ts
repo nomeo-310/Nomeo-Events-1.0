@@ -22,7 +22,7 @@ export interface Notification {
   receiverId: string;
   title: string;
   message: string;
-  message_type: "info" | "success" | "warning" | "error" | "update";
+  message_type: "info" | "success" | "warning" | "error" | "update" | "verification";
   sender_type: "system" | "user" | "admin";
   link?: string;
   metadata?: NotificationMetadata;

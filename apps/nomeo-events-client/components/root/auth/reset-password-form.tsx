@@ -4,17 +4,9 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  CircleLock02Icon as Lock01Icon,
-  ViewIcon as EyeIcon,
-  ViewOffSlashIcon as EyeOffIcon,
-  RotateClockwiseIcon as ResetIcon,
-  CheckmarkCircle01Icon,
-  ArrowLeft02Icon,
-  CodeIcon,
-} from "@hugeicons/core-free-icons";
-import { authClient } from "@/lib/auth-client";
-import { toast } from "sonner";
+import { CircleLock02Icon as Lock01Icon, ViewIcon as EyeIcon, ViewOffSlashIcon as EyeOffIcon, RotateClockwiseIcon as ResetIcon, CheckmarkCircle01Icon, ArrowLeft02Icon, CodeIcon } from "@hugeicons/core-free-icons";
+import { usePassword } from "@/hooks/use-password";
+import { PasswordStrength } from "@/components/ui/password-strength";
 
 interface ResetPasswordFormProps {
   email: string;
@@ -29,45 +21,50 @@ interface ResetFormData {
   confirmPassword: string;
 }
 
-export const ResetPasswordForm = ({
-  email,
-  onSuccess,
-  onBackToLogin,
-  isLoading = false,
-}: ResetPasswordFormProps) => {
+export const ResetPasswordForm = ({ email, onSuccess, onBackToLogin, isLoading = false }: ResetPasswordFormProps) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [isReset, setIsReset] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState<string>("weak");
 
-  const {
-    register,
-    handleSubmit,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm<ResetFormData>({
+  const { resetPassword } = usePassword();
+
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting }} = useForm<ResetFormData>({
     defaultValues: { otp: "", password: "", confirmPassword: "" },
   });
 
   const password = watch("password");
+  const confirmPassword = watch("confirmPassword");
+
+  // Check if password is strong enough
+  const isPasswordStrong = passwordStrength === "strong";
+  const doPasswordsMatch = password === confirmPassword;
+  const isFormValid = isPasswordStrong && doPasswordsMatch && !errors.otp;
 
   const onSubmit = async ({ otp, password }: ResetFormData) => {
     setServerError(null);
 
-    const { error } = await authClient.emailOtp.resetPassword({
-      email,
-      otp,
-      password,
-    });
-
-    if (error) {
-      setServerError(error.message ?? "Something went wrong. Please try again.");
+    if (!isPasswordStrong) {
+      setServerError("Please use a stronger password");
       return;
     }
 
-    setIsReset(true);
-    toast.success("Password reset successfully!");
-    setTimeout(() => onSuccess?.(), 2000);
+    if (!doPasswordsMatch) {
+      setServerError("Passwords do not match");
+      return;
+    }
+
+    const success = await resetPassword({email, otp, newPassword: password});
+
+    if (success) {
+      setIsReset(true);
+      setTimeout(() => onSuccess?.(), 2000);
+    } else {
+      setServerError("Something went wrong. Please try again.");
+      return;
+    }
+
   };
 
   if (isReset) {
@@ -185,9 +182,16 @@ export const ResetPasswordForm = ({
               {errors.password.message}
             </p>
           )}
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Min 8 characters with uppercase, lowercase, number and special character
-          </p>
+          
+          {/* Password Strength Indicator */}
+          <div className="mt-3">
+            <PasswordStrength 
+              password={password}
+              showProgress={true}
+              showRequirements={true}
+              onStrengthChange={(strength) => setPasswordStrength(strength)}
+            />
+          </div>
         </div>
 
         {/* Confirm Password */}
@@ -230,6 +234,30 @@ export const ResetPasswordForm = ({
               {errors.confirmPassword.message}
             </p>
           )}
+          
+          {/* Password Match Indicator */}
+          <AnimatePresence>
+            {confirmPassword && (
+              <motion.div
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                className="mt-2"
+              >
+                {doPasswordsMatch ? (
+                  <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 text-xs">
+                    <span>✓</span>
+                    <span>Passwords match</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400 text-xs">
+                    <span>✗</span>
+                    <span>Passwords do not match</span>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <AnimatePresence>
@@ -245,11 +273,23 @@ export const ResetPasswordForm = ({
           )}
         </AnimatePresence>
 
+        {/* Form validation summary */}
+        {!isFormValid && (password || confirmPassword) && (
+          <div className="text-xs text-gray-500 dark:text-gray-400 text-center space-y-0.5">
+            {password && !isPasswordStrong && (
+              <p>• Please make your password stronger</p>
+            )}
+            {confirmPassword && !doPasswordsMatch && (
+              <p>• Passwords need to match</p>
+            )}
+          </div>
+        )}
+
         <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+          whileHover={{ scale: isFormValid ? 1.02 : 1 }}
+          whileTap={{ scale: isFormValid ? 0.98 : 1 }}
           type="submit"
-          disabled={isLoading || isSubmitting}
+          disabled={isLoading || isSubmitting || !isFormValid}
           className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {isSubmitting ? (

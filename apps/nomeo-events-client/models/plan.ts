@@ -327,6 +327,4 @@ PlanSchema.index({ 'coupons.code': 1 });
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 
-export const Plan =
-  (mongoose.models.Plan as IPlanModel) ||
-  mongoose.model<IPlanDocument, IPlanModel>('Plan', PlanSchema);
+export const Plan = (mongoose.models.Plan as IPlanModel) || mongoose.model<IPlanDocument, IPlanModel>('Plan', PlanSchema);

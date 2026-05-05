@@ -1,17 +1,21 @@
 // models/subscription.ts
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import { PlanInterval, PlanTier, DiscountType } from './plan';
+import { PlanInterval, PlanTier, DiscountType, Plan } from './plan';
+import { Notification } from './notification';
+import { ObjectId } from 'mongodb';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 export enum SubscriptionStatus {
-  TRIALING = 'trialing',
-  ACTIVE = 'active',
-  PAST_DUE = 'past_due',       // Payment failed but within grace period
-  CANCELLED = 'cancelled',      // User cancelled; access until periodEnd
-  EXPIRED = 'expired',          // Period ended and not renewed
-  PAUSED = 'paused'             // Admin-paused (e.g. dispute)
+  TRIALING  = 'trialing',
+  ACTIVE    = 'active',
+  PAST_DUE  = 'past_due',   // Payment failed but within grace period
+  CANCELLED = 'cancelled',  // User cancelled; access until periodEnd
+  EXPIRED   = 'expired',    // Period ended and not renewed
+  PAUSED    = 'paused'      // Admin-paused (e.g. dispute)
 }
+
+const systemId = new ObjectId('000000000000000000000001');
 
 // ─── Main interface ───────────────────────────────────────────────────────────
 
@@ -19,25 +23,24 @@ export interface ISubscription {
   userId: mongoose.Types.ObjectId;
   planId: mongoose.Types.ObjectId;
 
-  // Paystack subscription identifiers (set after Paystack creates the subscription)
-  paystackSubscriptionCode?: string;  // e.g. "SUB_xxxxxxxx"
-  paystackEmailToken?: string;        // Token Paystack uses to manage the sub
+  paystackSubscriptionCode?: string;
+  paystackEmailToken?: string;
 
   status: SubscriptionStatus;
 
-  // Plan snapshot — denormalized so billing history is correct even if plan changes
+  // Plan snapshot — denormalized so billing history is correct if plan changes
   planTier: PlanTier;
   planName: string;
   interval: PlanInterval;
-  priceKobo: number;          // Price at time of subscription
+  priceKobo: number;
   currency: string;
 
-  // Discount / coupon applied at signup — snapshot for historical accuracy
+  // Discount / coupon snapshot
   couponCode?: string;
-  couponDiscount?: number;    // Percentage or fixed kobo — mirrors what was on the Plan coupon
+  couponDiscount?: number;
   couponDiscountType?: DiscountType;
-  discountKobo: number;       // Actual kobo discounted on each charge
-  finalPriceKobo: number;     // priceKobo - discountKobo (what is actually charged)
+  discountKobo: number;
+  finalPriceKobo: number;
 
   // Billing periods
   trialStart?: Date;
@@ -46,24 +49,20 @@ export interface ISubscription {
   currentPeriodEnd: Date;
 
   // Renewal
-  cancelAtPeriodEnd: boolean;  // true = cancel when currentPeriodEnd passes
+  cancelAtPeriodEnd: boolean;
   cancelledAt?: Date;
   cancellationReason?: string;
 
-  // The authorization code from the first successful payment (used for recurring charges)
   paystackAuthorizationCode?: string;
-
-  // Payment history — lightweight references; full details on Payment documents
   payments: mongoose.Types.ObjectId[];
 
-  // Limits inherited from plan at subscription time (snapshot)
+  // Limits snapshot from plan at subscription time
   maxEvents?: number;
   maxAttendeesPerEvent?: number;
   maxTeamMembers?: number;
   storageGb?: number;
 
   metadata: Map<string, any>;
-
   createdAt: Date;
   updatedAt: Date;
 }
@@ -75,24 +74,23 @@ export interface ISubscriptionDocument extends ISubscription, Document {
   recordPayment(paymentId: mongoose.Types.ObjectId, newPeriodEnd: Date): Promise<ISubscriptionDocument>;
 }
 
+// ── Static methods ─────────────────────────────────────────────────────────────
+// initialSubscription takes (userId, username) — username is used in the
+// welcome notification. subscribeToFreePlan mirrors this signature.
+
 interface ISubscriptionModel extends Model<ISubscriptionDocument> {
   findActiveByUser(userId: string): Promise<ISubscriptionDocument | null>;
+  findFreePlan(): Promise<any>;
+  initialSubscription(userId: string, username: string): Promise<ISubscriptionDocument>;
+  subscribeToFreePlan(userId: string, username: string): Promise<ISubscriptionDocument>;
 }
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
-const SubscriptionSchema = new Schema<ISubscriptionDocument>(
+const SubscriptionSchema = new Schema<ISubscriptionDocument, ISubscriptionModel>(
   {
-    userId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    },
-    planId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Plan',
-      required: true
-    },
+    userId:  { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    planId:  { type: Schema.Types.ObjectId, ref: 'Plan', required: true },
 
     paystackSubscriptionCode: String,
     paystackEmailToken: String,
@@ -131,7 +129,6 @@ const SubscriptionSchema = new Schema<ISubscriptionDocument>(
     cancellationReason: String,
 
     paystackAuthorizationCode: String,
-
     payments: [{ type: Schema.Types.ObjectId, ref: 'Payment' }],
 
     // Limits snapshot
@@ -165,26 +162,24 @@ SubscriptionSchema.methods.isInTrial = function (): boolean {
   );
 };
 
-// Cancel the subscription — immediately or at period end
 SubscriptionSchema.methods.cancel = async function (
   reason?: string,
-  immediately: boolean = false
+  immediately = false
 ): Promise<ISubscriptionDocument> {
   this.cancelledAt = new Date();
-  this.cancellationReason = reason || 'User cancelled';
+  this.cancellationReason = reason ?? 'User cancelled';
 
   if (immediately) {
     this.status = SubscriptionStatus.CANCELLED;
-    this.currentPeriodEnd = new Date(); // Access ends now
+    this.currentPeriodEnd = new Date();
   } else {
     this.cancelAtPeriodEnd = true;
-    // Status stays ACTIVE until the cron job expires it at period end
+    // Status stays ACTIVE — cron expires it at period end
   }
 
   return this.save();
 };
 
-// Called by the Paystack webhook handler after a successful renewal charge
 SubscriptionSchema.methods.recordPayment = async function (
   paymentId: mongoose.Types.ObjectId,
   newPeriodEnd: Date
@@ -204,27 +199,131 @@ SubscriptionSchema.statics.findActiveByUser = function (
   return this.findOne({
     userId: new mongoose.Types.ObjectId(userId),
     status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
-    currentPeriodEnd: { $gte: new Date() }
+    currentPeriodEnd: { $gte: new Date() },
   })
     .populate('planId')
     .exec();
 };
 
+SubscriptionSchema.statics.findFreePlan = function () {
+  return Plan.findOne({
+    $or: [{ priceKobo: 0 }, { tier: PlanTier.FREE }],
+  }).exec();
+};
+
+/**
+ * initialSubscription — called once at user signup.
+ * Finds the free plan, starts a trial if trialDays > 0, and fires
+ * a welcome notification.
+ *
+ * @param userId   - The new user's ObjectId string
+ * @param username - Used in the welcome notification message
+ */
+SubscriptionSchema.statics.initialSubscription = async function (
+  userId: string,
+  username: string
+): Promise<ISubscriptionDocument> {
+  // Guard: only one subscription per user
+  const existing = await this.findOne({ userId: new mongoose.Types.ObjectId(userId) });
+  if (existing) {
+    throw new Error('User already has a subscription');
+  }
+
+  const freePlan = await Plan.findOne({
+    $or: [{ priceKobo: 0 }, { tier: PlanTier.FREE }],
+  });
+
+  if (!freePlan) {
+    throw new Error('No free plan found. Please seed a free plan first.');
+  }
+
+  const now = new Date();
+  const trialDays: number = freePlan.trialDays ?? 0;
+
+  let status = SubscriptionStatus.ACTIVE;
+  let trialStart: Date | undefined;
+  let trialEnd: Date | undefined;
+  let currentPeriodEnd: Date;
+
+  if (trialDays > 0) {
+    status = SubscriptionStatus.TRIALING;
+    trialStart = now;
+    trialEnd = new Date(now.getTime() + trialDays * 86_400_000);
+    currentPeriodEnd = trialEnd;
+  } else {
+    // Free plans without a trial period get a 10-year window
+    currentPeriodEnd = new Date(now);
+    currentPeriodEnd.setFullYear(currentPeriodEnd.getFullYear() + 10);
+  }
+
+  const subscription = new this({
+    userId: new mongoose.Types.ObjectId(userId),
+    planId: freePlan._id,
+    status,
+    planTier: freePlan.tier,
+    planName: freePlan.name,
+    interval: freePlan.interval,
+    priceKobo: freePlan.priceKobo,
+    currency: freePlan.currency ?? 'NGN',
+    discountKobo: 0,
+    finalPriceKobo: freePlan.priceKobo,
+    trialStart,
+    trialEnd,
+    currentPeriodStart: now,
+    currentPeriodEnd,
+    cancelAtPeriodEnd: false,
+    payments: [],
+    maxEvents: freePlan.maxEvents,
+    maxAttendeesPerEvent: freePlan.maxAttendeesPerEvent,
+    maxTeamMembers: freePlan.maxTeamMembers,
+    storageGb: freePlan.storageGb,
+    metadata: new Map([['source', 'initial_signup']]),
+  });
+
+// Send welcome notification
+  const trialEndDateFormatted = trialEnd?.toLocaleDateString() || 'the end of your trial';
+  
+  await Notification.create({
+    senderId: systemId,
+    receiverId: new mongoose.Types.ObjectId(userId),
+    title: trialDays > 0 ? `Welcome! Your ${trialDays}-Day Free Trial Has Started` : "Welcome to the Free Plan!",
+    message: trialDays > 0 
+      ? `Hi ${username}, your account is now active with a ${trialDays}-day free trial! During this period, you'll have access to all features including event management, attendee tracking, and team collaboration. Your trial will expire on ${trialEndDateFormatted}. No payment details needed until your trial ends. Explore your dashboard to get started!`
+      : `Hi ${username}, your account is now active on the free plan! You have access to basic features including event management and attendee tracking. Upgrade anytime to unlock more features. Explore your dashboard to get started!`,
+    message_type: "update",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  return subscription.save();
+};
+
+/**
+ * subscribeToFreePlan — alias for initialSubscription.
+ * Kept for backwards compatibility; passes username through correctly.
+ */
+SubscriptionSchema.statics.subscribeToFreePlan = function (
+  userId: string,
+  username: string
+): Promise<ISubscriptionDocument> {
+  return this.initialSubscription(userId, username);
+};
+
 // ─── Indexes ──────────────────────────────────────────────────────────────────
 
-// A user should only have one active subscription at a time
+// One active subscription per user at a time
 SubscriptionSchema.index(
   { userId: 1, status: 1 },
   {
     unique: true,
     partialFilterExpression: {
-      status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] }
-    }
+      status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
+    },
   }
 );
 SubscriptionSchema.index({ userId: 1 });
 SubscriptionSchema.index({ planId: 1, status: 1 });
-SubscriptionSchema.index({ currentPeriodEnd: 1, status: 1 }); // For renewal cron jobs
+SubscriptionSchema.index({ currentPeriodEnd: 1, status: 1 });
 SubscriptionSchema.index({ paystackSubscriptionCode: 1 });
 
 // ─── Export ───────────────────────────────────────────────────────────────────

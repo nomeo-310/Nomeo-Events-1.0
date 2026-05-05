@@ -1,6 +1,8 @@
 'use server'
 
 import cloudinary from "@/lib/cloudinary";
+import { connectDB } from "@/lib/mongoose";
+import { Subscription } from "@/models/subscription";
 
 export const deleteImage = async (publicId:string) => {
   cloudinary.uploader.destroy(publicId, function(error: any,result: any) {

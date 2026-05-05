@@ -147,5 +147,4 @@ TicketSchema.methods.transfer = async function(toUserId: string): Promise<ITicke
   return this.save();
 };
 
-export const Ticket = (mongoose.models.Ticket as ITicketModel) ||
-  mongoose.model<ITicketDocument, ITicketModel>('Ticket', TicketSchema);
+export const Ticket = (mongoose.models.Ticket as ITicketModel) || mongoose.model<ITicketDocument, ITicketModel>('Ticket', TicketSchema);

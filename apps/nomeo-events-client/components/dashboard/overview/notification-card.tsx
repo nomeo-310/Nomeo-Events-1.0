@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useUpdateNotification, type Notification } from "@/hooks/use-notification";
 import { typeConfig } from "./notification-types";
 import { SenderAvatar } from "./sender-avatar";
+import { HugeiconsIcon } from "@hugeicons/react";
 
 interface NotificationCardProps {
   notification: Notification;
@@ -54,7 +54,7 @@ export function NotificationCard({ notification, onAction }: NotificationCardPro
                 cfg.text
               )}
             >
-              {cfg.icon}
+              <HugeiconsIcon icon={cfg.icon} className="size-3"/>
             </div>
             {isUnread && (
               <span className="text-xs md:text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-300 px-2 md:px-1.5 py-0.5 rounded-full">

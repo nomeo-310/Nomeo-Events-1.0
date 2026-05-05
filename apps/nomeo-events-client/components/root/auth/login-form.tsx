@@ -17,24 +17,23 @@ import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { getAndClearReturnUrl, clearReturnUrl } from "@/lib/return-url";
+import { useOTP } from "@/hooks/use-otp";
 
 interface LoginFormProps {
   onSuccess?: () => void;
   onForgotPassword?: () => void;
   onSignup?: () => void;
+  onNeedsVerification?: (email: string) => void;
   isLoading?: boolean;
 }
 
-export const LoginForm = ({ onSuccess, onForgotPassword, onSignup, isLoading = false }: LoginFormProps) => {
+export const LoginForm = ({ onSuccess, onForgotPassword, onSignup, isLoading = false, onNeedsVerification }: LoginFormProps) => {
+  const { sendOTP } = useOTP();
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<LoginFormData>({
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<LoginFormData>({
     defaultValues: {
       email: "",
       password: "",
@@ -68,7 +67,12 @@ export const LoginForm = ({ onSuccess, onForgotPassword, onSignup, isLoading = f
 
     if (error) {
       if (error.code === "EMAIL_NOT_VERIFIED") {
-        setServerError("Please verify your email before signing in.");
+        const sent = await sendOTP({ email: data.email, type: "email-verification" });
+        if (sent) {
+          onNeedsVerification?.(data.email);
+        } else {
+          setServerError("Please verify your email. Failed to send code — try again.");
+        }
       } else if (error.code === "INVALID_EMAIL_OR_PASSWORD") {
         setServerError("Invalid email or password. Please try again.");
       } else {

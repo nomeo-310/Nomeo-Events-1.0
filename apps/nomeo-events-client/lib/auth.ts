@@ -8,6 +8,7 @@ import { Profile } from "@/models/profile";
 import { Setting } from "@/models/setting";
 import { Notification } from "@/models/notification";
 import { connectDB } from "./mongoose";
+import { Subscription } from "@/models/subscription";
 
 const systemId = new ObjectId("000000000000000000000001");
 
@@ -86,25 +87,14 @@ export function createAuth() {
                 createdAt: new Date(),
                 updatedAt: new Date(),
               }),
+              Subscription.initialSubscription(user.id, user.name)
             ]);
           },
         },
       },
     },
 
-    plugins: [
-      emailOTP({
-        otpLength: 6,
-        expiresIn: 600,
-        sendVerificationOTP: async ({ email, otp, type }) => {
-          const userDoc = await mongoose.connection.db!
-            .collection("user")
-            .findOne({ email });
-          const name = (userDoc?.name as string) ?? "there";
-          await sendOTPEmail({ email, otp, name, type });
-        },
-      }),
-    ],
+    plugins: [],
   });
 }
 

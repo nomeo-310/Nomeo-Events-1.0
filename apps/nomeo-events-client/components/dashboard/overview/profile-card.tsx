@@ -73,11 +73,10 @@ export function ProfileCard({ user }: DashboardPageProps) {
         {checklist &&
           [...checklist]
             .sort((a, b) => Number(b.completed) - Number(a.completed))
-            .slice(0, 7)
             .map((item) => (
               <a
                 key={item.key}
-                href={item.completed ? undefined : '/dashboard/profile'}
+                href={item.completed ? undefined : item.path}
                 className={cn(
                   "flex items-center gap-2 md:gap-2 text-sm md:text-xs group",
                   item.completed ? "text-foreground" : "text-muted-foreground hover:text-foreground"

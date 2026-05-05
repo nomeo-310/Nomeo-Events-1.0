@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   const limit = parseInt(searchParams.get('limit') || '20');
   
   try {
-    let query: any = { status };
+    let query: any = { status, isDeleted: false };
     
     // Category filter
     if (category) {
