@@ -1,9 +1,11 @@
 'use client';
 
+import { useSubscription } from "@/hooks/use-subscription";
 import { NotificationPanel } from "./notification-panel";
 import { ProfileCard } from "./profile-card";
 import { StatsRow } from "./stats-row";
 import { UpcomingEvents } from "./upcoming-events";
+import { SubscriptionCard } from "./subscription-card";
 
 
 export interface DashboardPageProps {
@@ -19,11 +21,14 @@ export interface DashboardPageProps {
 }
 
 const DashboardPage = ({ user }: DashboardPageProps) => {
+  const {subscription, isLoading } = useSubscription();
+
   return (
     <div className="container mx-auto py-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-5">
         {/* Left column */}
         <div className="flex flex-col gap-6 md:gap-5">
+          <SubscriptionCard subscription={subscription} isLoading={isLoading} />
           <ProfileCard user={user} />
           <StatsRow />
           <UpcomingEvents />
