@@ -1200,7 +1200,7 @@ function PaymentStep({
   // The reference comes from useInitiatePayment (a real DB-backed reference).
   // The button stays disabled until the reference is ready.
   const paystackConfig = {
-    publicKey: process.env.PAYSTACK_PUBLIC_KEY!,
+    publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
     email: form.email,
     amount: amountInKobo,
     currency: "NGN",
