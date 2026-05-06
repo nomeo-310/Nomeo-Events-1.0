@@ -26,10 +26,7 @@ export const PricingPage: React.FC = () => {
   const router = useRouter();
   const { openModal, closeModal } = useModal();
 
-  const {
-    tiers, supportedIntervals, isLoading, isError, error,
-    selectedInterval, setSelectedInterval, getPricingForTier, refetch,
-  } = usePricing();
+  const { tiers, supportedIntervals, isLoading, isError, error, selectedInterval, setSelectedInterval, getPricingForTier, refetch } = usePricing();
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [selectedTier,            setSelectedTier]            = useState<PlanTier | null>(null);
@@ -74,10 +71,9 @@ const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing)
     // Step 1: fetch planId (existing)
     const res     = await fetch(`/api/plans/tier/${tier.tier}`);
     const data    = await res.json();
-    const planDoc = data.success
-      ? data.data.plans.find((p: any) => p.interval === pricing.interval)
-      : null;
+    const planDoc = data.success ? data.data.plans.find((p: any) => p.interval === pricing.interval) : null;
     const planId  = planDoc?._id ?? '';
+    const slug = planDoc.slug;
 
     // Step 2: create a pending subscription so we have an ID to link payment to
     let subscriptionId = '';
@@ -98,12 +94,12 @@ const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing)
       subscriptionId = subData?.data?._id ?? subData?._id ?? '';
     }
 
-    setSelectedPlanForPayment({ tier, pricing, planId, subscriptionId });
+    setSelectedPlanForPayment({ tier, pricing, planId, subscriptionId, slug });
     setShowConfirmationModal(true);
 
   } catch {
     // Fallback — open modal without subscriptionId, free plans don't need it
-    setSelectedPlanForPayment({ tier, pricing, planId: '', subscriptionId: '' });
+    setSelectedPlanForPayment({ tier, pricing, planId: '', subscriptionId: '', slug: ''});
     setShowConfirmationModal(true);
   }
 };
@@ -367,6 +363,7 @@ const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing)
 
       {showPaymentModal && selectedPlanForPayment && session?.user && (
         <PaymentModal
+          planSlug={selectedPlanForPayment.slug}
           planId={selectedPlanForPayment.planId}
           subscriptionId={selectedPlanForPayment.subscriptionId}  // ← add this
           tier={selectedPlanForPayment.tier}

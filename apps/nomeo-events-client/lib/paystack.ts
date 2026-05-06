@@ -2,7 +2,7 @@
 
 import crypto from 'crypto';
 
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+const PAYSTACK_SECRET_KEY = process.env.NEXT_PUBLIC_PAYSTACK_SECRET_KEY;
 
 if (!PAYSTACK_SECRET_KEY) {
   throw new Error(

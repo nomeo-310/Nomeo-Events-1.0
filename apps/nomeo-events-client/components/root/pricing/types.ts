@@ -2,6 +2,7 @@ import { TierPricing, IntervalPricing, PlanInterval } from '@/hooks/use-plans';
 
 /** Shape stored in PricingPage when a user clicks Subscribe */
 export interface SelectedPlanForPayment {
+  slug: string
   tier:    TierPricing;
   pricing: IntervalPricing;
   planId:  string;

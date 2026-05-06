@@ -55,6 +55,7 @@ export interface IntervalPricing {
 export interface TierPricing {
   tier: PlanTier;
   name: string;
+  slug: string;
   description: string;
   tagline: string;
   sortOrder: number;
