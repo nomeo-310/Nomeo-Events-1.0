@@ -61,7 +61,7 @@ export function ProfileCard({ user }: DashboardPageProps) {
         </div>
         <div className="h-2 md:h-1.5 rounded-full bg-muted overflow-hidden">
           <div
-            className="h-full bg-violet-500 rounded-full transition-all duration-700"
+            className="h-full bg-indigo-600 rounded-full transition-all duration-700"
             style={{ width: `${completionPercentage}%` }}
           />
         </div>

@@ -110,8 +110,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   }, [retryCount, finalAmount]);
 
   // ── Poll verify every 3s after Paystack modal closes ───────────────────────
-  // The webhook fires server-to-server and flips gatewayStatus to 'success'.
-  // Polling detects that and calls activateSubscription on the frontend.
   const verifyQuery = useVerifyPayment(paymentReference ?? '', {
     enabled: !!paymentReference && !hasCompletedRef.current,
     refetchInterval: (query) => {
@@ -123,31 +121,35 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   useEffect(() => {
     if (!verifyQuery.data || hasCompletedRef.current) return;
-    const status = verifyQuery.data.data?.gatewayStatus;
+
+    const responseRef = verifyQuery.data.data?.reference;
+    const status      = verifyQuery.data.data?.gatewayStatus;
+
+    // ── CRITICAL GUARD ──────────────────────────────────────────────────────
+    // Only act on data whose reference matches the CURRENT paymentReference.
+    // Stale cached data from a previous attempt would otherwise fire this
+    // effect immediately on re-render — showing the error toast and disabling
+    // the button before the user clicks anything.
+    if (!paymentReference || responseRef !== paymentReference) return;
     if (!status) return;
 
     if (status === 'success') {
       hasCompletedRef.current = true;
-      activateSubscription(verifyQuery.data.data.reference);
+      activateSubscription(responseRef);
     } else if (status === 'failed' || status === 'abandoned') {
+      queryClient.removeQueries({ queryKey: ['payments', 'verify', responseRef] });
+      prevReferenceRef.current = null;
+      setPaymentReference(null);
+      setRetryCount((c) => c + 1);
       toast.error(
         status === 'abandoned'
           ? 'Payment was not completed. Click Pay to try again.'
           : 'Payment failed. Please try again.'
       );
-      // Evict the stale "abandoned" result from cache before retry.
-      // paymentKeys.verify(ref) = ['payments', 'verify', ref]
-      // Without this, verifyQuery returns the cached abandoned data immediately
-      // when the new reference arrives, re-triggering this block in a loop.
-      if (prevReferenceRef.current) {
-        queryClient.removeQueries({ queryKey: ['payments', 'verify', prevReferenceRef.current] });
-        prevReferenceRef.current = null;
-      }
-      setPaymentReference(null);
-      setRetryCount((c) => c + 1);
     }
+  // paymentReference included so the guard re-evaluates when reference changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [verifyQuery.data]);
+  }, [verifyQuery.data, paymentReference]);
 
   // ── Activate subscription via useSubscription.subscribe ────────────────────
   // Using subscribe() instead of a raw fetch ensures:

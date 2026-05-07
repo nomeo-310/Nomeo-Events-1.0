@@ -75,11 +75,7 @@ const PLAN_CONFIG: Record<PlanTier, {
   enterprise: { Icon: Diamond02Icon,   accent: "text-amber-600 dark:text-amber-500",  chip: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",  dot: "bg-amber-500",  buttonText: "Contact Sales",   ButtonIcon: ArrowRight02Icon },
 };
 
-const STATUS_CONFIG: Record<string, {
-  label: string;
-  Icon: any;
-  chip: string;
-}> = {
+const STATUS_CONFIG: Record<string, {label: string; Icon: any; chip: string;}> = {
   trialing:           { label: "Trial",          Icon: Timer01FreeIcons,         chip: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300" },
   active:             { label: "Active",          Icon: CheckmarkCircle02Icon,  chip: "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300" },
   will_cancel:        { label: "Will Cancel",     Icon: AlertCircleIcon,   chip: "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300" },
@@ -221,7 +217,7 @@ export function SubscriptionCard({ subscription, isLoading = false }: Subscripti
 
         {/* Status chip */}
         <span className={cn(
-          "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs md:text-[10px] font-semibold flex-shrink-0",
+          "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0",
           status.chip
         )}>
           <HugeiconsIcon icon={StatusIcon} className="w-3 h-3" />
@@ -325,7 +321,7 @@ export function SubscriptionCard({ subscription, isLoading = false }: Subscripti
         className={cn(
           "mt-1 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm md:text-xs font-semibold transition-colors h-10 lg:h-11" ,
           isFree
-            ? "bg-violet-600 hover:bg-violet-700 text-white"
+            ? "bg-indigo-600 hover:bg-indigo-700 text-white"
             : "border border-border bg-background hover:bg-muted text-foreground"
         )}
       >

@@ -688,7 +688,8 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
   }, [retryCount]);
 
   // Poll verify every 3s once we have a reference.
-  // Stops automatically when a terminal status is reached.
+  // Pass the reference directly — never fall back to "" which could match
+  // stale cache entries and fire the effect before the user does anything.
   const verifyQuery = useVerifyPayment(paymentReference ?? "", {
     enabled: !!paymentReference && !hasCompletedRef.current,
     refetchInterval: (query) => {
@@ -700,23 +701,28 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
 
   useEffect(() => {
     if (!verifyQuery.data || hasCompletedRef.current) return;
-    const status = verifyQuery.data.data?.gatewayStatus;
+
+    const responseRef = verifyQuery.data.data?.reference;
+    const status      = verifyQuery.data.data?.gatewayStatus;
+
+    // ── CRITICAL GUARD ──────────────────────────────────────────────────────
+    // Only act on data that belongs to the CURRENT reference.
+    // Without this, stale cached data from a previous (abandoned) attempt
+    // fires this effect immediately when the component re-renders after retry,
+    // before the new reference is even set — causing the toast to fire and
+    // the button to stay disabled before the user clicks anything.
+    if (!paymentReference || responseRef !== paymentReference) return;
     if (!status) return;
 
     if (status === "success") {
       hasCompletedRef.current = true;
       setIsConfirming(true);
-      onRegistrationComplete({ reference: verifyQuery.data.data.reference, status: "success" })
+      onRegistrationComplete({ reference: responseRef, status: "success" })
         .finally(() => setIsConfirming(false));
     } else if (status === "failed" || status === "abandoned") {
-      // 1. Remove the stale "abandoned" result from React Query cache so the
-      //    verify useEffect doesn't re-fire with old data when the new reference arrives.
-      if (prevReferenceRef.current) {
-        queryClient.removeQueries({ queryKey: ["payments", "verify", prevReferenceRef.current] });
-        prevReferenceRef.current = null;
-      }
-      // 2. Clear reference first (disables polling), then increment retryCount
-      //    (triggers fresh initiation). Both happen in the same render batch.
+      // Evict this reference from cache so it can never re-trigger this block
+      queryClient.removeQueries({ queryKey: ["payments", "verify", responseRef] });
+      prevReferenceRef.current = null;
       setPaymentReference(null);
       setRetryCount((c) => c + 1);
       toast.error(
@@ -725,8 +731,10 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
           : "Payment failed. Please try again."
       );
     }
+  // paymentReference is intentionally included so the guard re-evaluates
+  // when the reference changes after retry.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [verifyQuery.data]);
+  }, [verifyQuery.data, paymentReference]);
 
   const handlePaystackSuccess = (response: any) => {
     // Polling handles confirmation — this is just a safety net
