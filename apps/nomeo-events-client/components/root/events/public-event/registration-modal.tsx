@@ -650,12 +650,15 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const hasCompletedRef = useRef(false);
+  // Keep a ref to the previous reference so we can remove its stale cache entry
+  const prevReferenceRef = useRef<string | null>(null);
 
   // Incrementing this re-triggers the initiatePayment useEffect so the user
   // gets a fresh Paystack reference after abandoning or a failed payment.
   // Paystack references are single-use — they cannot be reused.
   const [retryCount, setRetryCount] = useState(0);
 
+  const queryClient = useQueryClient();
   const { mutate: initiatePayment, isPending: isInitiating } = useInitiatePayment();
 
   useEffect(() => {
@@ -673,7 +676,10 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
         // registrationId intentionally omitted — webhook links it after confirmation
       },
       {
-        onSuccess: ({ data }) => setPaymentReference(data.reference),
+        onSuccess: ({ data }) => {
+          prevReferenceRef.current = data.reference;
+          setPaymentReference(data.reference);
+        },
         onError: () => toast.error("Could not prepare payment. Please try again."),
       }
     );
@@ -703,15 +709,21 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
       onRegistrationComplete({ reference: verifyQuery.data.data.reference, status: "success" })
         .finally(() => setIsConfirming(false));
     } else if (status === "failed" || status === "abandoned") {
-      // Clear the used reference — Paystack won't accept it again
+      // 1. Remove the stale "abandoned" result from React Query cache so the
+      //    verify useEffect doesn't re-fire with old data when the new reference arrives.
+      if (prevReferenceRef.current) {
+        queryClient.removeQueries({ queryKey: ["payments", "verify", prevReferenceRef.current] });
+        prevReferenceRef.current = null;
+      }
+      // 2. Clear reference first (disables polling), then increment retryCount
+      //    (triggers fresh initiation). Both happen in the same render batch.
       setPaymentReference(null);
+      setRetryCount((c) => c + 1);
       toast.error(
         status === "abandoned"
           ? "Payment was not completed. Click Pay to try again."
           : "Payment failed. Please try again."
       );
-      // Increment retryCount to trigger a fresh initiation in the effect above
-      setRetryCount((c) => c + 1);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [verifyQuery.data]);

@@ -11,17 +11,23 @@ import { EventActionBar } from "./event-action-bar";
 import { EventDetailLeftColumn } from "./event-detail-left-column";
 import { EventDetailRightColumn } from "./event-detail-right-column";
 import { getStatusConfig, toTitleCase } from "./event-detail-helpers";
+import { useSubscription } from "@/hooks/use-subscription";
 
 export default function EventDetailPage(): JSX.Element {
   const router  = useRouter();
   const params  = useParams();
   const eventId = params.id as string;
 
-  const { useGetEvent, usePublishEvent, useArchiveEvent, useSoftDeleteEvent, useRestoreEvent } = useEvents();
+  const { useGetEvent, usePublishEvent, useArchiveEvent, useSoftDeleteEvent, useRestoreEvent, useOrganizerAllEvents } = useEvents();
 
   const { data: event, isLoading, isError } = useGetEvent(eventId);
 
-  console.log(event)
+
+   const { data, isLoading:newDataLoading, isError:newDataError } = useOrganizerAllEvents();
+   const eventCount = data?.eventCount;
+ 
+   const { checkEventCreation } = useSubscription();
+   const allowCreation = checkEventCreation(eventCount?.total);
 
   const publishMutation = usePublishEvent();
   const archiveMutation = useArchiveEvent();
@@ -67,7 +73,7 @@ export default function EventDetailPage(): JSX.Element {
 
   return (
     <>
-      <EventTabs />
+      <EventTabs allowCreation={allowCreation.allowed} />
       <div className="container mx-auto pb-8 w-full">
 
         <EventHero

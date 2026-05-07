@@ -1,9 +1,10 @@
-// app/api/user/events/route.ts (Simplified version)
+// app/api/user/events/route.ts
 import { withGroupingBatch } from "@/lib/event-grouping";
 import { connectDB } from "@/lib/mongoose";
 import { getCurrentUser } from "@/lib/session";
 import { Event, EventStatus } from "@/models/event";
 import { User } from "@/models/user";
+import { Subscription } from "@/models/subscription"; // Import your subscription model
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -31,6 +32,13 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const skip = (page - 1) * limit;
 
+    // Get user's subscription to determine plan limits
+    const subscription = await Subscription.findActiveByUser(user.id)
+
+    const planTier = subscription?.planTier || 'free';
+    const maxEvents = subscription?.maxEvents ?? (planTier === 'free' ? 3 : 0); // 0 means unlimited
+
+    // Query for events list (paginated)
     const query: any = {
       organizerId: user.id,
     };
@@ -44,7 +52,7 @@ export async function GET(request: NextRequest) {
     if (isDeleted) {
       query.isDeleted = true;
     } else {
-      query.isDeleted = false; 
+      query.isDeleted = false;
     }
 
     // Archived filter
@@ -58,7 +66,7 @@ export async function GET(request: NextRequest) {
       query.status = EventStatus.PUBLISHED;
     }
 
-    // Count total documents
+    // Count total documents for pagination
     const totalCount = await Event.countDocuments(query);
     const totalPages = Math.ceil(totalCount / limit);
 
@@ -76,9 +84,39 @@ export async function GET(request: NextRequest) {
 
     const eventsWithGrouping = withGroupingBatch(events);
 
+    // ─── Calculate event count based on subscription tier ───────────────────
+    let eventCount = 0;
+    
+    if (planTier === 'free') {
+      // For free plan: count ALL events (published, draft, archived, but not deleted)
+      eventCount = await Event.countDocuments({
+        organizerId: user.id,
+        isDeleted: false,
+      });
+    } else {
+      // For paid plans: only count PUBLISHED events (active events)
+      eventCount = await Event.countDocuments({
+        organizerId: user.id,
+        status: EventStatus.PUBLISHED,
+        isDeleted: false,
+        isArchived: false, // Only active published events
+      });
+    }
+
+    // Calculate if user can create more events
+    const canCreateMore = maxEvents === 0 ? true : eventCount < maxEvents;
+    const remainingEvents = maxEvents === 0 ? -1 : Math.max(0, maxEvents - eventCount);
+
     return NextResponse.json({
       success: true,
       data: eventsWithGrouping,
+      eventCount: {
+        total: eventCount,
+        maxAllowed: maxEvents,
+        remaining: remainingEvents,
+        canCreateMore,
+        planTier,
+      },
       pagination: {
         currentPage: page,
         totalPages,

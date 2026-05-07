@@ -15,6 +15,7 @@ interface EventTabItem {
 }
 
 interface EventTabsProps {
+  allowCreation: boolean;
   basePath?: string;
   showBackButton?: boolean;
   backButtonLabel?: string;
@@ -40,7 +41,7 @@ const DEFAULT_TABS: EventTabItem[] = [
   },
 ];
 
-export function EventTabs({basePath = "/dashboard/events", showBackButton = true, backButtonLabel = "Back", onBackClick, customTabs, className, variant = "underline" }: EventTabsProps) {
+export function EventTabs({basePath = "/dashboard/events", showBackButton = true, backButtonLabel = "Back", onBackClick, customTabs, className, variant = "underline", allowCreation }: EventTabsProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -98,7 +99,7 @@ export function EventTabs({basePath = "/dashboard/events", showBackButton = true
 
         {/* Tabs */}
         <nav className="flex flex-1 gap-1 overflow-x-auto scrollbar-hide">
-          {tabs.map((tab) => {
+          {(allowCreation ? tabs : tabs.filter((tab) => tab.label !== 'Create Event')).map((tab) => {
             const active = isActive(tab);
             const Icon = tab.icon;
 

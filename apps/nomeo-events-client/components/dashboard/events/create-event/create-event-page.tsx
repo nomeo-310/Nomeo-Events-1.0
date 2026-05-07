@@ -28,6 +28,7 @@ import {
   PlanType,
 } from "@/types/create-event-type";
 import { EventTabs } from "../event-tabs";
+import { useSubscription } from "@/hooks/use-subscription";
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -194,6 +195,13 @@ export default function CreateEventPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const { useOrganizerAllEvents} = useEvents();
+  const { data, isLoading, isError } = useOrganizerAllEvents();
+  const eventCount = data?.eventCount;
+
+  const { checkEventCreation } = useSubscription();
+  const allowCreation = checkEventCreation(eventCount?.total);
+
   const form = useForm<EventFormData>({
     resolver: zodResolver(eventFormSchema) as any,
     defaultValues: {
@@ -326,7 +334,7 @@ export default function CreateEventPage() {
 
   return (
     <>
-      <EventTabs/>
+      <EventTabs allowCreation={allowCreation.allowed}/>
       <div className="container mx-auto pb-6">
         <div className="mb-6">
           <div className="flex items-center gap-6 mb-1">
@@ -489,7 +497,7 @@ export default function CreateEventPage() {
               {isSummaryStep ? (
                 <Button
                   type="button"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !allowCreation.allowed}
                   onClick={handleCreateEvent}
                   className="bg-indigo-600 hover:bg-indigo-700 px-6 h-10 lg:h-11"
                 >
@@ -502,6 +510,7 @@ export default function CreateEventPage() {
                 </Button>
               ) : (
                 <Button
+                  disabled={!allowCreation.allowed}
                   type="button"
                   onClick={nextStep}
                   className="bg-indigo-600 hover:bg-indigo-700 px-6 h-10 lg:h-11"

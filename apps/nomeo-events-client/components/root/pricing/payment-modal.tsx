@@ -14,6 +14,7 @@ import { useCoupon } from '@/hooks/use-plans';
 import { TierPricing, IntervalPricing, PlanInterval } from './types';
 import dynamic from 'next/dynamic';
 import { useInitiatePayment, useVerifyPayment } from '@/hooks/use-payments';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@/hooks/use-subscription';
 
 export enum PaymentPurpose {
@@ -50,9 +51,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
   const [isInitiating, setIsInitiating] = useState(false);
   const hasCompletedRef = useRef(false);
-
-  // Track the last amount we initiated for — re-initiate when coupon changes
-  const initiatedForAmountRef = useRef<number | null>(null);
+  const prevReferenceRef = useRef<string | null>(null); // for cache removal on retry
+  const queryClient = useQueryClient();
 
   const finalAmount = result?.valid && result.discountAmount
     ? pricing.priceKobo - result.discountAmount
@@ -62,17 +62,22 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const { mutate: initiatePayment } = useInitiatePayment();
 
-  // ── Initiate payment whenever finalAmount changes ───────────────────────────
-  // Runs on mount (first paid load) and again whenever a coupon is applied
-  // that changes the amount. Each run creates a fresh Payment record and
-  // Paystack reference — old references are single-use and cannot be reused.
+  // retryCount is the single trigger for re-initiation after abandonment/failure.
+  // Declared before the useEffect that uses it so it is in scope.
+  const [retryCount, setRetryCount] = useState(0);
+
+  // ── Initiate / re-initiate payment ─────────────────────────────────────────
+  // Runs:
+  //   1. On mount — creates the initial Payment record + Paystack reference.
+  //   2. When retryCount increments — user abandoned/failed, get a fresh reference.
+  //   3. When finalAmount changes — coupon applied, new amount needs new record.
+  // Each Paystack reference is single-use — never reuse an abandoned one.
   useEffect(() => {
     if (isFree || !userEmail || !subscriptionId || !planId) return;
-    if (initiatedForAmountRef.current === finalAmount) return; // same amount, skip
 
-    initiatedForAmountRef.current = finalAmount;
-    setPaymentReference(null);       // clear stale reference
-    hasCompletedRef.current = false; // allow polling to run fresh
+    // Reset guards so polling and button-disabled logic work cleanly on retry
+    hasCompletedRef.current = false;
+    setPaymentReference(null);
     setIsInitiating(true);
 
     initiatePayment(
@@ -90,18 +95,19 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       },
       {
         onSuccess: ({ data }) => {
+          prevReferenceRef.current = data.reference;
           setPaymentReference(data.reference);
           setIsInitiating(false);
         },
         onError: () => {
           toast.error('Could not prepare payment. Please try again.');
           setIsInitiating(false);
-          initiatedForAmountRef.current = null; // allow retry
         },
       }
     );
+  // retryCount is the primary retry trigger. finalAmount covers coupon changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finalAmount, isFree]);
+  }, [retryCount, finalAmount]);
 
   // ── Poll verify every 3s after Paystack modal closes ───────────────────────
   // The webhook fires server-to-server and flips gatewayStatus to 'success'.
@@ -129,19 +135,19 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           ? 'Payment was not completed. Click Pay to try again.'
           : 'Payment failed. Please try again.'
       );
-      // Reset so the user can retry — incrementing retryCount re-initiates
+      // Evict the stale "abandoned" result from cache before retry.
+      // paymentKeys.verify(ref) = ['payments', 'verify', ref]
+      // Without this, verifyQuery returns the cached abandoned data immediately
+      // when the new reference arrives, re-triggering this block in a loop.
+      if (prevReferenceRef.current) {
+        queryClient.removeQueries({ queryKey: ['payments', 'verify', prevReferenceRef.current] });
+        prevReferenceRef.current = null;
+      }
       setPaymentReference(null);
-      initiatedForAmountRef.current = null;
       setRetryCount((c) => c + 1);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [verifyQuery.data]);
-
-  // retryCount forces PaystackButton to fully remount after abandonment/failure.
-  // react-paystack caches the reference internally on mount — changing the
-  // `reference` prop alone is not enough. A key change destroys and recreates
-  // the component so Paystack picks up the new reference cleanly.
-  const [retryCount, setRetryCount] = useState(0);
 
   // ── Activate subscription via useSubscription.subscribe ────────────────────
   // Using subscribe() instead of a raw fetch ensures:

@@ -22,6 +22,7 @@ import { MediaStep } from "./media-step";
 import { AdvancedSettingsStep } from "./advance-setting-step";
 import { SummaryStep } from "./summary-step";
 import { EventTabs } from "../event-tabs";
+import { useSubscription } from "@/hooks/use-subscription";
 
 
 // ─── Schema (identical to create) ────────────────────────────────────────────
@@ -207,6 +208,13 @@ export default function EditEventPage() {
   const [currentStep,  setCurrentStep]  = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [populated,    setPopulated]    = useState(false);
+
+  const { useOrganizerAllEvents} = useEvents();
+  const { data, isLoading, isError:newDataError } = useOrganizerAllEvents();
+  const eventCount = data?.eventCount;
+
+  const { checkEventCreation } = useSubscription();
+  const allowCreation = checkEventCreation(eventCount?.total);
 
   const form = useForm<EventFormData>({
     resolver: zodResolver(eventFormSchema) as any,
@@ -447,7 +455,7 @@ export default function EditEventPage() {
 
   return (
     <>
-      <EventTabs />
+      <EventTabs allowCreation={allowCreation.allowed} />
       <div className="container mx-auto pb-6">
         {/* Page title */}
         <div className="mb-6">

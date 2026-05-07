@@ -13,6 +13,8 @@ import { EventListCard } from "./event-list-card";
 import { SkeletonCard } from "./event-skeleton";
 import { EmptyState } from "./empty-state";
 import { STATUS_TABS, ITEMS_PER_PAGE, StatusTab, ViewMode } from "./event-helpers";
+import { useSubscription } from "@/hooks/use-subscription";
+import { Loader2 } from "lucide-react";
 
 // ─── Query params helper ───────────────────────────────────────────────────────
 
@@ -38,7 +40,12 @@ export default function EventsPage() {
   const { status, isDeleted, isArchived } = tabToQueryParams(activeTab);
   const { data, isLoading, isError } = useOrganizerAllEvents(status, isDeleted, isArchived, undefined, currentPage, ITEMS_PER_PAGE);
 
-  console.log("Fetched events data:", data);
+  const { data:newData, isLoading:newDataLoading } = useOrganizerAllEvents();
+  const eventCount = newData?.eventCount;
+
+  const { checkEventCreation } = useSubscription();
+  const allowCreation = checkEventCreation(eventCount?.total);
+
 
   const publishMutation = usePublishEvent();
   const archiveMutation = useArchiveEvent();
@@ -82,7 +89,7 @@ export default function EventsPage() {
 
   return (
     <>
-      <EventTabs />
+      <EventTabs allowCreation={allowCreation.allowed} />
       <div className="w-full">
 
         {/* Header */}
@@ -93,13 +100,21 @@ export default function EventsPage() {
               {totalCount} event{totalCount !== 1 ? "s" : ""} total
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard/events/create-event")}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200 dark:shadow-indigo-900/30 self-start sm:self-auto"
-          >
-            <HugeiconsIcon icon={PlusSignIcon} size={16} /> Create Event
-          </button>
+          { newDataLoading && 
+            <div>
+              <Loader2 className="animate-spin"/>
+            </div>
+          }
+          { newData && allowCreation.allowed &&
+            <button
+              disabled={!allowCreation.allowed}
+              type="button"
+              onClick={() => router.push("/dashboard/events/create-event")}
+              className="disabled:bg-indigo-400 inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200 dark:shadow-indigo-900/30 self-start sm:self-auto"
+            >
+              <HugeiconsIcon icon={PlusSignIcon} size={16} /> Create Event
+            </button>
+          }
         </div>
 
         {/* Tabs + view toggle */}
@@ -175,7 +190,7 @@ export default function EventsPage() {
             </button>
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState tab={activeTab} onCreateClick={handleCreateClick} />
+          <EmptyState tab={activeTab} onCreateClick={handleCreateClick} allowCreate={allowCreation.allowed} />
         ) : (
           <>
             <div className={gridClass}>

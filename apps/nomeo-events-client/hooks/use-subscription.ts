@@ -199,12 +199,11 @@ export function useSubscription() {
   // null if everything is fine. Used internally by all other checks.
   const baseCheck = useCallback((): CheckResult | null => {
     if (isLoading) return null;
+
     if (!subscription || !isActive) {
       return {
         allowed: false,
-        reason: subscription
-          ? 'Your subscription has expired. Renew to continue.'
-          : 'You need an active subscription for this.',
+        reason: subscription ? 'Your subscription has expired. Renew to continue.' : 'You need an active subscription for this.',
         upgradeRequired: true,
       };
     }
@@ -220,14 +219,23 @@ export function useSubscription() {
     (currentCount: number): CheckResult => {
       const base = baseCheck();
       if (base) return base;
-      const max = subscription!.maxEvents;
-      if (max !== undefined && currentCount >= max) {
+      
+      const max = subscription?.maxEvents;
+      
+      // If no max limit (enterprise/unlimited) or max is 0 (unlimited)
+      if (!max || max === 0) {
+        return { allowed: true };
+      }
+      
+      // Check if at or over the limit
+      if (currentCount >= max) {
         return {
           allowed: false,
-          reason: `You've used ${currentCount}/${max} events on your plan.`,
+          reason: `You've used ${currentCount}/${max} events on your plan. ${currentCount === max ? 'You cannot create more events.' : `You're ${currentCount - max} over your limit.`}`,
           upgradeRequired: true,
         };
       }
+      
       return { allowed: true };
     },
     [baseCheck, subscription]

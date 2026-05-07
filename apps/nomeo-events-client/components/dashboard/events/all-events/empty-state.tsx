@@ -19,9 +19,10 @@ const CREATE_LABELS: Partial<Record<StatusTab, string>> = {
 interface EmptyStateProps {
   tab:           StatusTab;
   onCreateClick: () => void;
+  allowCreate: boolean;
 }
 
-export function EmptyState({ tab, onCreateClick }: EmptyStateProps) {
+export function EmptyState({ tab, onCreateClick , allowCreate}: EmptyStateProps) {
   const { title, description, icon } = MESSAGES[tab];
   const createLabel = CREATE_LABELS[tab];
 
@@ -32,7 +33,7 @@ export function EmptyState({ tab, onCreateClick }: EmptyStateProps) {
       </div>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">{title}</h3>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-xs">{description}</p>
-      {createLabel && (
+      {createLabel && allowCreate && (
         <button
           type="button"
           onClick={onCreateClick}

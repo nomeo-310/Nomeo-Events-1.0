@@ -41,6 +41,8 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react';
 import { EventTabs } from '../event-tabs';
 import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer';
+import { useEvents } from '@/hooks/use-events';
+import { useSubscription } from '@/hooks/use-subscription';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -831,6 +833,13 @@ export default function EventRegistrations() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pdfGenerating, setPdfGenerating] = useState(false);
 
+  const { useOrganizerAllEvents} = useEvents();
+  const { data:newData, isLoading:newDataLoading, isError } = useOrganizerAllEvents();
+  const eventCount = newData?.eventCount;
+
+  const { checkEventCreation } = useSubscription();
+  const allowCreation = checkEventCreation(eventCount?.total);
+
   const [filters, setFilters] = useState({
     status: undefined as RegistrationStatus | undefined,
     paymentStatus: undefined as PaymentStatus | undefined,
@@ -996,7 +1005,7 @@ export default function EventRegistrations() {
   if (error) {
     return (
       <>
-        <EventTabs />
+        <EventTabs allowCreation={allowCreation.allowed}/>
         <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
           <div className="max-w-sm w-full border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 rounded-2xl p-8 text-center">
             <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-950/50 flex items-center justify-center mx-auto mb-4">
@@ -1017,7 +1026,7 @@ export default function EventRegistrations() {
 
   return (
     <>
-      <EventTabs />
+      <EventTabs allowCreation={allowCreation.allowed} />
       <div className="min-h-screen bg-gray-50 dark:bg-inherit">
         <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
 
