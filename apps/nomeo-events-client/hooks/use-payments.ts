@@ -160,10 +160,7 @@ type VerifyResponse = { success: boolean; data: VerifyPaymentResponse };
 /**
  * List payments with optional filters + pagination.
  */
-export function usePayments(
-  filters: PaymentListFilters = {},
-  options?: Omit<UseQueryOptions<PaymentsListResponse>, 'queryKey' | 'queryFn'>
-) {
+export function usePayments( filters: PaymentListFilters = {}, options?: Omit<UseQueryOptions<PaymentsListResponse>, 'queryKey' | 'queryFn'>) {
   return useQuery<PaymentsListResponse>({
     queryKey: paymentKeys.list(filters),
     queryFn: () => apiFetch<PaymentsListResponse>(`/api/payments${buildQuery(filters)}`),
@@ -175,10 +172,7 @@ export function usePayments(
 /**
  * Get a single payment by ID.
  */
-export function usePayment(
-  id: string,
-  options?: Omit<UseQueryOptions<{ success: boolean; data: Payment }>, 'queryKey' | 'queryFn'>
-) {
+export function usePayment(id: string, options?: Omit<UseQueryOptions<{ success: boolean; data: Payment }>, 'queryKey' | 'queryFn'>) {
   return useQuery({
     queryKey: paymentKeys.detail(id),
     queryFn: () => apiFetch<{ success: boolean; data: Payment }>(`/api/payments/${id}`),
@@ -202,12 +196,7 @@ export function usePayment(
  *   },
  * });
  */
-export function useVerifyPayment(
-  reference: string,
-  options?: Omit<UseQueryOptions<VerifyResponse>, 'queryKey' | 'queryFn'> & {
-    onSuccess?: (data: VerifyResponse) => void;
-  }
-) {
+export function useVerifyPayment( reference: string, options?: Omit<UseQueryOptions<VerifyResponse>, 'queryKey' | 'queryFn'> & { onSuccess?: (data: VerifyResponse) => void; }) {
   const { onSuccess, ...queryOptions } = options ?? {};
 
   const query = useQuery<VerifyResponse>({

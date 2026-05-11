@@ -23,10 +23,10 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
-const PaystackButton = dynamic(
-  () => import('react-paystack').then((mod) => mod.PaystackButton),
-  { ssr: false },
-);
+// react-paystack accesses `window` at module load time so it cannot be
+// statically imported — doing so crashes Next.js SSR with
+// "ReferenceError: window is not defined".
+// We lazy-load it inside the component with useState + useEffect instead.
 
 // ── shadcn/ui form controls ────────────────────────────────────────────────────
 import { Input }      from "@/components/ui/input";
@@ -650,8 +650,12 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const hasCompletedRef = useRef(false);
-  // Keep a ref to the previous reference so we can remove its stale cache entry
   const prevReferenceRef = useRef<string | null>(null);
+
+  // Polling only starts after the user interacts with the Paystack modal.
+  // This prevents the 200+ payments problem: polling was starting on mount
+  // and hitting /api/payments/verify every 3s before the user clicked anything.
+  const [userHasPaid, setUserHasPaid] = useState(false);
 
   // Incrementing this re-triggers the initiatePayment useEffect so the user
   // gets a fresh Paystack reference after abandoning or a failed payment.
@@ -664,8 +668,9 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
   useEffect(() => {
     if (isFree || !form.email || !event._id) return;
 
-    // Reset the completion guard so polling works fresh on each retry
+    // Reset all guards so polling and state work cleanly on each retry
     hasCompletedRef.current = false;
+    setUserHasPaid(false);
 
     initiatePayment(
       {
@@ -691,7 +696,7 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
   // Pass the reference directly — never fall back to "" which could match
   // stale cache entries and fire the effect before the user does anything.
   const verifyQuery = useVerifyPayment(paymentReference ?? "", {
-    enabled: !!paymentReference && !hasCompletedRef.current,
+    enabled: !!paymentReference && userHasPaid && !hasCompletedRef.current,
     refetchInterval: (query) => {
       const status = query.state.data?.data?.gatewayStatus;
       if (status === "success" || status === "failed" || status === "abandoned") return false;
@@ -720,9 +725,10 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
       onRegistrationComplete({ reference: responseRef, status: "success" })
         .finally(() => setIsConfirming(false));
     } else if (status === "failed" || status === "abandoned") {
-      // Evict this reference from cache so it can never re-trigger this block
+      // Evict from cache so this block can never re-trigger with stale data
       queryClient.removeQueries({ queryKey: ["payments", "verify", responseRef] });
       prevReferenceRef.current = null;
+      setUserHasPaid(false);
       setPaymentReference(null);
       setRetryCount((c) => c + 1);
       toast.error(
@@ -736,14 +742,18 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [verifyQuery.data, paymentReference]);
 
+  // onSuccess: payment completed — start polling to confirm on the server
   const handlePaystackSuccess = (response: any) => {
-    // Polling handles confirmation — this is just a safety net
-    if (!paymentReference) setPaymentReference(response.reference);
+    setUserHasPaid(true);
+    if (response.reference && response.reference !== paymentReference) {
+      setPaymentReference(response.reference);
+    }
   };
 
+  // onClose: modal closed (paid or dismissed) — start polling either way.
+  // If they paid, verify returns success. If dismissed, returns pending then abandoned.
   const handlePaystackClose = () => {
-    // User dismissed the modal. Polling will catch it if they actually paid.
-    // If they didn't pay, verify will eventually return abandoned and retry kicks in.
+    setUserHasPaid(true);
   };
 
   const formatMembersList = (members: GroupMember[], startIndex: number): string =>
@@ -873,6 +883,42 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
     </div>
   );
 
+  // Lazy-load usePaystackPayment to avoid the SSR window crash.
+  // The hook is stored in state and only called once the module is loaded.
+  const [usePaystackPaymentHook, setUsePaystackPaymentHook] = useState<
+    typeof import('react-paystack')['usePaystackPayment'] | null
+  >(null);
+
+  useEffect(() => {
+    import('react-paystack').then((mod) => {
+      setUsePaystackPaymentHook(() => mod.usePaystackPayment);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // onSuccess and onClose are passed as an object to initializePayment() — not in the config.
+  const paystackConfig = {
+    publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
+    email:     form.email,
+    amount:    amountInKobo,
+    currency:  "NGN",
+    reference: paymentReference ?? "",
+    metadata:  { custom_fields: customFields },
+  };
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const initializePayment = usePaystackPaymentHook?.(paystackConfig) ?? null;
+
+  const isPreparingReference   = (isInitiating || !usePaystackPaymentHook) && !paymentReference;
+  const isAwaitingConfirmation = !!paymentReference && isConfirming;
+  const canPay = !!paymentReference && !!initializePayment && !isLoading && !isInitiating && !isConfirming;
+
+  const handlePayClick = () => {
+    if (!canPay || !initializePayment) return;
+    // onSuccess is the single argument — onClose is in the config above.
+    initializePayment({ onSuccess: handlePaystackSuccess, onClose: handlePaystackClose });
+  };
+
   // ── Free plan ─────────────────────────────────────────────────────────────
   if (isFree) {
     return (
@@ -888,22 +934,6 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
   }
 
   // ── Paid plan ─────────────────────────────────────────────────────────────
-  // IMPORTANT: publicKey must use NEXT_PUBLIC_ prefix — it runs in the browser.
-  // Without the prefix the value is undefined and Paystack will refuse to open.
-  const paystackConfig = {
-    publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
-    email: form.email,
-    amount: amountInKobo,
-    currency: "NGN",
-    reference: paymentReference ?? "",
-    metadata: { custom_fields: customFields },
-    onSuccess: handlePaystackSuccess,
-    onClose: handlePaystackClose,
-  };
-
-  const isPreparingReference = isInitiating && !paymentReference;
-  const isAwaitingConfirmation = !!paymentReference && isConfirming;
-
   return (
     <div className="space-y-5">
       <OrderSummary />
@@ -925,25 +955,23 @@ function PaymentStep({ plan, form, event, onRegistrationComplete, isLoading, nee
         </div>
       )}
 
-      {/*
-        key={retryCount} forces react-paystack to fully unmount and remount
-        after each abandoned/failed payment. Without this, the Paystack inline
-        script holds onto the old (single-use) reference internally and the
-        modal either won't open or will re-submit the dead reference.
-      */}
-      <PaystackButton
-        key={retryCount}
-        {...paystackConfig}
-        text={
-          isPreparingReference ? "Preparing payment…"
-          : isConfirming       ? "Confirming payment…"
-          : isLoading          ? "Processing…"
-          : retryCount > 0     ? `Try Again — Pay ${priceDisplay}`
+      <Button
+        type="button"
+        onClick={handlePayClick}
+        disabled={!canPay}
+        className="w-full h-11 font-semibold gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed text-white"
+      >
+        {isPreparingReference
+          ? <><HugeiconsIcon icon={Loading03Icon} size={16} className="animate-spin" /> Preparing payment…</>
+          : isConfirming
+          ? <><HugeiconsIcon icon={Loading03Icon} size={16} className="animate-spin" /> Confirming payment…</>
+          : isLoading
+          ? <><HugeiconsIcon icon={Loading03Icon} size={16} className="animate-spin" /> Processing…</>
+          : retryCount > 0
+          ? `Try Again — Pay ${priceDisplay}`
           : `Pay ${priceDisplay}`
         }
-        className="w-full h-11 font-semibold gap-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-        disabled={isLoading || isInitiating || isConfirming || !paymentReference}
-      />
+      </Button>
     </div>
   );
 }

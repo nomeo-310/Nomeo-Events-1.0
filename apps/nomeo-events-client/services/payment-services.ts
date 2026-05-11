@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { nanoid } from 'nanoid';
 import { Payment, PaymentGatewayStatus, PaymentProvider, PaymentPurpose, IPaymentDocument } from '@/models/payment';
 import { paystack, PaystackTransaction } from '@/lib/paystack';
+import { ObjectId } from 'mongodb';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -11,9 +12,6 @@ export interface InitiateEventPaymentInput {
   email: string;
   eventId: mongoose.Types.ObjectId | string;
   amount: number; // in kobo
-  // registrationId is optional — no registration exists yet when payment is
-  // initiated. The webhook handler links the registration back to this Payment
-  // record after the transaction is confirmed, using the shared reference.
   registrationId?: mongoose.Types.ObjectId | string;
   currency?: string;
   couponCode?: string;
@@ -45,6 +43,7 @@ export interface PaymentFilters {
   eventId?: string;
   registrationId?: string;
   subscriptionId?: string;
+  organizerId?: string; // Changed from userId to organizerId
   page?: number;
   limit?: number;
 }
@@ -55,16 +54,12 @@ export const PaymentService = {
   /**
    * Create a payment record and initialize a Paystack transaction.
    * Returns the access_code and authorizationUrl for the frontend Paystack modal.
-   *
-   * For event registrations, registrationId may be omitted — the webhook
-   * handler is responsible for linking the registration after confirmation.
    */
   async initiate(input: InitiatePaymentInput) {
     const reference = `pay_${nanoid(16)}`;
     const amountPaid = input.amount - (input.discountAmount ?? 0);
 
     // Build context fields depending on purpose.
-    // For event registrations, registrationId is stored only when provided.
     const contextFields =
       input.purpose === PaymentPurpose.EVENT_REGISTRATION
         ? {
@@ -83,7 +78,6 @@ export const PaymentService = {
           };
 
     // Initialize on Paystack first — fail fast before writing to DB
-    // if Paystack is unreachable or rejects the request.
     const paystackData = await paystack.initializeTransaction({
       email: input.email,
       amount: amountPaid,
@@ -122,8 +116,6 @@ export const PaymentService = {
 
   /**
    * Verify a payment by reference against Paystack and update the local record.
-   * Safe to call multiple times — skips the network call if already confirmed.
-   * Called by the polling fallback (frontend) and the webhook handler.
    */
   async verify(reference: string): Promise<IPaymentDocument> {
     const payment = await Payment.findOne({ reference });
@@ -157,8 +149,6 @@ export const PaymentService = {
 
   /**
    * Process a verified Paystack webhook event.
-   * Validates the HMAC signature before touching anything.
-   * Caller must pass the raw request body as a string (not parsed JSON).
    */
   async handleWebhook(rawBody: string, signature: string) {
     if (!paystack.validateWebhookSignature(rawBody, signature)) {
@@ -175,14 +165,11 @@ export const PaymentService = {
       return { handled: true, payment };
     }
 
-    // Additional Paystack events can be handled here as needed:
-    // 'charge.failed', 'refund.processed', 'charge.dispute.create', etc.
     return { handled: false, event: event.event };
   },
 
   /**
    * Initiate a full or partial refund via Paystack and record it locally.
-   * Omit `amount` to refund the full transaction value.
    */
   async refund(
     paymentId: string,
@@ -207,9 +194,10 @@ export const PaymentService = {
 
   /**
    * List payments with optional filters and pagination.
+   * If organizerId is provided, only returns payments for events organized by that user.
    */
   async list(filters: PaymentFilters = {}) {
-    const { page = 1, limit = 20, ...rest } = filters;
+    const { page = 1, limit = 20, organizerId, ...rest } = filters;
     const skip = (page - 1) * limit;
 
     const query: Record<string, unknown> = {};
@@ -221,8 +209,37 @@ export const PaymentService = {
     if (rest.subscriptionId)
       query.subscriptionId = new mongoose.Types.ObjectId(rest.subscriptionId);
 
+    // If organizerId is provided, filter payments by events organized by that user
+    if (organizerId) {
+      // First, get all event IDs organized by this user
+      const Event = mongoose.model('Event');
+      const userEvents = await Event.find({ organizerId: new ObjectId(organizerId) }).select('_id');
+      const eventIds = userEvents.map(event => event._id);
+      
+      // Add to query: only payments where eventId is in the user's events
+      if (eventIds.length > 0) {
+        query.eventId = { $in: eventIds };
+      } else {
+        // User has no events, return empty result
+        return {
+          payments: [],
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 0,
+          },
+        };
+      }
+    }
+
     const [payments, total] = await Promise.all([
-      Payment.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Payment.find(query)
+        .populate('eventId', 'title date slug') // Populate event details
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
       Payment.countDocuments(query),
     ]);
 
@@ -238,12 +255,191 @@ export const PaymentService = {
   },
 
   /**
-   * Get a single payment by ID.
+   * Get a single payment by ID, with access control based on user's organized events.
    */
-  async getById(id: string): Promise<IPaymentDocument> {
-    const payment = await Payment.findById(id);
+  async getById(id: string, organizerId?: string): Promise<IPaymentDocument> {
+    const payment = await Payment.findById(id).populate('eventId', 'title date slug');
     if (!payment) throw new Error('Payment not found');
+
+    // If organizerId is provided, verify that the payment belongs to an event organized by the user
+    if (organizerId && payment.eventId) {
+      const Event = mongoose.model('Event');
+      const event = await Event.findById(payment.eventId);
+      if (!event || event.organizerId.toString() !== organizerId) {
+        throw new Error('Unauthorized: You do not have permission to view this payment');
+      }
+    }
+
     return payment;
+  },
+
+  /**
+   * Get payment statistics for an organizer (total revenue, successful payments, etc.)
+   */
+  async getStats(organizerId: string) {
+    // Get all event IDs organized by this user
+    const Event = mongoose.model('Event');
+    const userEvents = await Event.find({ organizerId: new ObjectId(organizerId) }).select('_id');
+    const eventIds = userEvents.map(event => event._id);
+
+    if (eventIds.length === 0) {
+      return {
+        totalRevenue: 0,
+        successfulPayments: 0,
+        pendingPayments: 0,
+        failedPayments: 0,
+        refundedPayments: 0,
+        averagePaymentAmount: 0,
+        totalEvents: 0,
+        totalTransactions: 0,
+      };
+    }
+
+    const stats = await Payment.aggregate([
+      {
+        $match: {
+          eventId: { $in: eventIds },
+          purpose: PaymentPurpose.EVENT_REGISTRATION,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: {
+            $sum: {
+              $cond: [
+                { $eq: ['$gatewayStatus', PaymentGatewayStatus.SUCCESS] },
+                '$amountPaid',
+                0,
+              ],
+            },
+          },
+          successfulPayments: {
+            $sum: {
+              $cond: [{ $eq: ['$gatewayStatus', PaymentGatewayStatus.SUCCESS] }, 1, 0],
+            },
+          },
+          pendingPayments: {
+            $sum: {
+              $cond: [{ $eq: ['$gatewayStatus', PaymentGatewayStatus.PENDING] }, 1, 0],
+            },
+          },
+          failedPayments: {
+            $sum: {
+              $cond: [{ $eq: ['$gatewayStatus', PaymentGatewayStatus.FAILED] }, 1, 0],
+            },
+          },
+          refundedPayments: {
+            $sum: {
+              $cond: [{ $eq: ['$gatewayStatus', PaymentGatewayStatus.REVERSED] }, 1, 0],
+            },
+          },
+          abandonedPayments: {
+            $sum: {
+              $cond: [{ $eq: ['$gatewayStatus', PaymentGatewayStatus.ABANDONED] }, 1, 0],
+            },
+          },
+          averagePaymentAmount: { $avg: '$amountPaid' },
+          totalTransactions: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const result = stats[0] || {
+      totalRevenue: 0,
+      successfulPayments: 0,
+      pendingPayments: 0,
+      failedPayments: 0,
+      refundedPayments: 0,
+      abandonedPayments: 0,
+      averagePaymentAmount: 0,
+      totalTransactions: 0,
+    };
+
+    return {
+      ...result,
+      totalEvents: eventIds.length,
+    };
+  },
+
+  /**
+   * Get recent payments for an organizer (last 10 payments)
+   */
+  async getRecentPayments(organizerId: string, limit: number = 10) {
+    const Event = mongoose.model('Event');
+    const userEvents = await Event.find({ organizerId: new ObjectId(organizerId) }).select('_id');
+    const eventIds = userEvents.map(event => event._id);
+
+    if (eventIds.length === 0) {
+      return [];
+    }
+
+    const payments = await Payment.find({
+      eventId: { $in: eventIds },
+    })
+      .populate('eventId', 'title date slug')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    return payments;
+  },
+
+  /**
+   * Get payment summary by event for an organizer
+   */
+  async getPaymentsByEvent(organizerId: string) {
+    const Event = mongoose.model('Event');
+    const userEvents = await Event.find({ organizerId: new ObjectId(organizerId) }).select('_id title slug');
+    const eventIds = userEvents.map(event => event._id);
+
+    if (eventIds.length === 0) {
+      return [];
+    }
+
+    const paymentsByEvent = await Payment.aggregate([
+      {
+        $match: {
+          eventId: { $in: eventIds },
+          purpose: PaymentPurpose.EVENT_REGISTRATION,
+          gatewayStatus: PaymentGatewayStatus.SUCCESS,
+        },
+      },
+      {
+        $group: {
+          _id: '$eventId',
+          totalRevenue: { $sum: '$amountPaid' },
+          totalRegistrations: { $sum: 1 },
+          averageAmount: { $avg: '$amountPaid' },
+        },
+      },
+      {
+        $lookup: {
+          from: 'events',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'event',
+        },
+      },
+      {
+        $unwind: '$event',
+      },
+      {
+        $project: {
+          eventId: '$_id',
+          eventTitle: '$event.title',
+          eventSlug: '$event.slug',
+          totalRevenue: 1,
+          totalRegistrations: 1,
+          averageAmount: 1,
+        },
+      },
+      {
+        $sort: { totalRevenue: -1 },
+      },
+    ]);
+
+    return paymentsByEvent;
   },
 };
 

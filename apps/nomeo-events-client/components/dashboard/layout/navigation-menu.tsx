@@ -24,6 +24,7 @@ export const NavigationMenu = ({ menuItems, isMenuItemActive, onItemClick, class
 
         return (
           <Link
+            prefetch={true}
             key={item.id}
             href={item.path}
             onClick={onItemClick}

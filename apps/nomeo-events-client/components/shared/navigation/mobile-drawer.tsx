@@ -96,6 +96,7 @@ const MobileDrawer = ({
             const active = isActive(item.href);
             return (
               <Link
+                prefetch={true}
                 key={item.name}
                 href={item.href}
                 onClick={onClose}

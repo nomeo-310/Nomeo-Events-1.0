@@ -119,6 +119,7 @@ export default function EventsPage() {
 
         {/* Tabs + view toggle */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          {/* tabs */}
           <div className="flex flex-wrap gap-2">
             {STATUS_TABS.map((tab) => (
               <button
@@ -137,6 +138,7 @@ export default function EventsPage() {
             ))}
           </div>
 
+          {/* toggle */}
           <div className="hidden sm:flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg shrink-0">
             {(["grid", "list"] as ViewMode[]).map((mode) => (
               <button

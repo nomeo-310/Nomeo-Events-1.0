@@ -319,7 +319,7 @@ export function SubscriptionCard({ subscription, isLoading = false }: Subscripti
       <a
         href="/pricing"
         className={cn(
-          "mt-1 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm md:text-xs font-semibold transition-colors h-10 lg:h-11" ,
+          "mt-1 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm md:text-xs font-semibold transition-colors h-10 lg:h-11 uppercase" ,
           isFree
             ? "bg-indigo-600 hover:bg-indigo-700 text-white"
             : "border border-border bg-background hover:bg-muted text-foreground"

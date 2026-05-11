@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { connectDB } from "./mongoose";
 import mongoose from "mongoose";
+import { ObjectId } from "mongodb";
 
 export async function getSession() {
   const auth = await getAuth();
@@ -30,9 +31,11 @@ export async function getCurrentUser() {
 
   await connectDB();
 
-  const user = await mongoose.connection.db!
-    .collection("user")
-    .findOne({ _id: new mongoose.Types.ObjectId(session.user.id) });
+  const userCollection = mongoose.connection.db!.collection("user")
+  const user = await userCollection.findOne({ _id: new mongoose.Types.ObjectId(session.user.id) });
+
+  const accountColletion = mongoose.connection.db!.collection("account")
+  const account = await accountColletion.findOne({userId: new ObjectId( session.user.id)})
 
   if (!user) return null;
 
@@ -45,6 +48,7 @@ export async function getCurrentUser() {
     avatar: (user.avatar as string) ?? "",
     image: (user.image as string) ?? "",
     createdAt: user.createdAt as Date,
+    providerId: account?.providerId as string
   };
 }
 

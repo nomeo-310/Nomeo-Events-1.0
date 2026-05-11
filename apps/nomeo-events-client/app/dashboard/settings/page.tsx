@@ -1,5 +1,6 @@
 import { DashboardLayout } from "@/components/dashboard/layout/main-layout";
-import PaymentPage from "@/components/dashboard/payments/payment-page";
+import ProfilePage from "@/components/dashboard/profile/profile-page";
+import SettingsPage from "@/components/dashboard/settings/settings-page";
 import { getCurrentUser } from "@/lib/session";
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 
-const Payments = async () => {
+const Settings = async () => {
 
   const loggedInUser = await getCurrentUser();
 
@@ -22,9 +23,9 @@ const Payments = async () => {
   
   return (
     <DashboardLayout user={loggedInUser}>
-      <PaymentPage/>
+      <SettingsPage user={loggedInUser}/>
     </DashboardLayout>
   )
 }
 
-export default Payments;
+export default Settings;

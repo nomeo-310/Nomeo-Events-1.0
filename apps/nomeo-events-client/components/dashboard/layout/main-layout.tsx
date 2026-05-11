@@ -28,18 +28,22 @@ const menuItems = [
 const ALWAYS_UNLOCKED: string[] = [
   '/dashboard',
   '/dashboard/profile',
-  '/dashboard/settings',
+    '/dashboard/settings',
   '/dashboard/payments',
 ]
 
 const REQUIRES_VERIFICATION: string[] = [
   '/dashboard/events',
   '/dashboard/analytics',
+  // '/dashboard/settings',
+  // '/dashboard/payments',
 ]
 
 const GATED_PATHS: string[] = [
   '/dashboard/events',
   '/dashboard/analytics',
+  // '/dashboard/settings',
+  // '/dashboard/payments',
 ]
 
 interface DashboardLayoutProps {

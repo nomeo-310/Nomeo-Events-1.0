@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { connectDB } from "@/lib/mongoose";
 import mongoose from "mongoose";
 import { sendVerificationOTP } from "@/lib/otp";
+import { ObjectId } from "mongodb";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,9 +15,15 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "Email is required" }, { status: 400 });
     }
 
-    // Check if user exists
     const userCollection = mongoose.connection.db!.collection("user");
     const user = await userCollection.findOne({ email: email.toLowerCase() });
+
+    const accountCollection = mongoose.connection.db!.collection("account");
+    const account = await accountCollection.findOne({userId: new ObjectId(user?.id)});
+
+    if (account && account.providerId === 'google') {
+      return Response.json({ error: "This account is authenticated by Google, you cannot change it password" }, { status: 400 });
+    }; 
 
     // For security, don't reveal if user exists or not
     if (!user) {

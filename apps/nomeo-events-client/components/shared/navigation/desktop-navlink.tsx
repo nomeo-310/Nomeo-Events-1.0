@@ -7,6 +7,7 @@ import { DesktopNavLinkProps } from "@/types/navigation-type";
 const DesktopNavLink = ({ item, isActive }: DesktopNavLinkProps) => {
   return (
     <Link
+      prefetch={true}
       href={item.href}
       className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 ${
         isActive

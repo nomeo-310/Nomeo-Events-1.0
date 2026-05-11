@@ -3,16 +3,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Cancel01Icon, Tick01Icon, Loading03Icon } from '@hugeicons/core-free-icons';
-
-const PaystackButton = dynamic(
-  () => import('react-paystack').then((mod) => mod.PaystackButton),
-  { ssr: false }
-);
+// react-paystack accesses window at module load — lazy loaded below to avoid SSR crash.
 
 import { toast } from 'sonner';
 import { useCoupon } from '@/hooks/use-plans';
 import { TierPricing, IntervalPricing, PlanInterval } from './types';
-import dynamic from 'next/dynamic';
 import { useInitiatePayment, useVerifyPayment } from '@/hooks/use-payments';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@/hooks/use-subscription';
@@ -24,8 +19,8 @@ export enum PaymentPurpose {
 
 interface PaymentModalProps {
   planId:         string;
-  planSlug:       string; // needed by useSubscription.subscribe
-  subscriptionId: string; // must exist before modal opens — pass from your subscription creation
+  planSlug:       string;
+  subscriptionId: string;
   tier:           TierPricing;
   pricing:        IntervalPricing;
   interval:       PlanInterval;
@@ -42,17 +37,37 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const { validate, validating, result, clear } = useCoupon();
   const [couponCode, setCouponCode] = useState('');
   const [processing, setProcessing] = useState(false);
-
-  // Pull subscribe + isSubscribing from useSubscription so the cache
-  // is updated immediately after activation — no manual invalidation needed.
   const { subscribe, isSubscribing } = useSubscription();
+  const queryClient = useQueryClient();
+
+  // Lazy-load usePaystackPayment — react-paystack reads window at module load
+  // time which crashes SSR. Loading it inside useEffect is safe.
+  const [usePaystackPaymentHook, setUsePaystackPaymentHook] = useState<
+    typeof import('react-paystack')['usePaystackPayment'] | null
+  >(null);
+
+  useEffect(() => {
+    import('react-paystack').then((mod) => {
+      setUsePaystackPaymentHook(() => mod.usePaystackPayment);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Payment state ───────────────────────────────────────────────────────────
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
   const [isInitiating, setIsInitiating] = useState(false);
   const hasCompletedRef = useRef(false);
-  const prevReferenceRef = useRef<string | null>(null); // for cache removal on retry
-  const queryClient = useQueryClient();
+
+  // ── CRITICAL: polling is only active after the user actually pays ───────────
+  // We keep a separate flag for this so polling never starts on mount —
+  // only after the Paystack modal closes following a real payment attempt.
+  // This is the main reason 200+ payment records were created: polling was
+  // starting immediately on mount and calling verify every 3s before the user
+  // even opened the Paystack modal, which in turn called the server repeatedly.
+  const [userHasPaid, setUserHasPaid] = useState(false);
+
+  const [retryCount, setRetryCount] = useState(0);
+  const { mutate: initiatePayment } = useInitiatePayment();
 
   const finalAmount = result?.valid && result.discountAmount
     ? pricing.priceKobo - result.discountAmount
@@ -60,24 +75,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const isFree = finalAmount === 0;
 
-  const { mutate: initiatePayment } = useInitiatePayment();
-
-  // retryCount is the single trigger for re-initiation after abandonment/failure.
-  // Declared before the useEffect that uses it so it is in scope.
-  const [retryCount, setRetryCount] = useState(0);
-
-  // ── Initiate / re-initiate payment ─────────────────────────────────────────
-  // Runs:
-  //   1. On mount — creates the initial Payment record + Paystack reference.
-  //   2. When retryCount increments — user abandoned/failed, get a fresh reference.
-  //   3. When finalAmount changes — coupon applied, new amount needs new record.
-  // Each Paystack reference is single-use — never reuse an abandoned one.
+  // ── Initiate payment on mount and on retry ──────────────────────────────────
+  // Creates a Payment record on the server and gets a Paystack reference.
+  // Does NOT start polling — polling only starts after userHasPaid is set.
   useEffect(() => {
     if (isFree || !userEmail || !subscriptionId || !planId) return;
 
-    // Reset guards so polling and button-disabled logic work cleanly on retry
     hasCompletedRef.current = false;
     setPaymentReference(null);
+    setUserHasPaid(false); // reset so polling doesn't start prematurely on retry
     setIsInitiating(true);
 
     initiatePayment(
@@ -95,7 +101,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       },
       {
         onSuccess: ({ data }) => {
-          prevReferenceRef.current = data.reference;
           setPaymentReference(data.reference);
           setIsInitiating(false);
         },
@@ -105,13 +110,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         },
       }
     );
-  // retryCount is the primary retry trigger. finalAmount covers coupon changes.
+  // retryCount re-runs this after abandonment. finalAmount re-runs after coupon.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryCount, finalAmount]);
 
-  // ── Poll verify every 3s after Paystack modal closes ───────────────────────
+  // ── Poll verify — ONLY after user has attempted payment ────────────────────
+  // enabled is false until userHasPaid is set in handlePaystackClose/Success.
+  // This prevents the hundreds-of-payments problem where polling was creating
+  // verify calls (and therefore DB reads/writes) on every mount.
   const verifyQuery = useVerifyPayment(paymentReference ?? '', {
-    enabled: !!paymentReference && !hasCompletedRef.current,
+    enabled: !!paymentReference && userHasPaid && !hasCompletedRef.current,
     refetchInterval: (query) => {
       const status = query.state.data?.data?.gatewayStatus;
       if (status === 'success' || status === 'failed' || status === 'abandoned') return false;
@@ -125,11 +133,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     const responseRef = verifyQuery.data.data?.reference;
     const status      = verifyQuery.data.data?.gatewayStatus;
 
-    // ── CRITICAL GUARD ──────────────────────────────────────────────────────
-    // Only act on data whose reference matches the CURRENT paymentReference.
+    // Only act on data that belongs to the current reference.
     // Stale cached data from a previous attempt would otherwise fire this
-    // effect immediately on re-render — showing the error toast and disabling
-    // the button before the user clicks anything.
+    // effect immediately, showing the toast before the user does anything.
     if (!paymentReference || responseRef !== paymentReference) return;
     if (!status) return;
 
@@ -137,8 +143,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       hasCompletedRef.current = true;
       activateSubscription(responseRef);
     } else if (status === 'failed' || status === 'abandoned') {
+      // Evict from cache so it never re-triggers this block
       queryClient.removeQueries({ queryKey: ['payments', 'verify', responseRef] });
-      prevReferenceRef.current = null;
+      setUserHasPaid(false);
       setPaymentReference(null);
       setRetryCount((c) => c + 1);
       toast.error(
@@ -147,15 +154,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           : 'Payment failed. Please try again.'
       );
     }
-  // paymentReference included so the guard re-evaluates when reference changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [verifyQuery.data, paymentReference]);
 
-  // ── Activate subscription via useSubscription.subscribe ────────────────────
-  // Using subscribe() instead of a raw fetch ensures:
-  //   1. The React Query cache is updated immediately (setQueryData in onSuccess)
-  //   2. Any component reading useSubscription reflects the new state instantly
-  //   3. No need to manually call refresh() or invalidateQueries() afterwards
+  // ── Activate subscription after payment confirmed ──────────────────────────
   const activateSubscription = async (reference: string) => {
     setProcessing(true);
     try {
@@ -174,13 +176,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
-  // ── Free path — still uses subscribe() for cache consistency ───────────────
+  // ── Free subscription path ─────────────────────────────────────────────────
   const handleFreeSubscription = async () => {
     setProcessing(true);
     try {
       await subscribe({
         planSlug,
-        paystackReference: '', // no payment for free plans
+        paystackReference: '',
         ...(result?.valid && couponCode ? { couponCode } : {}),
       });
       toast.success('Subscription started successfully!');
@@ -193,18 +195,26 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
-  // ── Paystack success callback — store reference, let polling confirm ────────
-  // Do NOT activate the subscription here. The webhook handles it server-side;
-  // polling (useVerifyPayment) detects the result and calls activateSubscription.
+  // ── Paystack callbacks ─────────────────────────────────────────────────────
+  // onSuccess: user completed payment — start polling to confirm
   const handlePaystackSuccess = (response: { reference: string }) => {
-    if (!paymentReference) setPaymentReference(response.reference);
+    setUserHasPaid(true);
+    // Safety net: if reference somehow changed, update it
+    if (response.reference && response.reference !== paymentReference) {
+      setPaymentReference(response.reference);
+    }
+  };
+
+  // onClose: Paystack modal closed (paid or dismissed).
+  // Start polling regardless — if they paid, verify will return success.
+  // If they dismissed, verify will return pending then abandoned after timeout.
+  const handlePaystackClose = () => {
+    setUserHasPaid(true);
   };
 
   const handleApplyCoupon = async () => {
     if (!couponCode) return;
     await validate(couponCode, planId, interval);
-    // After validation, result.discountAmount updates → finalAmount changes
-    // → the useEffect above re-initiates with the discounted amount automatically
   };
 
   const handleClose = () => {
@@ -213,7 +223,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     onClose();
   };
 
-  // ── Paystack metadata ──────────────────────────────────────────────────────
+  // ── Paystack config ────────────────────────────────────────────────────────
   const customFields = [
     { display_name: 'Plan Tier',        variable_name: 'plan_tier',        value: tier.tier },
     { display_name: 'Plan Name',        variable_name: 'plan_name',        value: tier.name },
@@ -228,19 +238,33 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     ] : []),
   ];
 
+  // ── usePaystackPayment ─────────────────────────────────────────────────────
+  // onSuccess and onClose are NOT part of HookConfig — they go as arguments
+  // onSuccess and onClose are passed as an object to initializePayment() — not in the config.
   const paystackConfig = {
-    publicKey:  process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
-    email:      userEmail,
-    amount:     finalAmount,
-    currency:   'NGN',
-    reference:  paymentReference ?? '',
-    metadata:   { custom_fields: customFields },
-    onSuccess:  handlePaystackSuccess,
-    onClose:    () => {},
+    publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
+    email:     userEmail,
+    amount:    finalAmount,
+    currency:  'NGN',
+    reference: paymentReference ?? '',
+    metadata:  { custom_fields: customFields },
   };
 
-  const isAwaitingConfirmation = !!paymentReference && (processing || isSubscribing);
-  const buttonDisabled         = processing || isSubscribing || isInitiating || !paymentReference;
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const initializePayment = usePaystackPaymentHook?.(paystackConfig) ?? null;
+
+  const canPay = !!paymentReference && !!initializePayment && !isInitiating && !processing && !isSubscribing && !hasCompletedRef.current;
+
+  const handlePayClick = () => {
+    if (!canPay || !initializePayment) return;
+    // Callbacks passed here as arguments — this is the correct react-paystack API.
+    initializePayment({ onSuccess: handlePaystackSuccess, onClose: handlePaystackClose });
+  };
+
+  // ── Derived UI state ───────────────────────────────────────────────────────
+  const isConfirming       = userHasPaid && (processing || isSubscribing);
+  const isPreparingReference = isInitiating && !paymentReference;
+  const priceDisplay       = `₦${(finalAmount / 100).toLocaleString('en-NG')}`;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -361,8 +385,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
           )}
 
-          {/* Confirming banner */}
-          {isAwaitingConfirmation && (
+          {/* Confirming banner — only shown after user interacts with Paystack */}
+          {isConfirming && (
             <div className="flex items-center gap-3 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800">
               <HugeiconsIcon icon={Loading03Icon} className="w-4 h-4 animate-spin text-indigo-600 dark:text-indigo-400 shrink-0" />
               <p className="text-xs text-indigo-700 dark:text-indigo-300">
@@ -372,7 +396,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           )}
 
           {/* Preparing banner */}
-          {isInitiating && !isFree && (
+          {isPreparingReference && (
             <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
               <HugeiconsIcon icon={Loading03Icon} className="w-3 h-3 animate-spin shrink-0" />
               {retryCount > 0 ? 'Preparing a new payment session…' : 'Preparing payment…'}
@@ -403,27 +427,22 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 ) : 'Start Free Trial'}
               </button>
             ) : (
-              /*
-               * key={retryCount} forces react-paystack to fully unmount and
-               * remount after each abandoned/failed payment. The library
-               * caches the Paystack reference internally on mount — updating
-               * the `reference` prop alone doesn't reinitialize it. A key
-               * change destroys the old instance so Paystack picks up the
-               * fresh reference cleanly.
-               */
-              <PaystackButton
-                key={retryCount}
-                {...paystackConfig}
-                text={
-                  isInitiating          ? 'Preparing…'
-                  : processing
-                    || isSubscribing    ? 'Confirming…'
-                  : retryCount > 0      ? `Try Again — Pay ₦${(finalAmount / 100).toLocaleString('en-NG')}`
-                  : `Pay ₦${(finalAmount / 100).toLocaleString('en-NG')}`
-                }
-                className="flex-1 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98] cursor-pointer"
-                disabled={buttonDisabled}
-              />
+              <button
+                type="button"
+                onClick={handlePayClick}
+                disabled={!canPay}
+                className="flex-1 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+              >
+                {isPreparingReference ? (
+                  <><HugeiconsIcon icon={Loading03Icon} className="w-4 h-4 animate-spin inline mr-2" />Preparing…</>
+                ) : isConfirming ? (
+                  <><HugeiconsIcon icon={Loading03Icon} className="w-4 h-4 animate-spin inline mr-2" />Confirming…</>
+                ) : retryCount > 0 ? (
+                  `Try Again — Pay ${priceDisplay}`
+                ) : (
+                  `Pay ${priceDisplay}`
+                )}
+              </button>
             )}
           </div>
 

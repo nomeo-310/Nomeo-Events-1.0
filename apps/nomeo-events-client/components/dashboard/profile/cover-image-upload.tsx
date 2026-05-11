@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Loading03Icon, Camera02Icon } from "@hugeicons/core-free-icons";
+import { Loading03Icon, ImageAdd02Icon as Camera02Icon } from "@hugeicons/core-free-icons";
 import { compressImage } from "@/lib/compress-image";
 
 type UploadStage = 'compressing' | 'uploading' | null;

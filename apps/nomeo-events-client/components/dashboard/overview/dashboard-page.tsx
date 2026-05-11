@@ -28,8 +28,8 @@ const DashboardPage = ({ user }: DashboardPageProps) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-5">
         {/* Left column */}
         <div className="flex flex-col gap-6 md:gap-5">
-          <SubscriptionCard subscription={subscription} isLoading={isLoading} />
           <ProfileCard user={user} />
+          <SubscriptionCard subscription={subscription} isLoading={isLoading} />
           <StatsRow />
           <UpcomingEvents />
         </div>

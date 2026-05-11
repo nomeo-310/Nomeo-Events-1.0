@@ -83,7 +83,8 @@ export const Breadcrumb = ({ pathname, menuItems = [] }: BreadcrumbProps) => {
       <div className="flex items-center space-x-2 text-muted-foreground">
         {/* Home */}
         <Link 
-          href="/" 
+          href="/"
+          prefetch={true}
           className="hover:text-foreground transition-colors flex items-center gap-1.5"
         >
           <HugeiconsIcon icon={Home04Icon} className="w-4 h-4" />
@@ -104,6 +105,7 @@ export const Breadcrumb = ({ pathname, menuItems = [] }: BreadcrumbProps) => {
             ) : (
               <Link
                 href={crumb.href}
+                prefetch={true}
                 className="hover:text-foreground transition-colors"
               >
                 {crumb.label}

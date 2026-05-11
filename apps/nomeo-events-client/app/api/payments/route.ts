@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PaymentGatewayStatus, PaymentPurpose } from '@/models/payment';
 import { connectDB } from '@/lib/mongoose';
 import { PaymentService } from '@/services/payment-services';
+import { getCurrentUser } from '@/lib/session';
 
 /**
  * GET /api/payments
@@ -15,10 +16,21 @@ import { PaymentService } from '@/services/payment-services';
  *   subscriptionId   — filter by subscription
  *   page             — default 1
  *   limit            — default 20, max 100
+ *   organizerId      — filter by organizer (automatically set from session)
  */
 export async function GET(req: NextRequest) {
   try {
     await connectDB();
+
+    // Get the current user session
+    const loggedInUser = await getCurrentUser();
+
+    if (!loggedInUser) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized: Please log in' },
+        { status: 401 }
+      );
+    }
 
     const { searchParams } = req.nextUrl;
 
@@ -43,15 +55,25 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '20', 10)));
 
-    const result = await PaymentService.list({
-      ...(purpose && { purpose }),
-      ...(gatewayStatus && { gatewayStatus }),
-      ...(searchParams.get('eventId') && { eventId: searchParams.get('eventId')! }),
-      ...(searchParams.get('registrationId') && { registrationId: searchParams.get('registrationId')! }),
-      ...(searchParams.get('subscriptionId') && { subscriptionId: searchParams.get('subscriptionId')! }),
+    // Get optional eventId from query params (for additional filtering)
+    const eventId = searchParams.get('eventId');
+    const registrationId = searchParams.get('registrationId');
+    const subscriptionId = searchParams.get('subscriptionId');
+
+    // Build filters object
+    const filters: any = {
+      organizerId: loggedInUser.id,
       page,
       limit
-    });
+    };
+
+    if (purpose) filters.purpose = purpose;
+    if (gatewayStatus) filters.gatewayStatus = gatewayStatus;
+    if (eventId) filters.eventId = eventId;
+    if (registrationId) filters.registrationId = registrationId;
+    if (subscriptionId) filters.subscriptionId = subscriptionId;
+
+    const result = await PaymentService.list(filters);
 
     return NextResponse.json({ success: true, ...result }, { status: 200 });
   } catch (error) {

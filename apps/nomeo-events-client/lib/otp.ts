@@ -78,9 +78,10 @@ export async function verifyOTP( email: string, otp: string,  type: OTPType = "e
   }
 
   // Increment attempts
-  await Otp.updateOne(
-    { _id: record._id },
-    { $inc: { attempts: 1 } }
+  await Otp.findByIdAndUpdate(
+    record._id,
+    { $inc: { attempts: 1 } },
+    { new: true }
   );
 
   // If this is a forget-password request, also verify the email

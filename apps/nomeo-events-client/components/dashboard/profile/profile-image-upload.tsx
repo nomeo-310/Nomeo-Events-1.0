@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Loading03Icon, Camera02Icon } from "@hugeicons/core-free-icons";
+import { Loading03Icon, ImageAdd02Icon as Camera02Icon } from "@hugeicons/core-free-icons";
 import { compressImage } from "@/lib/compress-image";
 
 type UploadStage = 'compressing' | 'uploading' | null;
@@ -145,7 +145,7 @@ export const ProfileImageUpload = ({
 
         {(isUploading || uploadStage) && (
           <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-1 z-10">
-            <HugeiconsIcon icon={Loading03Icon} className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-white" />
+            <HugeiconsIcon icon={Loading03Icon} className="size-6 sm:size-12 animate-spin text-white" />
             <span className="text-[8px] sm:text-[10px] text-white text-center">{stageLabel}</span>
           </div>
         )}

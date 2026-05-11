@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon, Camera02Icon } from "@hugeicons/core-free-icons";
+import { Cancel01Icon, Image03Icon as Camera02Icon } from "@hugeicons/core-free-icons";
 
 export const ImageGuidanceNote = () => {
   const [isVisible, setIsVisible] = useState(true);

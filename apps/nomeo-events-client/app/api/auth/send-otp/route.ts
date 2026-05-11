@@ -1,3 +1,4 @@
+//api/settings/send-otp/route.ts
 import { NextRequest } from "next/server";
 import { connectDB } from "@/lib/mongoose";
 import mongoose from "mongoose";
