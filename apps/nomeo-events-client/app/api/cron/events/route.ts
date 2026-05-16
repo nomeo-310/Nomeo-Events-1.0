@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
   try {
     await connectDB();
     const result = await processEndedEvents();
+    
     console.log('[cron/events]', result);
     return NextResponse.json({ ok: true, ...result, ranAt: new Date().toISOString() });
   } catch (err) {

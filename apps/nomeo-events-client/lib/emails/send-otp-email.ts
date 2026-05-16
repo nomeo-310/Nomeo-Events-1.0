@@ -1,5 +1,5 @@
 // lib/send-otp-email.ts
-import { transporter } from "./transporter";
+import { transporter } from "../transporter";
 
 export type OTPType = "sign-in" | "email-verification" | "forget-password" | "change-email";
 

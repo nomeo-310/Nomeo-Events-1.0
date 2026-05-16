@@ -11,12 +11,21 @@ import CTA from "./cta";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import UserJourneyGuide from "./user-journey-guide";
+import { useEvents } from "@/hooks/use-events";
+import { useSubscription } from "@/hooks/use-subscription";
 
 
 const HomePage = () => {
   const { openModal, closeModal } = useModal();
 
   const router = useRouter();
+
+  const { useOrganizerAllEvents} = useEvents();
+  const { data } = useOrganizerAllEvents();
+  const eventCount = data?.eventCount;
+
+  const { checkEventCreation } = useSubscription();
+  const allowCreation = checkEventCreation(eventCount?.total);
 
   const { data: session , isPending} = authClient.useSession();
 
@@ -32,7 +41,11 @@ const HomePage = () => {
   };
 
   const routeToDashboard = () => {
-    router.push('/dashboard/events/create-event')
+    if (allowCreation.allowed) {
+      router.push('/dashboard/events/create-event');
+    } else {
+      router.push('/dashboard/events');
+    }
   }
 
   const handleCTAClick = () => {

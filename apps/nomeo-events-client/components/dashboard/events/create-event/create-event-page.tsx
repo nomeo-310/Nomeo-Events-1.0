@@ -6,7 +6,7 @@ import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Loading03Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
+import { Loading03Icon, CheckmarkCircle02Icon, ArrowLeft02Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,7 @@ import {
 } from "@/types/create-event-type";
 import { EventTabs } from "../event-tabs";
 import { useSubscription } from "@/hooks/use-subscription";
+import Link from "next/link";
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -186,16 +187,105 @@ const STEP_VALIDATION: Record<string, (keyof EventFormData)[]> = {
   summary:  [],
 };
 
+// ─── Skeleton (matching dashboard pattern) ───────────────────────────────────
+
+function CreateEventPageSkeleton() {
+  return (
+    <div className="animate-pulse space-y-6">
+      <div className="space-y-2">
+        <div className="h-7 w-48 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+        <div className="h-4 w-72 bg-gray-200 dark:bg-gray-700 rounded-md" />
+      </div>
+      <div className="flex gap-3">
+        <div className="h-9 w-32 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+        <div className="h-9 w-24 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+      </div>
+      
+      {/* Progress steps skeleton */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <div className="space-y-1">
+            <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded" />
+          </div>
+          <div className="text-right space-y-1">
+            <div className="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded ml-auto" />
+            <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded ml-auto" />
+          </div>
+        </div>
+      </div>
+
+      {/* Card skeleton */}
+      <div className="rounded-xl bg-gray-200 dark:bg-gray-700 h-96" />
+      
+      {/* Navigation skeleton */}
+      <div className="flex justify-between gap-4">
+        <div className="h-10 w-24 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+        <div className="h-10 w-24 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+      </div>
+    </div>
+  )
+}
+
+// ─── Not Allowed Message ──────────────────────────────────────────────────────
+
+interface NotAllowedMessageProps {
+  reason?: string;
+}
+
+function NotAllowedMessage({ reason }: NotAllowedMessageProps) {
+  const router = useRouter();
+  
+  return (
+    <div className="animate-pulse space-y-6">
+      <div className="space-y-2">
+        <div className="h-7 w-48 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+        <div className="h-4 w-72 bg-gray-200 dark:bg-gray-700 rounded-md" />
+      </div>
+      
+      <div className="max-w-2xl mx-auto text-center py-12">
+        <div className="mb-6">
+          <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-10 h-10 text-amber-600 dark:text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            Event Creation Limit Reached
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            {reason || "Your current plan doesn't allow creating more events. Please upgrade your subscription to continue creating events."}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button
+              onClick={() => router.back()}
+              variant="outline"
+              className="gap-2 h-11 px-4"
+            >
+              <HugeiconsIcon icon={ArrowLeft02Icon} className="w-4 h-4" />
+              Go Back
+            </Button>
+            <Link href="/pricing">
+              <Button className="bg-indigo-600 hover:bg-indigo-700 gap-2 h-11 px-4">
+                View Pricing Plans
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CreateEventPage() {
   const router = useRouter();
-  const { useCreateEvent } = useEvents();
+  const { useCreateEvent, useOrganizerAllEvents } = useEvents();
   const createEvent = useCreateEvent();
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { useOrganizerAllEvents} = useEvents();
   const { data, isLoading, isError } = useOrganizerAllEvents();
   const eventCount = data?.eventCount;
 
@@ -332,9 +422,45 @@ export default function CreateEventPage() {
     ? "Platform and meeting link for your online event"
     : ALL_STEPS[currentStep].description;
 
+  // Show skeleton when loading (matches dashboard pattern)
+  if (isLoading) {
+    return (
+      <>
+        <EventTabs allowCreation={false} />
+        <div className="container mx-auto pb-6">
+          <div className="mb-6">
+            <div className="flex items-center gap-6 mb-1">
+              <div className="h-8 w-48 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
+            </div>
+          </div>
+          <CreateEventPageSkeleton />
+        </div>
+      </>
+    );
+  }
+
+  // Show not allowed message if user can't create events
+  if (!allowCreation.allowed) {
+    return (
+      <>
+        <EventTabs allowCreation={allowCreation.allowed} />
+        <div className="container mx-auto pb-6">
+          <div className="mb-6">
+            <div className="flex items-center gap-6 mb-1">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Create Event
+              </h1>
+            </div>
+          </div>
+          <NotAllowedMessage reason={allowCreation.reason} />
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
-      <EventTabs allowCreation={allowCreation.allowed}/>
+      <EventTabs allowCreation={allowCreation.allowed} />
       <div className="container mx-auto pb-6">
         <div className="mb-6">
           <div className="flex items-center gap-6 mb-1">
@@ -354,7 +480,6 @@ export default function CreateEventPage() {
             }}
             className="space-y-6"
           >
-
             {/* Progress steps */}
             <div className="mb-8">
               {/* Step label header — shows current step info on mobile/tablet */}
@@ -364,11 +489,7 @@ export default function CreateEventPage() {
                     Step {currentStep + 1} of {ALL_STEPS.length}
                   </p>
                   <p className="text-sm font-semibold text-foreground mt-0.5">
-                    {ALL_STEPS[currentStep].id === "location" && isVirtualMode(eventMode)
-                      ? "Online Details"
-                      : ALL_STEPS[currentStep].id === "summary"
-                      ? "Review Changes"      // use "Review & Create" on the create page
-                      : ALL_STEPS[currentStep].title}
+                    {stepTitle}
                   </p>
                 </div>
                 {/* Next step preview */}
@@ -403,9 +524,7 @@ export default function CreateEventPage() {
                     aria-label={step.title}
                     className={cn(
                       "relative flex items-center justify-center rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
-                      // Size: current step is bigger
                       index === currentStep ? "w-8 h-8" : "w-6 h-6",
-                      // Colors
                       index < currentStep
                         ? "bg-green-500 text-white cursor-pointer"
                         : index === currentStep
@@ -423,7 +542,6 @@ export default function CreateEventPage() {
                       <span
                         className={cn(
                           "absolute left-full top-1/2 -translate-y-1/2 h-px transition-all duration-300",
-                          // Width fills gap between dots — adjust based on step count
                           "w-[calc((100vw-4rem)/9-1.5rem)] max-w-8",
                           index < currentStep ? "bg-green-400" : "bg-muted"
                         )}

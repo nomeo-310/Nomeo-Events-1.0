@@ -1,6 +1,6 @@
 // lib/send-user-cancel-email.ts
-import { transporter } from "./transporter";
-import { formatDate, formatTime } from "./date-utils";
+import { transporter } from "../transporter";
+import { formatDate, formatTime } from "../date-utils";
 
 interface SendUserCancelEmailParams {
   email: string;

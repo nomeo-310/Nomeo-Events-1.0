@@ -2,7 +2,7 @@ import { connectDB } from "@/lib/mongoose";
 import { getCurrentUser } from "@/lib/session";
 import { Event } from "@/models/event";
 import { Registration, RegistrationStatus, PaymentStatus } from "@/models/registration";
-import { sendUserCancelEmail } from "@/lib/send-user-cancel-email";
+import { sendUserCancelEmail } from "@/lib/emails/send-user-cancel-email";
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { Ticket } from "@/models/ticket";

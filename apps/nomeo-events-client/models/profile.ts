@@ -89,6 +89,15 @@ export interface IProfile extends Document {
     userAgent?: string;
     signupSource?: string;
     referrer?: string;
+    deletionScheduled?: Date;
+    deletionReason?: string;
+    finalDeletionDate?: Date;
+    eventsDeleted?: number;
+    registrationsAffected?: number;
+    refundsInitiated?: number;
+    deactivationReason?: string;
+    deactivatedAt?: Date;
+    [key: string]: any;
   };
   createdAt: Date;
   updatedAt: Date;
@@ -179,7 +188,15 @@ const MetadataSchema = new Schema({
   userAgent: String,
   signupSource: String,
   referrer: String,
-}, { _id: false });
+  deletionScheduled: Date,
+  deletionReason: String,
+  finalDeletionDate: Date,
+  eventsDeleted: Number,
+  registrationsAffected: Number,
+  refundsInitiated: Number,
+  deactivationReason: String,
+  deactivatedAt: Date,
+}, { _id: false, strict: false });
 
 // ====================== MAIN SCHEMA ======================
 const ProfileSchema = new Schema<IProfile, IProfileModel>(

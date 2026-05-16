@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { OTPType, sendOTPEmail } from "./send-otp-email";
+import { OTPType, sendOTPEmail } from "./emails/send-otp-email";
 import Otp from "@/models/otp";
 import { connectDB } from "./mongoose";
 import { User } from "@/models/user";

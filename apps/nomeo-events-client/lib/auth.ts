@@ -23,7 +23,7 @@ export function createAuth() {
           type: "string",
           required: false,
           defaultValue: "user",
-          enum: ["user", "admin", "superadmin"],
+          enum: ["user", "admin", "super_admin", "moderator", "support"],
         },
         avatar: {
           type: "string",

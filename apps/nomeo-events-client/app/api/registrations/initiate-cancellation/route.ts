@@ -5,7 +5,7 @@ import mongoose from "mongoose";
 import crypto from "crypto";
 import { Registration, RegistrationStatus } from "@/models/registration";
 import { connectDB } from "@/lib/mongoose";
-import { sendCancellationOtpEmail } from "@/lib/send-cancellation-email";
+import { sendCancellationOtpEmail } from "@/lib/emails/send-cancellation-email";
 
 const OTP_TTL_MS = 15 * 60 * 1_000;
 

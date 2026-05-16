@@ -1,6 +1,6 @@
 // lib/send-cancellation-email.ts
-import { transporter } from "./transporter";
-import { formatDate, formatTime } from "./date-utils";
+import { transporter } from "../transporter";
+import { formatDate, formatTime } from "../date-utils";
 
 interface SendCancellationOtpEmailParams {
   email: string;

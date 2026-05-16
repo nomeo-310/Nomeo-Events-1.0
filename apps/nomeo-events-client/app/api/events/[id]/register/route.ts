@@ -7,7 +7,7 @@ import { Payment, PaymentGatewayStatus, PaymentPurpose, PaymentProvider } from "
 import { Ticket, TicketStatus } from "@/models/ticket";
 import { NextResponse } from "next/server";
 import QRCode from "qrcode";
-import { sendRegistrationEmail, sendParentalConsentEmail } from "@/lib/send-registration-email";
+import { sendRegistrationEmail, sendParentalConsentEmail } from "@/lib/emails/send-registration-email";
 import mongoose from "mongoose";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {

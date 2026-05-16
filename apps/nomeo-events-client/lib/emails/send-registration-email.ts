@@ -1,7 +1,7 @@
 // lib/send-registration-email.ts
 
-import { transporter } from "./transporter";
-import { formatDate, formatTime } from "./date-utils";
+import { transporter } from "../transporter";
+import { formatDate, formatTime } from "../date-utils";
 
 interface SendRegistrationEmailParams {
   email: string;

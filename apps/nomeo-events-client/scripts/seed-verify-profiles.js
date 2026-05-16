@@ -18,7 +18,7 @@ const UserSchema = new mongoose.Schema(
     email: { type: String },
     emailVerified: { type: Boolean, default: false },
     image: { type: String },
-    role: { type: String, enum: ["user", "admin", "superadmin"], default: "user" },
+    role: { type: String, enum: ["user", "admin", "super_admin", "moderator", "support"], default: "user" },
     avatar: { type: String, default: "" },
   },
   {

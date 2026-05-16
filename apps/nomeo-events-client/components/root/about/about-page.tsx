@@ -21,6 +21,8 @@ import { TeamSection } from './team-section';
 import { FaqSection } from './faq-section';
 import { CtaSection } from './cta-section';
 import { ContactSection } from './contact-section';
+import { useEvents } from '@/hooks/use-events';
+import { useSubscription } from '@/hooks/use-subscription';
 
 export default function AboutPage() {
   const { scrollToSection } = useSmoothScroll();
@@ -30,6 +32,13 @@ export default function AboutPage() {
   const { openModal, closeModal } = useModal();
   const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
+
+  const { useOrganizerAllEvents} = useEvents();
+  const { data } = useOrganizerAllEvents();
+  const eventCount = data?.eventCount;
+
+  const { checkEventCreation } = useSubscription();
+  const allowCreation = checkEventCreation(eventCount?.total);
 
   const handleOpenSignupModal = () => {
     openModal({
@@ -43,8 +52,12 @@ export default function AboutPage() {
   };
 
   const routeToDashboard = () => {
-    router.push('/dashboard/events/create-event');
-  };
+    if (allowCreation.allowed) {
+      router.push('/dashboard/events/create-event');
+    } else {
+      router.push('/dashboard/events');
+    }
+  }
 
   const handleCTAClick = () => {
     if (isPending) return;

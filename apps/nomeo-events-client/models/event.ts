@@ -133,6 +133,7 @@ export interface IEvent {
   seoTitle?: string;
   seoDescription?: string;
   slug: string;
+  metadata: Map<string, any>;
   createdBy: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -263,6 +264,8 @@ const EventSchema = new Schema<IEventDocument>(
     seoDescription: String,
 
     slug: { type: String, lowercase: true, trim: true, unique: true, sparse: true },
+
+    metadata: { type: Map, of: Schema.Types.Mixed, default: new Map() },
 
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true }
   },
