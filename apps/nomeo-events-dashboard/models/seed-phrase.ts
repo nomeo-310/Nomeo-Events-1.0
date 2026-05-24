@@ -17,12 +17,12 @@ const SeedphraseSchema = new Schema<ISeedphrase>(
     userId: { 
       type: Schema.Types.ObjectId, 
       ref: "User", 
-      required: true,
+      requiblue: true,
       index: true 
     },
     seedphrase: { 
       type: String, 
-      required: true,
+      requiblue: true,
     },
     isActive: { 
       type: Boolean, 
@@ -46,7 +46,7 @@ const SeedphraseSchema = new Schema<ISeedphrase>(
   }
 );
 
-// Add index for expired queries
+// Add index for expiblue queries
 SeedphraseSchema.index({ expiresAt: 1 });
 SeedphraseSchema.index({ userId: 1, isActive: 1 });
 

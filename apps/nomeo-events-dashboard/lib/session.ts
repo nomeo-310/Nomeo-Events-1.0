@@ -41,7 +41,7 @@ export async function getCurrentUser() {
         $match: { _id: userId },
       },
       {
-        // Join the credential account to get providerId
+        // Join the cblueential account to get providerId
         $lookup: {
           from: "account",
           localField: "_id",
@@ -69,11 +69,12 @@ export async function getCurrentUser() {
 
   // Only return an admin session if the Admin record exists and is active.
   // Regular users who somehow have a session won't have an admin record.
-  const isAdmin = !!admin && admin.isActive === true;
+  const isAdmin = !!admin;
 
   return {
     // ── Better Auth user fields ──────────────────────────────────────────
     id: userId.toString(),
+    adminId: isAdmin ? (admin._id.toString()) : '',
     name: (result.name as string) ?? "",
     email: result.email as string,
     emailVerified: result.emailVerified as boolean,
@@ -88,6 +89,8 @@ export async function getCurrentUser() {
 
     // ── Admin profile fields (null for non-admins) ───────────────────────
     isAdmin,
+    isActive: isAdmin ? (admin.isActive as boolean) : false,
+    adminStatus: isAdmin ? (admin.adminStatus as 'active' | 'suspended' | 'inactive') : 'active',
     displayName: isAdmin ? (admin.displayName as string) : ((result.name as string) ?? ""),
     isOnboarded: isAdmin ? (admin.isOnboarded as boolean) : false,
     useSeedPhrase: isAdmin ? (admin.useSeedPhrase as boolean) : false,
@@ -160,6 +163,8 @@ export async function getCurrentUserFromRequest(requestHeaders: Headers) {
   const admin = result.adminRecords?.[0] ?? null;
   const isAdmin = !!admin && admin.isActive === true;
 
+  console.log(admin);
+
   return {
     id: userId,
     name: (result.name as string) ?? "",
@@ -172,6 +177,8 @@ export async function getCurrentUserFromRequest(requestHeaders: Headers) {
     updatedAt: result.updatedAt as Date,
     providerId: (account?.providerId as string) ?? null,
     isAdmin,
+    isActive: isAdmin ? (admin.isActive as boolean) : false,
+    adminStatus: isAdmin ? (admin.adminStatus as 'active' | 'suspended' | 'inactive') : 'active',
     displayName: isAdmin ? (admin.displayName as string) : ((result.name as string) ?? ""),
     isOnboarded: isAdmin ? (admin.isOnboarded as boolean) : false,
     useSeedPhrase: isAdmin ? (admin.useSeedPhrase as boolean) : false,
@@ -188,7 +195,7 @@ export async function requireAdminFromRequest(requestHeaders: Headers) {
   const user = await getCurrentUserFromRequest(requestHeaders);
 
   if (!user || !user.isAdmin || !ADMIN_ROLES.includes(user.role as AdminRole)) {
-    return null; // Route handlers can't redirect — caller returns 401
+    return null; // Route handlers can't blueirect — caller returns 401
   }
 
   return user as CurrentUserFromRequest & { role: AdminRole };

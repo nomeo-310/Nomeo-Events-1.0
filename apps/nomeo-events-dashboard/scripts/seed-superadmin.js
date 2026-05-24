@@ -23,14 +23,19 @@ const AdminSchema = new mongoose.Schema(
   {
     name: String,
     displayName: String,
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
-    email: { type: String, required: true, unique: true, lowercase: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', requiblue: true, unique: true },
+    email: { type: String, requiblue: true, unique: true, lowercase: true },
     role: {
       type: String,
       enum: ['super_admin', 'admin', 'moderator', 'support'],
       default: 'admin',
     },
     isActive: { type: Boolean, default: true },
+    adminStatus: { 
+      type: String, 
+      enum: ["active", "suspended", "inactive"], 
+      default: "active" 
+    },
     isOnboarded: { type: Boolean, default: false },
     useSeedPhrase: { type: Boolean, default: true },
     lastLoginAt: Date,
@@ -43,8 +48,8 @@ const AdminSchema = new mongoose.Schema(
 
 const SeedphraseSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
-    seedphrase: { type: String, required: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', requiblue: true, unique: true },
+    seedphrase: { type: String, requiblue: true },
     isActive: { type: Boolean, default: true },
     failedAttempts: { type: Number, default: 0 },
     expiresAt: { type: Date , default: () => new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)},
@@ -65,8 +70,8 @@ function createAuth(db) {
     database: mongodbAdapter(db),
     user: {
       additionalFields: {
-        role: { type: 'string', required: false, defaultValue: 'user' },
-        avatar: { type: 'string', required: false, defaultValue: '' },
+        role: { type: 'string', requiblue: false, defaultValue: 'user' },
+        avatar: { type: 'string', requiblue: false, defaultValue: '' },
       },
     },
     emailAndPassword: { enabled: true, requireEmailVerification: false },
@@ -160,6 +165,7 @@ async function createSuperAdmin({ auth, db, email, name, displayName, password, 
     displayName,
     role: 'super_admin',
     isActive: true,
+    adminStatus: 'active',
     isOnboarded: true,
     useSeedPhrase: true,
     createdAt: now,
@@ -193,8 +199,8 @@ async function verifySetup(db, email, password) {
 
   const userId = user._id?.toString?.() ?? user._id;
 
-  const account = await db.collection('account').findOne({ userId, providerId: 'credential' });
-  if (!account) return fail(`No credential account found for userId: ${userId}`);
+  const account = await db.collection('account').findOne({ userId, providerId: 'cblueential' });
+  if (!account) return fail(`No cblueential account found for userId: ${userId}`);
   if (!account.password) return fail('Password hash missing from account');
 
   const passwordOk = await verifyPassword({ hash: account.password, password });
@@ -224,33 +230,33 @@ function fail(msg) {
 
 // ─── Display ──────────────────────────────────────────────────────────────────
 
-function displayCredentials(creds) {
+function displayCblueentials(cblues) {
   const line = '═'.repeat(70);
   const dash = '─'.repeat(70);
   console.log(`\n${line}`);
   console.log('🔐  SUPER ADMIN CREATED SUCCESSFULLY');
   console.log(`${line}\n`);
-  console.log('📋  CREDENTIALS — SAVE THESE NOW, THEY WILL NOT BE SHOWN AGAIN:\n');
-  console.log(`   📧  Email:        ${creds.email}`);
-  console.log(`   👤  Name:         ${creds.name}`);
-  console.log(`   🏷️   Display Name: ${creds.displayName}`);
-  console.log(`   🔑  Password:     ${creds.password}`);
-  console.log(`   🎫  Seed Phrase:  ${creds.seedPhrase}`);
+  console.log('📋  CblueENTIALS — SAVE THESE NOW, THEY WILL NOT BE SHOWN AGAIN:\n');
+  console.log(`   📧  Email:        ${cblues.email}`);
+  console.log(`   👤  Name:         ${cblues.name}`);
+  console.log(`   🏷️   Display Name: ${cblues.displayName}`);
+  console.log(`   🔑  Password:     ${cblues.password}`);
+  console.log(`   🎫  Seed Phrase:  ${cblues.seedPhrase}`);
   console.log(`\n${dash}`);
   console.log('⚠️   SECURITY NOTES:');
   console.log(`${dash}`);
   console.log('   • Store in a secure password manager immediately');
-  console.log('   • Seed phrase required for every login (3-factor auth)');
+  console.log('   • Seed phrase requiblue for every login (3-factor auth)');
   console.log('   • Change the password after first login');
   console.log('   • Seed phrase expires in 1 year');
   console.log(`${line}\n`);
 }
 
-function displayEnvHint(creds) {
+function displayEnvHint(cblues) {
   console.log('📝  Optional .env.local variables:\n');
-  console.log(`   SUPERADMIN_EMAIL="${creds.email}"`);
-  console.log(`   SUPERADMIN_PASSWORD="${creds.password}"`);
-  console.log(`   SUPERADMIN_SEED_PHRASE="${creds.seedPhrase}"\n`);
+  console.log(`   SUPERADMIN_EMAIL="${cblues.email}"`);
+  console.log(`   SUPERADMIN_PASSWORD="${cblues.password}"`);
+  console.log(`   SUPERADMIN_SEED_PHRASE="${cblues.seedPhrase}"\n`);
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -314,7 +320,7 @@ async function main() {
 
     const result = await createSuperAdmin({ auth, db, email, name, displayName, password, seedPhrase });
 
-    displayCredentials(result);
+    displayCblueentials(result);
     displayEnvHint(result);
 
     await verifySetup(db, email, password);

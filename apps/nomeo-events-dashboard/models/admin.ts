@@ -7,6 +7,7 @@ export interface IAdmin extends Document {
   userId: mongoose.Types.ObjectId;
   email: string;
   role: "super_admin" | "admin" | "moderator" | "support";
+  adminStatus: 'active' | 'suspended' | 'inactive';
   isActive: boolean;
   isOnboarded: boolean;
   useSeedPhrase: boolean;
@@ -40,6 +41,11 @@ const AdminSchema = new Schema<IAdmin>(
       type: String, 
       enum: ["super_admin", "admin", "moderator", "support"], 
       default: "admin" 
+    },
+    adminStatus: { 
+      type: String, 
+      enum: ["active", "suspended", "inactive"], 
+      default: "active" 
     },
     isActive: { 
       type: Boolean, 

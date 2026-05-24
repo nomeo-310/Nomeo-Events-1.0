@@ -10,12 +10,24 @@ export function createAuth() {
     secret: process.env.BETTER_AUTH_SECRET!,
     baseURL: process.env.BETTER_AUTH_URL!,
 
+    // Derive trusted origins from env — no hardcoded ports
     trustedOrigins: [
       process.env.BETTER_AUTH_URL!,
-      "http://localhost:3000",
-    ],
+      process.env.NEXT_PUBLIC_APP_URL ?? process.env.BETTER_AUTH_URL!,
+    ].filter(Boolean),
 
     database: mongodbAdapter(mongoose.connection.db!),
+
+    advanced: {
+      cookiePrefix: "admin",
+      // Ensure cookies are not scoped to a specific port
+      // so localhost:3000 and localhost:3001 share the same cookie domain
+      defaultCookieAttributes: {
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        httpOnly: true,
+      },
+    },
 
     user: {
       additionalFields: {
@@ -37,9 +49,7 @@ export function createAuth() {
     plugins: [],
 
     hooks: {
-      // Must be a single AuthMiddleware via createAuthMiddleware — not an array
       after: createAuthMiddleware(async (ctx) => {
-        // Only run on session fetch and only if a session exists
         if (ctx.path !== "/get-session") return;
 
         const session = (ctx.context as any)?.session;
@@ -58,8 +68,6 @@ export function createAuth() {
 
           if (!admin || !admin.isActive) return;
 
-          // Merge admin fields into the session user — flows through to
-          // useSession() on the client and auth.api.getSession() on the server
           Object.assign(session.user, {
             displayName: (admin.displayName as string) ?? session.user.name,
             isOnboarded: (admin.isOnboarded as boolean) ?? false,
@@ -69,7 +77,6 @@ export function createAuth() {
             lastLoginIP: (admin.lastLoginIP as string) ?? null,
           });
         } catch (err) {
-          // Never let a hook failure break session reads
           console.error("Failed to merge admin fields into session:", err);
         }
       }),
@@ -89,7 +96,6 @@ export async function getAuth() {
 
 export type Session = ReturnType<typeof createAuth>["$Infer"]["Session"];
 
-// Extended type with admin fields merged in by the hook
 export type AdminSessionUser = Session["user"] & {
   displayName: string;
   isOnboarded: boolean;

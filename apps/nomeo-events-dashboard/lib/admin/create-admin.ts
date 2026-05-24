@@ -8,6 +8,7 @@ import { generateSeedPhrase } from "@/hooks/use-generate-seedphrase";
 import mongoose from "mongoose";
 import { Admin } from "@/models/admin";
 import { Seedphrase } from "@/models/seed-phrase";
+import { sendAdminInvitationEmail } from "../email/send-admin-invitation-email";
 
 interface CreateAdminParams {
   email: string;
@@ -18,13 +19,56 @@ interface CreateAdminParams {
   createdByName: string;
 }
 
-export async function createAdminUser({  email, name, displayName, role, createdBy, createdByName }: CreateAdminParams) {
+interface CreateAdminResult {
+  userId: string;
+  success: boolean;
+  email: string;
+  name: string;
+  displayName: string;
+  tempPassword: string;
+  seedPhrase: string;
+}
+
+function generateTemporaryPassword(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+  let password = '';
+  for (let i = 0; i < 16; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
+
+// Valid roles accepted from the API and their mapped DB values
+const VALID_ROLES = ["admin", "super_admin", "moderator", "support"] as const;
+type ApiRole = (typeof VALID_ROLES)[number];
+
+// Normalize "superadmin" (common typo/alias) to the DB value "super_admin"
+function normalizeRole(role: string): ApiRole | null {
+  if (role === "superadmin") return "super_admin";
+  if (VALID_ROLES.includes(role as ApiRole)) return role as ApiRole;
+  return null;
+}
+
+export async function createAdminUser({ email, name, displayName, role, createdBy, createdByName }: CreateAdminParams): Promise<CreateAdminResult> {
   const startTime = Date.now();
+  
+  // Validate inputs first
+  const normalizedEmail = email.toLowerCase().trim();
+  const normalizedRole = normalizeRole(role);
+  
+  if (!normalizedRole) {
+    throw new Error("Valid role is requiblue: admin, super_admin, moderator, support");
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    throw new Error("Invalid email format");
+  }
   
   try {
     await connectDB();
     
-    // Generate credentials
+    // Generate cblueentials
     const tempPassword = generateTemporaryPassword();
     const hashedPassword = await hashPassword(tempPassword);
     
@@ -36,15 +80,20 @@ export async function createAdminUser({  email, name, displayName, role, created
     const usersCollection = db.collection("user");
     const accountsCollection = db.collection("account");
     
+    // Check if user already exists
+    const existingUser = await usersCollection.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      throw new Error(`User with email ${normalizedEmail} already exists`);
+    }
+    
     const userId = new ObjectId();
-    const adminRole = role === "super_admin" ? "super_admin" : "admin";
-    const dbRole = role === "super_admin" ? AdminRole.SUPER_ADMIN : AdminRole.ADMIN;
+    const adminRole = role === "super_admin" ? "super_admin" : role;
     
     // Create user in Better Auth's collection
     const newUser = {
       _id: userId,
-      name: displayName,
-      email: email.toLowerCase(),
+      name: name,
+      email: normalizedEmail,
       emailVerified: false,
       role: adminRole,
       avatar: "",
@@ -56,8 +105,9 @@ export async function createAdminUser({  email, name, displayName, role, created
     
     // Create account for password authentication
     const account = {
-      userId: userId.toString(),
-      providerId: "email",
+      userId: new mongoose.Types.ObjectId(userId),
+      accountId: userId.toString(),
+      providerId: "credential",
       password: hashedPassword,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -66,11 +116,11 @@ export async function createAdminUser({  email, name, displayName, role, created
     await accountsCollection.insertOne(account);
 
     await Admin.create({
-      userId: userId,
-      email: email.toLowerCase(),
+      userId: new mongoose.Types.ObjectId(userId),
+      email: normalizedEmail,
       name: name,
       displayName: displayName,
-      role: role === "super_admin" ? "super_admin" : "admin",
+      role,
       isActive: false,
     });
     
@@ -78,7 +128,6 @@ export async function createAdminUser({  email, name, displayName, role, created
       userId: userId,
       seedphrase: hashedSeedPhrase,
       isActive: true,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       failedAttempts: 0,
     });
     
@@ -86,12 +135,12 @@ export async function createAdminUser({  email, name, displayName, role, created
     const duration = Date.now() - startTime;
     await AdminLog.logAction({
       adminId: createdBy,
-      adminEmail: email.toLowerCase(),
+      adminEmail: normalizedEmail,
       adminName: createdByName,
-      adminRole: dbRole,
+      adminRole: role as AdminRole,
       action: AdminAction.CREATE_USER,
       severity: AdminLogSeverity.INFO,
-      details: `Admin user created: ${displayName} (${email}) with role ${role}`,
+      details: `Admin user created: ${displayName} (${normalizedEmail}) with role ${role}`,
       ipAddress: "system",
       targetType: "user",
       targetId: userId.toString(),
@@ -108,17 +157,28 @@ export async function createAdminUser({  email, name, displayName, role, created
         createdBy,
         createdByName,
         hasSeedPhrase: true,
-        seedPhraseExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        seedPhraseExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
       }
     });
     
-    // Send email with credentials
-    await sendInvitationEmail(email, name, displayName, tempPassword, plainSeedPhrase, role);
+    // Send invitation email
+    const loginLink = `${process.env.NEXT_PUBLIC_APP_URL || "https://nomeo-events.com"}/admin/login`;
     
+    await sendAdminInvitationEmail({
+      email: normalizedEmail,
+      name: name.trim(),
+      displayName: displayName.trim(),
+      role: normalizedRole,
+      tempPassword: tempPassword,
+      seedPhrase: plainSeedPhrase,
+      loginLink,
+      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    });
+
     return {
       userId: userId.toString(),
       success: true,
-      email,
+      email: normalizedEmail,
       name,
       displayName,
       tempPassword,
@@ -128,68 +188,30 @@ export async function createAdminUser({  email, name, displayName, role, created
   } catch (error: any) {
     console.error("Error creating admin:", error);
     
-    // Log error
-    await AdminLog.logAction({
-      adminId: createdBy,
-      adminEmail: email,
-      adminName: createdByName,
-      adminRole: role === "super_admin" ? AdminRole.SUPER_ADMIN : AdminRole.ADMIN,
-      action: AdminAction.CREATE_USER,
-      severity: AdminLogSeverity.ERROR,
-      details: `Failed to create admin user: ${error.message}`,
-      ipAddress: "system",
-      status: "failed",
-      errorMessage: error.message,
-      metadata: {
-        attemptedEmail: email,
-        attemptedRole: role
+    // Only log if we have createdBy (to avoid logging errors from validation)
+    if (createdBy) {
+      try {
+        await AdminLog.logAction({
+          adminId: createdBy,
+          adminEmail: email,
+          adminName: createdByName,
+          adminRole: role as AdminRole,
+          action: AdminAction.CREATE_USER,
+          severity: AdminLogSeverity.ERROR,
+          details: `Failed to create admin user: ${error.message}`,
+          ipAddress: "system",
+          status: "failed",
+          errorMessage: error.message,
+          metadata: {
+            attemptedEmail: email,
+            attemptedRole: role
+          }
+        });
+      } catch (logError) {
+        console.error("Failed to log error:", logError);
       }
-    });
+    }
     
     throw error;
   }
-}
-
-function generateTemporaryPassword(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
-  let password = '';
-  for (let i = 0; i < 16; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return password;
-}
-
-async function sendInvitationEmail( email: string,  name: string,  displayName: string, password: string,  seedPhrase: string, role: string ) {
-  const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL}/login`;
-  
-  console.log(`
-    ═══════════════════════════════════════════════════════════════════
-    🔐 ADMIN INVITATION - THREE FACTOR CREDENTIALS
-    ═══════════════════════════════════════════════════════════════════
-    
-    To: ${email}
-    Name: ${name}
-    Display Name: ${displayName}
-    Role: ${role}
-    
-    ┌─────────────────────────────────────────────────────────────────┐
-    │  ALL THREE CREDENTIALS ARE REQUIRED FOR LOGIN                   │
-    ├─────────────────────────────────────────────────────────────────┤
-    │  📧 FACTOR 1 - EMAIL:      ${email}                             │
-    │  🔑 FACTOR 2 - PASSWORD:   ${password}                          │
-    │  🔐 FACTOR 3 - SEED PHRASE: ${seedPhrase}                       │
-    └─────────────────────────────────────────────────────────────────┘
-    
-    🔗 LOGIN URL: ${loginUrl}
-    
-    ⚠️  IMPORTANT SECURITY NOTES:
-    • You need ALL THREE credentials to login
-    • Seed phrase format: space-separated words (12-16 words)
-    • Seed phrase expires in 30 days
-    • Change your password after first login
-    • Never share these credentials
-    • Contact super admin if you lose your seed phrase
-    
-    ═══════════════════════════════════════════════════════════════════
-  `);
-}
+};

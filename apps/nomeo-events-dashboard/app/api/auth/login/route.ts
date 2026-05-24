@@ -50,24 +50,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // STEP 3: Verify admin record is active
+    // STEP 3: Verify admin record
     const admin = await Admin.findOne({ userId: user._id });
-    if (!admin || !admin.isActive) {
-      await logFailedAttempt(email, user._id, "ADMIN_INACTIVE", ipAddress, userAgent);
+    if (!admin) {
+      await logFailedAttempt(email, user._id, "ADMIN_NOT_FOUND", ipAddress, userAgent);
       return NextResponse.json(
         { error: "Invalid email, password, or seed phrase" },
         { status: 401 }
       );
     }
 
+    // Check if this is a new account that needs onboarding
+    // A new account needs onboarding when:
+    // 1. isActive is false AND isOnboarded is false (regardless of adminStatus)
+    // 2. OR adminStatus is "active" but isActive is false (pre-onboarding state)
+    const needsOnboarding = !admin.isActive && !admin.isOnboarded;
+    
+    // Check if account is deactivated (should NOT be allowed to login)
+    // Account is deactivated if:
+    // 1. isActive is false AND isOnboarded is true (was activated before, now deactivated)
+    // 2. OR adminStatus is "inactive" or "suspended" AND isOnboarded is true
+    const isDeactivated = !admin.isActive && admin.isOnboarded;
+    
+    // Block login only for deactivated accounts
+    if (isDeactivated) {
+      await logFailedAttempt(email, user._id, "ADMIN_DEACTIVATED", ipAddress, userAgent);
+      return NextResponse.json(
+        { error: "Account has been deactivated. Please contact support." },
+        { status: 401 }
+      );
+    }
+    
+    // Allow login for:
+    // - Active accounts (isActive = true)
+    // - New accounts needing onboarding (isActive = false, isOnboarded = false)
+    // This covers both scenarios where adminStatus might be "active" or "inactive" before onboarding
+
     // STEP 4: Verify password directly against the account record hash
     const auth = await getAuth();
     const db = mongoose.connection.db!;
 
-    const accountRecord = await db.collection("account").findOne({
-      userId: user._id,
-      providerId: "credential",
-    });
+    const accountRecord = await db.collection("account").findOne({ userId: user._id, providerId: "credential" });
 
     if (!accountRecord?.password) {
       await logFailedAttempt(email, user._id, "NO_PASSWORD_RECORD", ipAddress, userAgent);
@@ -77,10 +100,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const isValidPassword = await verifyPassword({
-      hash: accountRecord.password,
-      password,
-    });
+    const isValidPassword = await verifyPassword({ hash: accountRecord.password, password });
 
     if (!isValidPassword) {
       await logFailedAttempt(email, user._id, "INVALID_PASSWORD", ipAddress, userAgent);
@@ -136,8 +156,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // STEP 6: All factors verified — create session via auth.handler so
-    // set-cookie headers are preserved and forwarded to the browser.
+    // STEP 6: All factors verified — create session via auth.handler
     const betterAuthUrl = process.env.BETTER_AUTH_URL!;
 
     const signInResponse = await auth.handler(
@@ -177,12 +196,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // STEP 7: Update audit records + sync admin fields onto the user document.
-    // Better Auth reads additionalFields directly from the user collection, so
-    // writing them here means getSession() and useSession() return them
-    // automatically — no extra queries needed on the client or server.
+    // STEP 7: Update audit records - DO NOT activate or onboard during login
     const newLoginCount = (admin.loginCount ?? 0) + 1;
     const loginTimestamp = new Date();
+    
+    // Prepare update operations - only update login tracking fields
+    // IMPORTANT: Do NOT set isOnboarded or isActive here
+    const adminUpdateFields: any = {
+      $set: {
+        lastLoginAt: loginTimestamp,
+        lastLoginIP: ipAddress,
+      },
+      $inc: { loginCount: 1 },
+    };
+    
+    const userUpdateFields: any = {
+      $set: {
+        displayName: admin.displayName,
+        useSeedPhrase: admin.useSeedPhrase ?? true,
+        loginCount: newLoginCount,
+        lastLoginAt: loginTimestamp,
+        lastLoginIP: ipAddress,
+        // IMPORTANT: Do NOT set isOnboarded here - frontend will handle it
+      },
+    };
 
     await Promise.all([
       // Reset seed phrase failure counter
@@ -190,41 +227,24 @@ export async function POST(request: NextRequest) {
         { userId: user._id },
         { $set: { lastUsedAt: loginTimestamp, failedAttempts: 0 } }
       ),
-      // Update admin audit fields
+      // Update admin audit fields (only login tracking, not onboarding status)
       Admin.updateOne(
         { userId: user._id },
-        {
-          $set: {
-            lastLoginAt: loginTimestamp,
-            lastLoginIP: ipAddress,
-            isOnboarded: true,
-          },
-          $inc: { loginCount: 1 },
-        }
+        adminUpdateFields
       ),
-      // Sync admin fields onto the Better Auth user document so the session
-      // includes them without needing the hook or extra DB calls
+      // Sync admin fields onto the Better Auth user document
       db.collection("user").updateOne(
         { _id: user._id },
-        {
-          $set: {
-            displayName: admin.displayName,
-            isOnboarded: admin.isOnboarded,
-            useSeedPhrase: admin.useSeedPhrase ?? true,
-            loginCount: newLoginCount,
-            lastLoginAt: loginTimestamp,
-            lastLoginIP: ipAddress,
-          },
-        }
+        userUpdateFields
       ),
-      logSuccessfulLogin(email, user._id, ipAddress, userAgent),
+      logSuccessfulLogin(email, user._id, ipAddress, userAgent, needsOnboarding),
     ]);
 
-    // Build response and forward all set-cookie headers from Better Auth
-    // so the browser receives the session cookie and middleware can see it
+    // Build response - indicate if onboarding is required
     const response = NextResponse.json({
       success: true,
-      message: "Login successful",
+      message: needsOnboarding ? "Login successful. Please complete your setup." : "Login successful",
+      requiresOnboarding: needsOnboarding,
       user: {
         id: user._id.toString(),
         name: admin.name,
@@ -232,13 +252,14 @@ export async function POST(request: NextRequest) {
         email: user.email,
         role: user.role,
         isOnboarded: admin.isOnboarded,
+        isActive: admin.isActive,
         loginCount: newLoginCount,
         lastLoginAt: loginTimestamp,
       },
       token,
     });
 
-    // Copy set-cookie headers — this is what actually logs the browser in
+    // Copy set-cookie headers
     signInResponse.headers.forEach((value, key) => {
       if (key.toLowerCase() === "set-cookie") {
         response.headers.append("set-cookie", value);
@@ -268,6 +289,7 @@ async function logFailedAttempt(
     const db = mongoose.connection.db!;
     await db.collection("adminlogs").insertOne({
       email,
+      action: 'login',
       userId: userId?.toString(),
       success: false,
       failureReason: reason,
@@ -285,14 +307,17 @@ async function logSuccessfulLogin(
   email: string,
   userId: any,
   ipAddress: string,
-  userAgent?: string
+  userAgent?: string,
+  requiresOnboarding: boolean = false
 ) {
   try {
     const db = mongoose.connection.db!;
     await db.collection("adminlogs").insertOne({
       email,
+      action: 'login',
       userId: userId.toString(),
       success: true,
+      requiresOnboarding,
       ipAddress,
       userAgent: userAgent || "unknown",
       timestamp: new Date(),

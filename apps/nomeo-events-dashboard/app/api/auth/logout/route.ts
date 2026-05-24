@@ -1,48 +1,36 @@
-// app/api/auth/admin-logout/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongoose";
-import { AdminLog, AdminAction, AdminLogSeverity, AdminRole } from "@/models/admin-log";
-import { User } from "@/models/user";
+import { AdminLog, AdminAction, AdminLogSeverity } from "@/models/admin-log";
 import { getAuth } from "@/lib/auth/auth";
-
-function getAdminRole(role: string): AdminRole | null {
-  switch (role) {
-    case "super_admin": return AdminRole.SUPER_ADMIN;
-    case "admin":       return AdminRole.ADMIN;
-    case "moderator":   return AdminRole.MODERATOR;
-    case "support":     return AdminRole.SUPPORT;
-    default:            return null;
-  }
-}
+import { requireAdminFromRequest } from "@/lib/session";
+import { getAdminRole } from "@/lib/admin-role";
 
 export async function POST(request: NextRequest) {
   try {
     await connectDB();
-
     const auth = await getAuth();
-    const session = await auth.api.getSession({ headers: request.headers });
 
-    // Best-effort audit log — never blocks the actual logout
-    if (session?.user) {
+    // Best-effort audit — never blocks logout
+    const admin = await requireAdminFromRequest(request.headers).catch(() => null);
+
+    if (admin) {
       try {
-        const user = await User.findOne({ email: session.user.email });
-        const adminRole = user ? getAdminRole(user.role) : null;
-
-        if (user && adminRole) {
+        const adminRole = getAdminRole(admin.role);
+        if (adminRole) {
           await AdminLog.logAction({
-            adminId: user._id.toString(),
-            adminEmail: user.email,
-            adminName: user.name || session.user.name || "Admin",
+            adminId: admin.id,
+            adminEmail: admin.email,
+            adminName: admin.displayName || admin.name,
             adminRole,
             action: AdminAction.LOGOUT,
             severity: AdminLogSeverity.INFO,
-            details: `Admin ${user.name || session.user.name} logged out`,
-            ipAddress: request.headers.get("x-forwarded-for") || "unknown",
-            userAgent: request.headers.get("user-agent") || "unknown",
-            endpoint: "/api/auth/admin-logout",
+            details: `Admin ${admin.displayName || admin.name} logged out`,
+            ipAddress: request.headers.get("x-forwarded-for") ?? "unknown",
+            userAgent: request.headers.get("user-agent") ?? "unknown",
+            endpoint: "/api/auth/logout",
             method: "POST",
             status: "success",
-            metadata: { sessionId: session.session?.id ?? null },
+            metadata: {},
           });
         }
       } catch (logError) {
@@ -50,30 +38,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // BETTER_AUTH_URL is already the full base path e.g. "http://localhost:3000/api/auth"
-    // so /sign-out is the correct suffix — handled by your [...all]/route.ts
-    const betterAuthURL = process.env.BETTER_AUTH_URL;
-    if (!betterAuthURL) {
-      throw new Error("BETTER_AUTH_URL is not defined");
-    }
+    // Derive the correct base URL from the incoming request itself —
+    // this works regardless of whether you're on port 3000, 3001, or production.
+    const origin = request.nextUrl.origin; // e.g. "http://localhost:3001"
+    const signOutUrl = `${origin}/api/auth/sign-out`;
 
+    // Forward the original headers (cookies) so better-auth can find the session
     const signOutResponse = await auth.handler(
-      new Request(`${betterAuthURL}/api/auth/sign-out`, {
+      new Request(signOutUrl, {
         method: "POST",
         headers: request.headers,
       })
     );
 
-    // Forward all Better Auth response headers onto our response.
-    // This is what actually clears the browser cookies — Better Auth's
-    // deleteSessionCookie() expires sessionToken, sessionData,
-    // dontRememberToken etc. via set-cookie headers on this response.
-    const response = NextResponse.json(
-      { success: true },
-      { status: signOutResponse.status }
-    );
+    const response = NextResponse.json({ success: true }, { status: 200 });
 
-    signOutResponse.headers.forEach((value, key) => {
+    // Copy Set-Cookie from better-auth so the session cookie is cleared on the client
+    signOutResponse.headers.forEach((value: string, key: string) => {
       response.headers.append(key, value);
     });
 
@@ -81,6 +62,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error("Logout error:", error);
-    return NextResponse.json({ error: "Logout failed" }, { status: 500 });
+    // Always return success — client must clear state regardless of server errors
+    return NextResponse.json({ success: true }, { status: 200 });
   }
 }

@@ -4,12 +4,14 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Shield, Fingerprint, Clock, FileText, Users, Bell, ChevronRight, Mail, Lock, Key, ArrowLeft, CheckCircle, Eye, EyeOff, Loader2, Server, Activity, Database, Globe, AlertCircle } from "lucide-react";
+import { ShieldPlusIcon, FingerAccessIcon, Clock02Icon, File02Icon, UserMultiple02Icon, Notification02Icon, ArrowRight01Icon, Mail01Icon, LockIcon, Key01Icon, ArrowLeft02Icon, CheckmarkCircle02Icon, ViewIcon, ViewOffSlashIcon, ServerStack02Icon, Database01Icon, Globe02Icon, AlertCircleIcon, Activity04Icon } from '@hugeicons/core-free-icons'
+import { ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { HugeiconsIcon } from "@hugeicons/react";
 
 const LoginPage = () => {
   const [step, setStep] = useState<1 | 2>(1);
@@ -25,32 +27,32 @@ const LoginPage = () => {
 
   const securityFeatures = [
     { 
-      icon: Shield, 
+      icon: ShieldPlusIcon, 
       title: "Military-Grade Encryption", 
       desc: "All data encrypted with AES-256, ensuring your information remains confidential and secure from unauthorized access." 
     },
     { 
-      icon: Fingerprint, 
+      icon: FingerAccessIcon, 
       title: "Three-Factor Authentication", 
       desc: "Email, password, and seed phrase verification provides enterprise-grade security against unauthorized access." 
     },
     { 
-      icon: Clock, 
+      icon: Clock02Icon, 
       title: "Automatic Session Management", 
       desc: "Sessions automatically expire after inactivity, and you can view all active devices from your security dashboard." 
     },
     { 
-      icon: FileText, 
+      icon: File02Icon, 
       title: "Comprehensive Audit Logging", 
       desc: "Every action, login attempt, and change is recorded with timestamps and IP addresses for complete accountability." 
     },
     { 
-      icon: Users, 
+      icon: UserMultiple02Icon, 
       title: "Granular Access Control", 
       desc: "Role-based permissions allow fine-tuned control over exactly what each admin can see, edit, and manage." 
     },
     { 
-      icon: Bell, 
+      icon: Notification02Icon, 
       title: "Real-Time Security Alerts", 
       desc: "Instant notifications for suspicious activities, failed login attempts, or unauthorized access attempts." 
     },
@@ -62,7 +64,7 @@ const LoginPage = () => {
     setError("");
     
     if (!email || !password) {
-      setError("Email and password are required");
+      setError("Email and password are requiblue");
       return;
     }
     
@@ -86,7 +88,7 @@ const LoginPage = () => {
       const checkData = await checkResponse.json();
       
       if (!checkResponse.ok) {
-        setError(checkData.error || "Invalid credentials");
+        setError(checkData.error || "Invalid cblueentials");
         setLoading(false);
         return;
       }
@@ -145,7 +147,7 @@ const LoginPage = () => {
 
       toast.success('Login was successful')
       
-      // Redirect to admin dashboard
+      // blueirect to admin dashboard
       const callbackUrl = searchParams.get("callbackUrl") || "/";
       router.push(callbackUrl);
       router.refresh();
@@ -158,13 +160,13 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Left Column - Brand & Security */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-700 to-indigo-900 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-20">
+    <div className="min-h-screen flex bg-gray-50">
+      {/* Left Column - Brand & Security - Plain blue-600 */}
+      <div className="hidden lg:flex lg:w-1/2 bg-blue-600 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
           <div className="absolute top-10 left-10 w-72 h-72 bg-white rounded-full blur-3xl" />
           <div className="absolute bottom-10 right-10 w-96 h-96 bg-white rounded-full blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500 rounded-full blur-3xl" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-400 rounded-full blur-3xl" />
         </div>
         
         <div className="relative z-10 flex flex-col justify-between p-12 w-full overflow-y-auto">
@@ -190,7 +192,7 @@ const LoginPage = () => {
               <h1 className="text-4xl font-bold text-white mb-4">
                 Admin Dashboard
               </h1>
-              <p className="text-indigo-100 text-lg leading-relaxed">
+              <p className="text-blue-100 text-lg leading-relaxed">
                 Secure access to manage events, organizers, analytics, and platform operations.
               </p>
             </motion.div>
@@ -215,10 +217,10 @@ const LoginPage = () => {
                   transition={{ duration: 0.4, delay: 0.3 + index * 0.05 }}
                   className="flex items-start gap-3 p-3 rounded-lg bg-white/10 backdrop-blur-sm hover:bg-white/15 transition-all group"
                 >
-                  <feature.icon className="w-5 h-5 text-indigo-200 mt-0.5 flex-shrink-0" />
+                  <HugeiconsIcon icon={feature.icon} className="w-5 h-5 text-blue-200 mt-0.5 flex-shrink-0" />
                   <div>
                     <div className="text-white text-sm font-medium mb-1">{feature.title}</div>
-                    <div className="text-indigo-200 text-xs leading-relaxed">{feature.desc}</div>
+                    <div className="text-blue-200 text-xs leading-relaxed">{feature.desc}</div>
                   </div>
                 </motion.div>
               ))}
@@ -232,21 +234,21 @@ const LoginPage = () => {
             transition={{ duration: 0.6, delay: 0.6 }}
             className="space-y-3"
           >
-            <div className="flex items-center gap-4 text-indigo-200 text-xs border-t border-indigo-500/30 pt-6">
+            <div className="flex items-center gap-4 text-blue-200 text-xs border-t border-blue-500/30 pt-6">
               <div className="flex items-center gap-1">
-                <Server className="w-3 h-3" />
+                <HugeiconsIcon icon={ServerStack02Icon} className="w-5 h-5" />
                 <span>AWS Cloud</span>
               </div>
               <div className="flex items-center gap-1">
-                <Database className="w-3 h-3" />
+                <HugeiconsIcon icon={Database01Icon} className="w-5 h-5" />
                 <span>Encrypted Storage</span>
               </div>
               <div className="flex items-center gap-1">
-                <Globe className="w-3 h-3" />
+                <HugeiconsIcon icon={Globe02Icon} className="w-5 h-5" />
                 <span>Global CDN</span>
               </div>
               <div className="flex items-center gap-1">
-                <Activity className="w-3 h-3" />
+                <HugeiconsIcon icon={Activity04Icon} className="w-5 h-5" />
                 <span>Real-time Sync</span>
               </div>
             </div>
@@ -256,7 +258,7 @@ const LoginPage = () => {
 
       {/* Right Column - Login Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 lg:p-12">
-        <div className="w-full max-w-lg">
+        <div className="w-full max-w-2xl">
           {/* Step Indicator */}
           <motion.div
             initial={{ opacity: 0, y: -20 }}
@@ -269,11 +271,11 @@ const LoginPage = () => {
                 <div
                   className={`w-12 h-12 rounded-full flex items-center justify-center font-semibold text-lg transition-all ${
                     step >= 1
-                      ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+                      ? "bg-blue-600 text-white"
                       : "bg-gray-200 text-gray-500"
                   }`}
                 >
-                  {step > 1 ? <CheckCircle className="w-5 h-5" /> : "1"}
+                  {step > 1 ? <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-5 h-5" />: "1"}
                 </div>
                 <div>
                   <div className="text-xs text-gray-500 uppercase tracking-wide">Step 1</div>
@@ -285,11 +287,11 @@ const LoginPage = () => {
                 <div
                   className={`w-12 h-12 rounded-full flex items-center justify-center font-semibold text-lg transition-all ${
                     step >= 2
-                      ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+                      ? "bg-blue-600 text-white"
                       : "bg-gray-200 text-gray-500"
                   }`}
                 >
-                  {step > 2 ? <CheckCircle className="w-5 h-5" /> : "2"}
+                  {step > 2 ? <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-5 h-5" /> : "2"}
                 </div>
                 <div>
                   <div className="text-xs text-gray-500 uppercase tracking-wide">Step 2</div>
@@ -325,9 +327,9 @@ const LoginPage = () => {
                         initial={{ opacity: 0, height: 0, y: -10 }}
                         animate={{ opacity: 1, height: "auto", y: 0 }}
                         exit={{ opacity: 0, height: 0, y: -10 }}
-                        className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2"
+                        className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2"
                       >
-                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <HugeiconsIcon icon={AlertCircleIcon} className="w-4 h-4 mt-0.5 flex-shrink-0" />
                         <span>{error}</span>
                       </motion.div>
                     )}
@@ -338,7 +340,7 @@ const LoginPage = () => {
                       Email Address
                     </Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <HugeiconsIcon icon={Mail01Icon} className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                       <Input
                         id="email"
                         type="email"
@@ -346,7 +348,6 @@ const LoginPage = () => {
                         onChange={(e) => setEmail(e.target.value)}
                         className="pl-11 py-6 text-base"
                         placeholder="admin@nomeo.com"
-                        required
                         autoComplete="email"
                       />
                     </div>
@@ -357,7 +358,7 @@ const LoginPage = () => {
                       Password
                     </Label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <HugeiconsIcon icon={LockIcon} className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                       <Input
                         id="password"
                         type={showPassword ? "text" : "password"}
@@ -365,7 +366,6 @@ const LoginPage = () => {
                         onChange={(e) => setPassword(e.target.value)}
                         className="pl-11 pr-11 py-6 text-base"
                         placeholder="••••••••"
-                        required
                         autoComplete="current-password"
                       />
                       <button
@@ -374,9 +374,9 @@ const LoginPage = () => {
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
                       >
                         {showPassword ? (
-                          <EyeOff className="w-5 h-5" />
+                          <HugeiconsIcon icon={ViewOffSlashIcon} className="w-5 h-5" />
                         ) : (
-                          <Eye className="w-5 h-5" />
+                          <HugeiconsIcon icon={ViewIcon} className="w-5 h-5" />
                         )}
                       </button>
                     </div>
@@ -386,7 +386,7 @@ const LoginPage = () => {
                     type="submit"
                     disabled={loading}
                     size="lg"
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 py-6 text-base rounded-lg shadow-lg shadow-indigo-200"
+                    className="w-full bg-blue-600 hover:bg-blue-700 py-6 text-base rounded-lg"
                   >
                     {loading ? (
                       <span className="flex items-center gap-2">
@@ -419,8 +419,8 @@ const LoginPage = () => {
                   <p className="text-gray-500">
                     Enter your seed phrase to complete authentication
                   </p>
-                  <div className="mt-2 p-3 bg-purple-50 rounded-lg border border-purple-100">
-                    <p className="text-xs text-purple-700">
+                  <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                    <p className="text-xs text-blue-700">
                       <strong>Three-Factor Authentication:</strong> Your seed phrase is the final layer of security. 
                       Never share it with anyone.
                     </p>
@@ -434,9 +434,9 @@ const LoginPage = () => {
                         initial={{ opacity: 0, height: 0, y: -10 }}
                         animate={{ opacity: 1, height: "auto", y: 0 }}
                         exit={{ opacity: 0, height: 0, y: -10 }}
-                        className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2"
+                        className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2"
                       >
-                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <HugeiconsIcon icon={AlertCircleIcon} className="w-4 h-4 mt-0.5 flex-shrink-0" />
                         <span>{error}</span>
                       </motion.div>
                     )}
@@ -447,14 +447,13 @@ const LoginPage = () => {
                       Seed Phrase
                     </Label>
                     <div className="relative">
-                      <Key className="absolute left-3 top-4 w-5 h-5 text-gray-400" />
+                      <HugeiconsIcon icon={Key01Icon} className="absolute left-3 top-4 w-5 h-5 text-gray-400" />
                       <Textarea
                         id="seedPhrase"
                         value={seedPhrase}
                         onChange={(e) => setSeedPhrase(e.target.value)}
                         className="pl-11 font-mono text-sm resize-none h-24 lg:h-28"
                         placeholder="apple mountain ocean star thunder forest crystal phoenix dragon shadow light ember"
-                        required
                       />
                     </div>
                     <p className="text-xs text-gray-400">
@@ -468,7 +467,7 @@ const LoginPage = () => {
                         type="checkbox"
                         checked={rememberMe}
                         onChange={(e) => setRememberMe(e.target.checked)}
-                        className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                       />
                       <span className="text-sm text-gray-600">Remember this device</span>
                     </label>
@@ -484,16 +483,16 @@ const LoginPage = () => {
                         setError("");
                         setSeedPhrase("");
                       }}
-                      className="flex-1 py-6 text-base"
+                      className="flex-1 py-6 text-base rounded-lg"
                     >
-                      <ArrowLeft className="w-5 h-5 mr-2" />
+                      <HugeiconsIcon icon={ArrowLeft02Icon} className="w-5 h-5 mr-2" />
                       Back
                     </Button>
                     <Button
                       type="submit"
                       disabled={loading}
                       size="lg"
-                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 py-6 text-base shadow-lg shadow-indigo-200"
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 py-6 text-base rounded-lg"
                     >
                       {loading ? (
                         <span className="flex items-center gap-2">
@@ -503,7 +502,7 @@ const LoginPage = () => {
                       ) : (
                         <>
                           Access Dashboard
-                          <ChevronRight className="w-5 h-5 ml-2" />
+                          <HugeiconsIcon icon={ArrowRight01Icon} className="w-5 h-5 ml-2" />
                         </>
                       )}
                     </Button>
