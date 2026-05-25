@@ -74,13 +74,13 @@ export interface IRegistration {
   updatedAt: Date;
   cancelledAt?: Date;
   cancellationReason?: string;
-  cancelledBy?: "by_user" | "by_organizer";
+  cancelledBy?: "by_user" | "by_organizer" | "by_admin";
   cancellationOtp?: string;
   cancellationOtpExpiresAt?: number;
 }
 
 export interface IRegistrationDocument extends IRegistration, Document {
-  cancel(reason?: string, cancelledBy?: "by_user" | "by_organizer"): Promise<IRegistrationDocument>;
+  cancel(reason?: string, cancelledBy?: "by_user" | "by_organizer" | "by_admin" ): Promise<IRegistrationDocument>;
   checkIn(email: string): Promise<IRegistrationDocument>;
   submitFeedback(rating: number, feedback: string): Promise<IRegistrationDocument>;
   checkAgeEligibility(event: any): { eligible: boolean; message?: string; requiresConsent?: boolean };
@@ -222,7 +222,7 @@ const RegistrationSchema = new Schema<IRegistrationDocument>(
     },
     cancelledAt: Date,
     cancellationReason: String,
-    cancelledBy: { type: String, enum: ["by_user", "by_organizer"] },
+    cancelledBy: { type: String, enum: ["by_user", "by_organizer", "by_admin"] },
     cancellationOtp: { type: String, select: false },
     cancellationOtpExpiresAt: { type: Number, select: false }
   },
@@ -270,7 +270,7 @@ RegistrationSchema.pre('save', async function () {
 //   4. Marks the linked payment as reversed + sets Registration.paymentStatus
 RegistrationSchema.methods.cancel = async function (
   reason?: string,
-  cancelledBy?: "by_user" | "by_organizer"
+  cancelledBy?: "by_user" | "by_organizer" | "by_admin"
 ): Promise<IRegistrationDocument> {
   const doc = this as IRegistrationDocument;
 

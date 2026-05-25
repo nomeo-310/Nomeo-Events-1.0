@@ -16,7 +16,7 @@ import { LoginFormData } from "@/types/auth-type";
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { getAndClearReturnUrl, clearReturnUrl } from "@/lib/return-url";
+import { getAndClearReturnUrl } from "@/lib/return-url";
 import { useOTP } from "@/hooks/use-otp";
 
 interface LoginFormProps {
@@ -27,13 +27,48 @@ interface LoginFormProps {
   isLoading?: boolean;
 }
 
-export const LoginForm = ({ onSuccess, onForgotPassword, onSignup, isLoading = false, onNeedsVerification }: LoginFormProps) => {
+const BLOCKED_ACCOUNT_MESSAGES: Record<string, string> = {
+  account_deactivated:
+    "Your account has been deactivated. Please contact support if you believe this is a mistake.",
+  account_scheduled_for_deletion:
+    "This account is scheduled for permanent deletion. Access has been revoked.",
+  account_suspended:
+    "Your account has been suspended. Please contact support for more information.",
+};
+
+export const LoginForm = ({
+  onSuccess,
+  onForgotPassword,
+  onSignup,
+  isLoading = false,
+  onNeedsVerification,
+}: LoginFormProps) => {
   const { sendOTP } = useOTP();
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [serverError, setServerError] = useState<string | null>(null);
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<LoginFormData>({
+  // Read error param set by middleware (catches social OAuth blocked accounts)
+  const getInitialError = () => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("error");
+    if (!error) return null;
+
+    window.history.replaceState({}, "", window.location.pathname);
+
+    return (
+      BLOCKED_ACCOUNT_MESSAGES[error] ??
+      "Access denied. Please contact support if you believe this is a mistake."
+    );
+  };
+
+  const [serverError, setServerError] = useState<string | null>(getInitialError);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginFormData>({
     defaultValues: {
       email: "",
       password: "",
@@ -43,14 +78,8 @@ export const LoginForm = ({ onSuccess, onForgotPassword, onSignup, isLoading = f
 
   const getCallbackUrl = () => {
     if (typeof window === "undefined") return "/dashboard";
-    
-    // First check if there's a saved return URL from localStorage
     const savedReturnUrl = getAndClearReturnUrl();
-    if (savedReturnUrl) {
-      return savedReturnUrl;
-    }
-    
-    // Fallback to URL parameter or dashboard
+    if (savedReturnUrl) return savedReturnUrl;
     const params = new URLSearchParams(window.location.search);
     return params.get("callbackUrl") ?? "/dashboard";
   };
@@ -66,19 +95,40 @@ export const LoginForm = ({ onSuccess, onForgotPassword, onSignup, isLoading = f
     });
 
     if (error) {
+      // Handle email not verified
       if (error.code === "EMAIL_NOT_VERIFIED") {
-        const sent = await sendOTP({ email: data.email, type: "email-verification" });
+        const sent = await sendOTP({
+          email: data.email,
+          type: "email-verification",
+        });
         if (sent) {
           onNeedsVerification?.(data.email);
         } else {
-          setServerError("Please verify your email. Failed to send code — try again.");
+          setServerError(
+            "Please verify your email. Failed to send code — try again."
+          );
         }
-      } else if (error.code === "INVALID_EMAIL_OR_PASSWORD") {
-        setServerError("Invalid email or password. Please try again.");
-      } else {
-        setServerError(error.message ?? "Something went wrong. Please try again.");
+        return;
       }
-      return;
+
+      // Handle wrong credentials
+      if (error.code === "INVALID_EMAIL_OR_PASSWORD") {
+        setServerError("Invalid email or password. Please try again.");
+        return;
+      }
+
+      // Handle blocked accounts — APIError("FORBIDDEN", { message }) from auth.ts
+      if (error.status === 403) {
+        const msg = error.message ?? "";
+        setServerError(
+          BLOCKED_ACCOUNT_MESSAGES[msg] ??
+            "Access denied. Please contact support if you believe this is a mistake."
+        );
+        return;
+      }
+
+      // Fallback
+      setServerError(error.message ?? "Something went wrong. Please try again.");
     }
 
     onSuccess?.();
@@ -204,7 +254,9 @@ export const LoginForm = ({ onSuccess, onForgotPassword, onSignup, isLoading = f
               exit={{ opacity: 0, y: -10 }}
               className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800"
             >
-              <p className="text-sm text-red-600 dark:text-red-400">{serverError}</p>
+              <p className="text-sm text-red-600 dark:text-red-400">
+                {serverError}
+              </p>
             </motion.div>
           )}
         </AnimatePresence>

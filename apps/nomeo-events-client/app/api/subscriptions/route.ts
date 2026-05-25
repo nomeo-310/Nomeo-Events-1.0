@@ -8,6 +8,8 @@ import { Plan, PlanInterval } from '@/models/plan';
 import mongoose from 'mongoose';
 import { connectDB } from '@/lib/mongoose';
 import { getCurrentUser } from '@/lib/session';
+import { Notification } from '@/models/notification';
+import { User } from '@/models/user';
 
 // ─── Serializer ───────────────────────────────────────────────────────────────
 // Defined inline so this file is self-contained.
@@ -196,6 +198,56 @@ export async function POST(req: NextRequest) {
       payments: [],
       metadata: new Map([['paystackReference', paystackReference]]),
     });
+
+    // ─── Send notifications for new subscription ─────────────────────────────
+    try {
+      const SYSTEM_USER_ID = new mongoose.Types.ObjectId("000000000000000000000001");
+      
+      // 1. Notify the user who subscribed
+      const userNotification = {
+        senderId: SYSTEM_USER_ID,
+        receiverId: new mongoose.Types.ObjectId(loggedInUser.id),
+        title: hasTrial ? "Subscription Started - Trial Period" : "Subscription Activated",
+        message: hasTrial 
+          ? `Your ${plan.name} plan subscription has been started with a ${plan.trialDays}-day trial period. You will be billed after the trial ends.`
+          : `Your ${plan.name} plan subscription has been successfully activated. You can now enjoy all the benefits of your selected plan.`,
+        message_type: "info",
+        sender_type: 'system',
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await Notification.create(userNotification);
+
+      const adminUsers = await User.find({  role: { $in: ["admin", "super_admin"] }}).select('_id name email role');
+
+      if (adminUsers.length > 0) {
+
+        const adminMessage = `${loggedInUser.name || loggedInUser.email} has subscribed to the ${plan.name} plan. Review this subscription in the admin dashboard.`;
+
+        const adminNotifications = adminUsers.map((admin) => ({
+          senderId: new mongoose.Types.ObjectId(loggedInUser.id),
+          receiverId: admin._id,
+          title: "New Subscription Created",
+          message: adminMessage,
+          message_type: "info",
+          sender_type: 'user',
+          createdAt: now,
+          updatedAt: now,
+          isRead: false,
+        }));
+
+        await Notification.insertMany(adminNotifications);
+        
+        console.log(`[NOTIFICATIONS] Sent ${adminNotifications.length} admin notifications to users with roles: ${adminUsers.map(u => u.role).join(', ')}`);
+      } else {
+        console.log('[NOTIFICATIONS] No admin or super_admin users found to notify');
+      }
+
+    } catch (notifError) {
+      // Don't fail the subscription if notifications fail
+      console.error('[NOTIFICATION ERROR] Failed to send subscription notifications:', notifError);
+    }
 
     // Re-fetch as a full document so instance methods work in serializer
     const full = await Subscription.findById(subscription._id);

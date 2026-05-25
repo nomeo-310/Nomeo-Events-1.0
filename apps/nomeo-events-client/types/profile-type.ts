@@ -69,8 +69,16 @@ export interface ProfileMetadata {
   userAgent?: string;
   signupSource?: string;
   referrer?: string;
+  deletionScheduled?: string;
+  deletionReason?: string;
+  finalDeletionDate?: string;
+  deletedBy?: string;
+  deletedByEmail?: string;
+  deactivationReason?: string;
+  deactivatedAt?: string;
+  deactivatedBy?: string;
+  deactivatedByEmail?: string;
 }
-
 // Base profile (fields always present)
 export interface BaseProfile {
   _id: string;

@@ -5,6 +5,7 @@ import type { createAuth } from "./auth";
 
 export const authClient = createAuthClient({
   baseURL: process.env.BETTER_AUTH_URL!,
+  cookiePrefix: "client",
   plugins: [
     emailOTPClient(),
     inferAdditionalFields<ReturnType<typeof createAuth>>(),

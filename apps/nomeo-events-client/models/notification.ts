@@ -52,7 +52,7 @@ const NotificationSchema = new Schema<INotification, NotificationModel, INotific
     },
     sender_type: {
       type: String,
-      enum: ["system", "user", "admin"],
+      enum: ["system", "user", "admin", "super_admin", "moderator", "support"],
       default: "system",
     },
     link: { type: String },

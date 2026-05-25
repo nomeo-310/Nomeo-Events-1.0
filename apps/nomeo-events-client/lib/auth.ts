@@ -1,4 +1,4 @@
-import { betterAuth } from "better-auth";
+import { betterAuth, APIError } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import mongoose from "mongoose";
 import { ObjectId } from "mongodb";
@@ -14,6 +14,14 @@ export function createAuth() {
   return betterAuth({
     secret: process.env.BETTER_AUTH_SECRET!,
     baseURL: process.env.BETTER_AUTH_URL!,
+
+    onAPIError: {
+      errorURL: "/auth/error",
+    },
+
+    advanced: {
+      cookiePrefix: "client",
+    },
 
     database: mongodbAdapter(mongoose.connection.db!),
 
@@ -85,8 +93,48 @@ export function createAuth() {
                 createdAt: new Date(),
                 updatedAt: new Date(),
               }),
-              Subscription.initialSubscription(user.id, user.name)
+              Subscription.initialSubscription(user.id, user.name),
             ]);
+          },
+        },
+      },
+
+      session: {
+        create: {
+          before: async (session) => {
+            try {
+              await connectDB();
+
+              const profile = await Profile.findOne({
+                userId: session.userId,
+              }).lean();
+
+              // No profile found — allow session, handle elsewhere
+              if (!profile) return { data: session };
+
+              if (profile.activeStatus === "deactivated") {
+                const message = profile.metadata?.deletionScheduled
+                  ? "account_scheduled_for_deletion"
+                  : "account_deactivated";
+
+                throw new APIError("FORBIDDEN", { message });
+              }
+
+              if (profile.activeStatus === "suspended") {
+                throw new APIError("FORBIDDEN", {
+                  message: "account_suspended",
+                });
+              }
+
+              return { data: session };
+            } catch (err) {
+              // Re-throw intentional APIErrors — don't swallow them
+              if (err instanceof APIError) throw err;
+
+              // Fail open on unexpected DB/runtime errors
+              console.error("[Auth] session.create.before error:", err);
+              return { data: session };
+            }
           },
         },
       },

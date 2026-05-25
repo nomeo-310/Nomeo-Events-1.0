@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
     });
 
     // 2. Notify all admins
-    const admins = await User.find({ role: { $in: ["admin", "superadmin"] } }).select('_id');
+    const admins = await User.find({ role: { $in: ["admin", "super_admin"] } }).select('_id');
 
     if (admins.length > 0) {
       const adminNotifications = admins.map((admin) => ({

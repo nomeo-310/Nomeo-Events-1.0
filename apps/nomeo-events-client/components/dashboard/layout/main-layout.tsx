@@ -145,12 +145,23 @@ export const DashboardLayout = ({ children, user }: DashboardLayoutProps) => {
     if (!pathname || ALWAYS_UNLOCKED.includes(pathname)) return null
     if (isLoading) return null
 
+    console.log(profile)
+
+    // Check for deactivated account (including scheduled deletion)
+    if (profile?.activeStatus === 'deactivated') {
+      if (profile.metadata?.deletionScheduled) {
+        return 'deletion_scheduled' as const
+      }
+      return 'deactivated' as const
+    }
+    
     if (profile?.activeStatus === 'suspended') return 'suspended' as const
     if (!isActive) return 'subscription_expired' as const
     if (REQUIRES_VERIFICATION.some(p => pathname.startsWith(p))) {
       if (isPending) return 'verification_pending' as const
       if (!isVerified) return 'unverified' as const
-    }
+    };
+
     if (pathname.startsWith('/dashboard/events') && completionPercentage < 50) {
       return 'incomplete_profile' as const
     }
@@ -158,7 +169,14 @@ export const DashboardLayout = ({ children, user }: DashboardLayoutProps) => {
     return null
   }
 
-  const lockCondition = getLock()
+  const lockCondition = getLock();
+  console.log(lockCondition)
+
+  // If account is deactivated or scheduled for deletion, sign out immediately
+  if (lockCondition === 'deactivated' || lockCondition === 'deletion_scheduled') {
+    logOut();
+    return null
+  }
 
   const isGatedPath = GATED_PATHS.some(p => pathname?.startsWith(p))
   const showSkeleton = isGatedPath && isLoading && !lockCondition

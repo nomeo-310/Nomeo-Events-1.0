@@ -125,7 +125,7 @@ export const useGetNotifications = (params: GetNotificationsParams = {}) => {
   return useQuery({
     queryKey: notificationKeys.list(params),
     queryFn: () => notificationApi.getNotifications(params),
-    staleTime: 1000 * 60,
+    staleTime: 1000 * 60 * 5, // 5 minutes
     placeholderData: (previousData) => previousData, 
   });
 };
@@ -135,8 +135,8 @@ export const useNotificationCounts = () => {
   return useQuery({
     queryKey: notificationKeys.counts(),
     queryFn: () => notificationApi.getNotificationCounts(),
-    staleTime: 1000 * 30,
-    refetchInterval: 30000,
+    staleTime: 1000 * 60 * 5,
+    refetchInterval: 300000,
     select: (data): NotificationCounts => data.data,
   });
 };
