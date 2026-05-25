@@ -252,6 +252,7 @@ SubscriptionSchema.statics.initialSubscription = async function (
     currentPeriodEnd = trialEnd;
   } else {
     // Free plans without a trial period get a 10-year window
+    status = SubscriptionStatus.ACTIVE;
     currentPeriodEnd = new Date(now);
     currentPeriodEnd.setFullYear(currentPeriodEnd.getFullYear() + 10);
   }
@@ -271,7 +272,7 @@ SubscriptionSchema.statics.initialSubscription = async function (
     trialEnd,
     currentPeriodStart: now,
     currentPeriodEnd,
-    cancelAtPeriodEnd: false,
+    cancelAtPeriodEnd: true,
     payments: [],
     maxEvents: freePlan.maxEvents,
     maxAttendeesPerEvent: freePlan.maxAttendeesPerEvent,
