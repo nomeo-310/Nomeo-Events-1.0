@@ -1011,8 +1011,8 @@ const SubscriptionPage = () => {
             <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
               You don't have an active subscription. Choose a plan to get started.
             </p>
-            <Button>
-              <a href="/pricing">
+            <Button className={'bg-indigo-600 hover:bg-indigo-700 text-white h-10 px-4 flex items-center justify-center'} >
+              <a href="/pricing" className="flex items-center">
                 View Plans
                 <HugeiconsIcon icon={ArrowRightIcon} size={16} className="ml-2" />
               </a>
