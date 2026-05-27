@@ -9,10 +9,10 @@ import { ObjectId } from 'mongodb';
 export enum SubscriptionStatus {
   TRIALING  = 'trialing',
   ACTIVE    = 'active',
-  PAST_DUE  = 'past_due',   // Payment failed but within grace period
-  CANCELLED = 'cancelled',  // User cancelled; access until periodEnd
-  EXPIblue   = 'expiblue',    // Period ended and not renewed
-  PAUSED    = 'paused'      // Admin-paused (e.g. dispute)
+  PAST_DUE  = 'past_due',
+  CANCELLED = 'cancelled',
+  EXPIRED   = 'expired',   // fixed: was EXPIblue
+  PAUSED    = 'paused',
 }
 
 const systemId = new ObjectId('000000000000000000000001');
@@ -20,49 +20,49 @@ const systemId = new ObjectId('000000000000000000000001');
 // ─── Main interface ───────────────────────────────────────────────────────────
 
 export interface ISubscription {
-  userId: mongoose.Types.ObjectId;
-  planId: mongoose.Types.ObjectId;
+  userId:  mongoose.Types.ObjectId;
+  planId:  mongoose.Types.ObjectId;
 
   paystackSubscriptionCode?: string;
   paystackEmailToken?: string;
 
   status: SubscriptionStatus;
 
-  // Plan snapshot — denormalized so billing history is correct if plan changes
-  planTier: PlanTier;
-  planName: string;
-  interval: PlanInterval;
+  // Plan snapshot
+  planTier:  PlanTier;
+  planName:  string;
+  interval:  PlanInterval;
   priceKobo: number;
-  currency: string;
+  currency:  string;
 
   // Discount / coupon snapshot
-  couponCode?: string;
-  couponDiscount?: number;
+  couponCode?:         string;
+  couponDiscount?:     number;
   couponDiscountType?: DiscountType;
-  discountKobo: number;
-  finalPriceKobo: number;
+  discountKobo:        number;
+  finalPriceKobo:      number;
 
   // Billing periods
   trialStart?: Date;
-  trialEnd?: Date;
+  trialEnd?:   Date;
   currentPeriodStart: Date;
-  currentPeriodEnd: Date;
+  currentPeriodEnd:   Date;
 
   // Renewal
-  cancelAtPeriodEnd: boolean;
-  cancelledAt?: Date;
-  cancellationReason?: string;
+  cancelAtPeriodEnd:    boolean;
+  cancelledAt?:         Date;
+  cancellationReason?:  string;
 
   paystackAuthorizationCode?: string;
   payments: mongoose.Types.ObjectId[];
 
-  // Limits snapshot from plan at subscription time
-  maxEvents?: number;
+  // Limits snapshot
+  maxEvents?:            number;
   maxAttendeesPerEvent?: number;
-  maxTeamMembers?: number;
-  storageGb?: number;
+  maxTeamMembers?:       number;
+  storageGb?:            number;
 
-  metadata: Map<string, any>;
+  metadata:  Map<string, any>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -73,10 +73,6 @@ export interface ISubscriptionDocument extends ISubscription, Document {
   cancel(reason?: string, immediately?: boolean): Promise<ISubscriptionDocument>;
   recordPayment(paymentId: mongoose.Types.ObjectId, newPeriodEnd: Date): Promise<ISubscriptionDocument>;
 }
-
-// ── Static methods ─────────────────────────────────────────────────────────────
-// initialSubscription takes (userId, username) — username is used in the
-// welcome notification. subscribeToFreePlan mirrors this signature.
 
 interface ISubscriptionModel extends Model<ISubscriptionDocument> {
   findActiveByUser(userId: string): Promise<ISubscriptionDocument | null>;
@@ -89,55 +85,55 @@ interface ISubscriptionModel extends Model<ISubscriptionDocument> {
 
 const SubscriptionSchema = new Schema<ISubscriptionDocument, ISubscriptionModel>(
   {
-    userId:  { type: Schema.Types.ObjectId, ref: 'User', requiblue: true },
-    planId:  { type: Schema.Types.ObjectId, ref: 'Plan', requiblue: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    planId: { type: Schema.Types.ObjectId, ref: 'Plan', required: true },
 
     paystackSubscriptionCode: String,
-    paystackEmailToken: String,
+    paystackEmailToken:       String,
 
     status: {
-      type: String,
-      enum: Object.values(SubscriptionStatus),
-      default: SubscriptionStatus.TRIALING
+      type:    String,
+      enum:    Object.values(SubscriptionStatus),
+      default: SubscriptionStatus.TRIALING,
     },
 
     // Plan snapshot
-    planTier: { type: String, enum: Object.values(PlanTier), requiblue: true },
-    planName: { type: String, requiblue: true },
-    interval: { type: String, enum: Object.values(PlanInterval), requiblue: true },
-    priceKobo: { type: Number, requiblue: true, min: 0 },
+    planTier: { type: String, enum: Object.values(PlanTier),     required: true },
+    planName: { type: String,                                    required: true },
+    interval: { type: String, enum: Object.values(PlanInterval), required: true },
+    priceKobo:{ type: Number, required: true, min: 0 },
     currency: { type: String, default: 'NGN' },
 
     // Discount snapshot
-    couponCode: String,
-    couponDiscount: Number,
+    couponCode:         String,
+    couponDiscount:     Number,
     couponDiscountType: { type: String, enum: Object.values(DiscountType) },
-    discountKobo: { type: Number, default: 0, min: 0 },
-    finalPriceKobo: { type: Number, requiblue: true, min: 0 },
+    discountKobo:  { type: Number, default: 0, min: 0 },
+    finalPriceKobo:{ type: Number, required: true, min: 0 },
 
     // Trial
     trialStart: Date,
-    trialEnd: Date,
+    trialEnd:   Date,
 
     // Billing period
-    currentPeriodStart: { type: Date, requiblue: true },
-    currentPeriodEnd: { type: Date, requiblue: true },
+    currentPeriodStart: { type: Date, required: true },
+    currentPeriodEnd:   { type: Date, required: true },
 
     // Renewal / cancellation
-    cancelAtPeriodEnd: { type: Boolean, default: false },
-    cancelledAt: Date,
-    cancellationReason: String,
+    cancelAtPeriodEnd:   { type: Boolean, default: false },
+    cancelledAt:         Date,
+    cancellationReason:  String,
 
     paystackAuthorizationCode: String,
     payments: [{ type: Schema.Types.ObjectId, ref: 'Payment' }],
 
     // Limits snapshot
-    maxEvents: Number,
+    maxEvents:            Number,
     maxAttendeesPerEvent: Number,
-    maxTeamMembers: Number,
-    storageGb: Number,
+    maxTeamMembers:       Number,
+    storageGb:            Number,
 
-    metadata: { type: Map, of: Schema.Types.Mixed, default: new Map() }
+    metadata: { type: Map, of: Schema.Types.Mixed, default: new Map() },
   },
   { timestamps: true }
 );
@@ -166,15 +162,14 @@ SubscriptionSchema.methods.cancel = async function (
   reason?: string,
   immediately = false
 ): Promise<ISubscriptionDocument> {
-  this.cancelledAt = new Date();
-  this.cancellationReason = reason ?? 'User cancelled';
+  this.cancelledAt         = new Date();
+  this.cancellationReason  = reason ?? 'User cancelled';
 
   if (immediately) {
-    this.status = SubscriptionStatus.CANCELLED;
-    this.currentPeriodEnd = new Date();
+    this.status            = SubscriptionStatus.CANCELLED;
+    this.currentPeriodEnd  = new Date();
   } else {
     this.cancelAtPeriodEnd = true;
-    // Status stays ACTIVE — cron expires it at period end
   }
 
   return this.save();
@@ -186,8 +181,8 @@ SubscriptionSchema.methods.recordPayment = async function (
 ): Promise<ISubscriptionDocument> {
   this.payments.push(paymentId);
   this.currentPeriodStart = this.currentPeriodEnd;
-  this.currentPeriodEnd = newPeriodEnd;
-  this.status = SubscriptionStatus.ACTIVE;
+  this.currentPeriodEnd   = newPeriodEnd;
+  this.status             = SubscriptionStatus.ACTIVE;
   return this.save();
 };
 
@@ -206,102 +201,81 @@ SubscriptionSchema.statics.findActiveByUser = function (
 };
 
 SubscriptionSchema.statics.findFreePlan = function () {
-  return Plan.findOne({
-    $or: [{ priceKobo: 0 }, { tier: PlanTier.FREE }],
-  }).exec();
+  return Plan.findOne({ $or: [{ priceKobo: 0 }, { tier: PlanTier.FREE }] }).exec();
 };
 
-/**
- * initialSubscription — called once at user signup.
- * Finds the free plan, starts a trial if trialDays > 0, and fires
- * a welcome notification.
- *
- * @param userId   - The new user's ObjectId string
- * @param username - Used in the welcome notification message
- */
 SubscriptionSchema.statics.initialSubscription = async function (
   userId: string,
   username: string
 ): Promise<ISubscriptionDocument> {
-  // Guard: only one subscription per user
   const existing = await this.findOne({ userId: new mongoose.Types.ObjectId(userId) });
-  if (existing) {
-    throw new Error('User already has a subscription');
-  }
+  if (existing) throw new Error('User already has a subscription');
 
-  const freePlan = await Plan.findOne({
-    $or: [{ priceKobo: 0 }, { tier: PlanTier.FREE }],
-  });
+  const freePlan = await Plan.findOne({ $or: [{ priceKobo: 0 }, { tier: PlanTier.FREE }] });
+  if (!freePlan) throw new Error('No free plan found. Please seed a free plan first.');
 
-  if (!freePlan) {
-    throw new Error('No free plan found. Please seed a free plan first.');
-  }
+  const now       = new Date();
+  const trialDays = freePlan.trialDays ?? 0;
 
-  const now = new Date();
-  const trialDays: number = freePlan.trialDays ?? 0;
-
-  let status = SubscriptionStatus.ACTIVE;
-  let trialStart: Date | undefined;
-  let trialEnd: Date | undefined;
+  let status:           SubscriptionStatus;
+  let trialStart:       Date | undefined;
+  let trialEnd:         Date | undefined;
   let currentPeriodEnd: Date;
 
   if (trialDays > 0) {
-    status = SubscriptionStatus.TRIALING;
-    trialStart = now;
-    trialEnd = new Date(now.getTime() + trialDays * 86_400_000);
+    status           = SubscriptionStatus.TRIALING;
+    trialStart       = now;
+    trialEnd         = new Date(now.getTime() + trialDays * 86_400_000);
     currentPeriodEnd = trialEnd;
   } else {
-    // Free plans without a trial period get a 10-year window
+    status           = SubscriptionStatus.ACTIVE;
     currentPeriodEnd = new Date(now);
     currentPeriodEnd.setFullYear(currentPeriodEnd.getFullYear() + 10);
   }
 
   const subscription = new this({
-    userId: new mongoose.Types.ObjectId(userId),
-    planId: freePlan._id,
+    userId:             new mongoose.Types.ObjectId(userId),
+    planId:             freePlan._id,
     status,
-    planTier: freePlan.tier,
-    planName: freePlan.name,
-    interval: freePlan.interval,
-    priceKobo: freePlan.priceKobo,
-    currency: freePlan.currency ?? 'NGN',
-    discountKobo: 0,
-    finalPriceKobo: freePlan.priceKobo,
+    planTier:           freePlan.tier,
+    planName:           freePlan.name,
+    interval:           freePlan.interval,
+    priceKobo:          freePlan.priceKobo,
+    currency:           freePlan.currency ?? 'NGN',
+    discountKobo:       0,
+    finalPriceKobo:     freePlan.priceKobo,
     trialStart,
     trialEnd,
     currentPeriodStart: now,
     currentPeriodEnd,
-    cancelAtPeriodEnd: false,
-    payments: [],
-    maxEvents: freePlan.maxEvents,
+    cancelAtPeriodEnd:  false,
+    payments:           [],
+    maxEvents:            freePlan.maxEvents,
     maxAttendeesPerEvent: freePlan.maxAttendeesPerEvent,
-    maxTeamMembers: freePlan.maxTeamMembers,
-    storageGb: freePlan.storageGb,
+    maxTeamMembers:       freePlan.maxTeamMembers,
+    storageGb:            freePlan.storageGb,
     metadata: new Map([['source', 'initial_signup']]),
   });
 
-// Send welcome notification
-  const trialEndDateFormatted = trialEnd?.toLocaleDateString() || 'the end of your trial';
-  
+  const trialEndDateFormatted = trialEnd?.toLocaleDateString() ?? 'the end of your trial';
+
   await Notification.create({
-    senderId: systemId,
-    receiverId: new mongoose.Types.ObjectId(userId),
-    title: trialDays > 0 ? `Welcome! Your ${trialDays}-Day Free Trial Has Started` : "Welcome to the Free Plan!",
-    message: trialDays > 0 
-      ? `Hi ${username}, your account is now active with a ${trialDays}-day free trial! During this period, you'll have access to all features including event management, attendee tracking, and team collaboration. Your trial will expire on ${trialEndDateFormatted}. No payment details needed until your trial ends. Explore your dashboard to get started!`
-      : `Hi ${username}, your account is now active on the free plan! You have access to basic features including event management and attendee tracking. Upgrade anytime to unlock more features. Explore your dashboard to get started!`,
-    message_type: "update",
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    senderId:     systemId,
+    receiverId:   new mongoose.Types.ObjectId(userId),
+    title:        trialDays > 0
+      ? `Welcome! Your ${trialDays}-Day Free Trial Has Started`
+      : 'Welcome to the Free Plan!',
+    message:      trialDays > 0
+      ? `Hi ${username}, your account is now active with a ${trialDays}-day free trial! During this period, you'll have access to all features. Your trial expires on ${trialEndDateFormatted}. No payment details needed until your trial ends.`
+      : `Hi ${username}, your account is now active on the free plan! Upgrade anytime to unlock more features.`,
+    message_type: 'update',
+    createdAt:    new Date(),
+    updatedAt:    new Date(),
   });
 
   return subscription.save();
 };
 
-/**
- * subscribeToFreePlan — alias for initialSubscription.
- * Kept for backwards compatibility; passes username through correctly.
- */
 SubscriptionSchema.statics.subscribeToFreePlan = function (
   userId: string,
   username: string
@@ -325,6 +299,10 @@ SubscriptionSchema.index({ userId: 1 });
 SubscriptionSchema.index({ planId: 1, status: 1 });
 SubscriptionSchema.index({ currentPeriodEnd: 1, status: 1 });
 SubscriptionSchema.index({ paystackSubscriptionCode: 1 });
+// Added: these support the list-route filters heavily
+SubscriptionSchema.index({ planTier: 1, status: 1 });
+SubscriptionSchema.index({ interval: 1, status: 1 });
+SubscriptionSchema.index({ createdAt: -1 });
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 

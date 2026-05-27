@@ -1653,7 +1653,7 @@ const PlansPage = () => {
   const showEmpty = !isLoading && !isFetching && displayPlans.length === 0;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-6">
       <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
 
       <div className="px-4 space-y-6">

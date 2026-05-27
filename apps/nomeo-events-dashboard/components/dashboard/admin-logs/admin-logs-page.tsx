@@ -651,7 +651,7 @@ export default function AdminLogsPage() {
   const handleRefresh = () => { refetch(); toast.success('Logs refreshed'); };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-6">
       <div className="px-4 lg:px-6 space-y-5 max-w-screen-2xl mx-auto">
 
         {/* ── Header ─────────────────────────────────────────────────────── */}

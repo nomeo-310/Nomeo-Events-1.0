@@ -21,18 +21,121 @@ interface AdminActionResult {
     registrationsCancelled?: number;
     refundsInitiated?: number;
     emailsSent: number;
+    subscriptionDaysExtended?: number;
   };
 }
 
+// ─── Shared helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Pause a subscription and record the exact timestamp so we can calculate
+ * how many days to add back when restored.
+ */
+async function pauseSubscription(
+  userId: string,
+  reason: string,
+  pausedBy: string,
+  pauseType: 'deactivation' | 'suspension',
+  session: mongoose.ClientSession
+): Promise<void> {
+  const subscription = await Subscription.findOne({
+    userId,
+    status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
+  }).session(session);
+
+  if (!subscription) return;
+
+  subscription.metadata.set('statusBeforePause', subscription.status);
+  subscription.metadata.set('pausedAt', new Date().toISOString());
+  subscription.metadata.set('pauseType', pauseType);
+  subscription.metadata.set('pauseReason', reason);
+  subscription.metadata.set('pausedBy', pausedBy);
+  subscription.status = SubscriptionStatus.PAUSED;
+  await subscription.save({ session });
+}
+
+/**
+ * Restore a paused subscription.
+ * Extends currentPeriodEnd (and trialEnd if in trial) by the exact number of
+ * milliseconds the subscription was paused, so the user never loses time they
+ * already paid for.
+ */
+async function restoreSubscription(
+  userId: string,
+  restoredBy: string,
+  session: mongoose.ClientSession
+): Promise<{ restored: boolean; daysExtended: number }> {
+  const subscription = await Subscription.findOne({
+    userId,
+    status: SubscriptionStatus.PAUSED,
+  }).session(session);
+
+  if (!subscription) return { restored: false, daysExtended: 0 };
+
+  const pausedAtRaw = subscription.metadata.get('pausedAt');
+  const statusBeforePause = subscription.metadata.get('statusBeforePause') as SubscriptionStatus | undefined;
+
+  const pausedAt = pausedAtRaw ? new Date(pausedAtRaw) : null;
+  const now = new Date();
+
+  // Calculate how long the subscription was paused (in ms)
+  const pausedDurationMs = pausedAt ? now.getTime() - pausedAt.getTime() : 0;
+  const daysExtended = Math.ceil(pausedDurationMs / 86_400_000);
+
+  // Extend the billing period by the paused duration so the user doesn't
+  // lose days they couldn't use the product.
+  const newPeriodEnd = new Date(subscription.currentPeriodEnd.getTime() + pausedDurationMs);
+
+  // If the extended period end is still in the past the subscription effectively
+  // lapsed during the pause — cancel rather than silently restore an expired sub.
+  if (newPeriodEnd <= now) {
+    subscription.status = SubscriptionStatus.CANCELLED;
+    subscription.cancelledAt = now;
+    subscription.metadata.set('cancellationReason', 'Subscription period lapsed during pause');
+    await subscription.save({ session });
+    return { restored: false, daysExtended: 0 };
+  }
+
+  subscription.currentPeriodEnd = newPeriodEnd;
+
+  // If the subscription was in a trial, also extend the trial end
+  if (
+    statusBeforePause === SubscriptionStatus.TRIALING &&
+    subscription.trialEnd
+  ) {
+    subscription.trialEnd = new Date(subscription.trialEnd.getTime() + pausedDurationMs);
+  }
+
+  // Restore to whichever status it had before pausing
+  subscription.status =
+    statusBeforePause === SubscriptionStatus.TRIALING
+      ? SubscriptionStatus.TRIALING
+      : SubscriptionStatus.ACTIVE;
+
+  // Clean up pause metadata
+  subscription.metadata.delete('statusBeforePause');
+  subscription.metadata.delete('pausedAt');
+  subscription.metadata.delete('pauseType');
+  subscription.metadata.delete('pauseReason');
+  subscription.metadata.delete('pausedBy');
+
+  // Audit trail
+  subscription.metadata.set('lastRestoredBy', restoredBy);
+  subscription.metadata.set('lastRestoredAt', now.toISOString());
+  subscription.metadata.set('lastExtensionDays', daysExtended.toString());
+
+  await subscription.save({ session });
+  return { restored: true, daysExtended };
+}
+
+// ─── Service ───────────────────────────────────────────────────────────────────
+
 export class AdminAccountManagementService {
-  
+
   /**
    * ============================================
    * ADMIN ACCOUNT DEACTIVATION
    * ============================================
-   * - Bypasses user ownership check
-   * - Adds admin authorization
-   * - Sends admin-specific email
    */
   static async adminDeactivateAccount(
     userId: string,
@@ -48,10 +151,10 @@ export class AdminAccountManagementService {
       const stats = {
         eventsUnpublished: 0,
         registrationsAffected: 0,
-        emailsSent: 0
+        emailsSent: 0,
+        subscriptionDaysExtended: 0,
       };
 
-      // 1. Get user and profile (NO ownership check - admin bypass)
       const user = await User.findById(userId).session(session);
       if (!user) throw new Error('User not found');
 
@@ -66,7 +169,7 @@ export class AdminAccountManagementService {
         throw new Error('Account is pending deletion. Cannot deactivate.');
       }
 
-      // 2. Update profile status
+      // 1. Update profile status
       profile.activeStatus = 'deactivated';
       profile.deactivatedAt = new Date();
       profile.metadata = {
@@ -74,30 +177,25 @@ export class AdminAccountManagementService {
         deactivatedBy: adminId,
         deactivatedByEmail: adminEmail,
         deactivationReason: reason || 'Deactivated by administrator',
-        deactivatedAt: new Date()
+        deactivatedAt: new Date(),
       };
       await profile.save({ session });
 
-      // 3. Pause subscription
-      const subscription = await Subscription.findOne({ 
+      // 2. Pause subscription — records pausedAt so restoration can extend the period
+      await pauseSubscription(
         userId,
-        status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] }
-      }).session(session);
-      
-      if (subscription) {
-        subscription.status = SubscriptionStatus.PAUSED;
-        subscription.metadata.set('deactivationReason', reason || 'Account deactivated by admin');
-        subscription.metadata.set('deactivatedBy', adminEmail);
-        subscription.metadata.set('deactivatedAt', new Date().toISOString());
-        await subscription.save({ session });
-      }
+        reason || 'Account deactivated by admin',
+        adminEmail,
+        'deactivation',
+        session
+      );
 
-      // 4. Unpublish all active events
-      const activeEvents = await Event.find({ 
+      // 3. Unpublish all active events
+      const activeEvents = await Event.find({
         organizerId: userId,
         status: EventStatus.PUBLISHED,
         isDeleted: false,
-        isArchived: false
+        isArchived: false,
       }).session(session);
 
       stats.eventsUnpublished = activeEvents.length;
@@ -105,33 +203,28 @@ export class AdminAccountManagementService {
       for (const event of activeEvents) {
         event.status = EventStatus.DRAFT;
         event.isPublic = false;
-        
         event.set('deactivationMetadata', {
           deactivatedAt: new Date(),
           reason: 'Account deactivated by administrator',
           deactivatedBy: adminEmail,
-          autoRestore: true
+          autoRestore: true,
         });
-        
         await event.save({ session });
 
         const registrationCount = await Registration.countDocuments({
           eventId: event._id,
-          status: { $in: [RegistrationStatus.CONFIRMED, RegistrationStatus.PENDING] }
+          status: { $in: [RegistrationStatus.CONFIRMED, RegistrationStatus.PENDING] },
         }).session(session);
-        
+
         stats.registrationsAffected += registrationCount;
       }
 
-      // 5. Delete all notifications
-      await Notification.deleteMany({ 
-        $or: [
-          { receiverId: userId },
-          { senderId: userId }
-        ]
+      // 4. Clear notifications
+      await Notification.deleteMany({
+        $or: [{ receiverId: userId }, { senderId: userId }],
       }).session(session);
 
-      // 6. Send admin deactivation email
+      // 5. Email
       if (sendEmail && user.email) {
         await sendAccountDeactivationEmail({
           email: user.email,
@@ -139,25 +232,22 @@ export class AdminAccountManagementService {
           reason: reason || `Your account was deactivated by an administrator: ${adminEmail}`,
           deactivatedBy: adminEmail,
           reactivationPossible: true,
-          reactivationInstructions: "Contact support to request account reactivation after addressing the violation.",
-          supportEmail: "support@nomeo-events.com"
+          reactivationInstructions:
+            'Contact support to request account reactivation after addressing the violation.',
+          supportEmail: 'support@nomeo-events.com',
         });
         stats.emailsSent++;
       }
 
       await session.commitTransaction();
 
-      console.log(`✅ Admin deactivated account for user ${userId}:`, stats);
-      
       return {
         success: true,
-        message: 'Account deactivated successfully by admin. Events are hidden but can be restored.',
-        stats
+        message: 'Account deactivated. Subscription paused — time will be extended on restoration.',
+        stats,
       };
-
     } catch (error) {
       await session.abortTransaction();
-      console.error('Admin account deactivation failed:', error);
       throw error;
     } finally {
       session.endSession();
@@ -181,20 +271,21 @@ export class AdminAccountManagementService {
       const stats = {
         eventsUnpublished: 0,
         registrationsAffected: 0,
-        emailsSent: 0
+        emailsSent: 0,
+        subscriptionDaysExtended: 0,
       };
 
-      const profile = await Profile.findOne({ 
+      const profile = await Profile.findOne({
         userId,
         activeStatus: 'deactivated',
-        'metadata.deletionScheduled': { $exists: false }
+        'metadata.deletionScheduled': { $exists: false },
       }).session(session);
 
       if (!profile) {
         throw new Error('Account not found or pending permanent deletion');
       }
 
-      // Restore profile
+      // 1. Restore profile
       profile.activeStatus = 'active';
       profile.deactivatedAt = undefined;
       profile.metadata = {
@@ -204,29 +295,26 @@ export class AdminAccountManagementService {
         deactivatedByEmail: undefined,
         deactivationReason: undefined,
         reactivatedBy: adminEmail,
-        reactivatedAt: new Date()
+        reactivatedAt: new Date(),
       };
       await profile.save({ session });
 
-      // Restore subscription if paused
-      const subscription = await Subscription.findOne({
-        userId,
-        status: SubscriptionStatus.PAUSED
-      }).session(session);
+      // 2. Restore subscription + extend period by paused duration
+      const { restored, daysExtended } = await restoreSubscription(userId, adminEmail, session);
+      stats.subscriptionDaysExtended = daysExtended;
 
-      if (subscription) {
-        if (new Date() <= subscription.currentPeriodEnd) {
-          subscription.status = SubscriptionStatus.ACTIVE;
-          await subscription.save({ session });
-        }
+      if (!restored && daysExtended === 0) {
+        // Subscription lapsed during deactivation — nothing to restore but that's fine,
+        // the user can re-subscribe. We log but don't fail the reactivation.
+        console.warn(`[adminReactivateAccount] Subscription for ${userId} lapsed during deactivation — not restored.`);
       }
 
-      // Republish events
+      // 3. Republish events that were auto-hidden on deactivation
       const events = await Event.find({
         organizerId: userId,
         status: EventStatus.DRAFT,
         isDeleted: false,
-        'deactivationMetadata.autoRestore': true
+        'deactivationMetadata.autoRestore': true,
       }).session(session);
 
       let eventsRestored = 0;
@@ -241,14 +329,11 @@ export class AdminAccountManagementService {
 
       await session.commitTransaction();
 
-      console.log(`✅ Admin reactivated account for user ${userId}: ${eventsRestored} events restored`);
-
       return {
         success: true,
-        message: `Account reactivated successfully by admin. ${eventsRestored} events restored.`,
-        stats
+        message: `Account reactivated. ${eventsRestored} events restored. Subscription extended by ${daysExtended} days.`,
+        stats,
       };
-
     } catch (error) {
       await session.abortTransaction();
       throw error;
@@ -277,7 +362,8 @@ export class AdminAccountManagementService {
       const stats = {
         eventsUnpublished: 0,
         registrationsAffected: 0,
-        emailsSent: 0
+        emailsSent: 0,
+        subscriptionDaysExtended: 0,
       };
 
       const user = await User.findById(userId).session(session);
@@ -294,13 +380,14 @@ export class AdminAccountManagementService {
         throw new Error('Cannot suspend a deactivated account');
       }
 
-      // Update profile to suspended
+      // 1. Update profile
+      const expectedReactivation = duration
+        ? new Date(Date.now() + duration * 86_400_000)
+        : undefined;
+
       profile.activeStatus = 'suspended';
       profile.suspendedAt = new Date();
       profile.suspensionReason = reason;
-      
-      const expectedReactivation = duration ? new Date(Date.now() + duration * 24 * 60 * 60 * 1000) : undefined;
-      
       profile.metadata = {
         ...profile.metadata,
         suspensionDuration: duration,
@@ -308,19 +395,21 @@ export class AdminAccountManagementService {
         suspendedBy: adminId,
         suspendedByEmail: adminEmail,
         suspensionReason: reason,
-        suspendedAt: new Date()
+        suspendedAt: new Date(),
       };
-      
       await profile.save({ session });
 
-      // Update user status
+      // 2. Update user status
       await User.findByIdAndUpdate(userId, { status: 'suspended' }).session(session);
 
-      // Unpublish events (optional - can keep hidden during suspension)
-      const activeEvents = await Event.find({ 
+      // 3. Pause subscription — records pausedAt for later extension calculation
+      await pauseSubscription(userId, reason, adminEmail, 'suspension', session);
+
+      // 4. Unpublish events
+      const activeEvents = await Event.find({
         organizerId: userId,
         status: EventStatus.PUBLISHED,
-        isDeleted: false
+        isDeleted: false,
       }).session(session);
 
       stats.eventsUnpublished = activeEvents.length;
@@ -332,22 +421,22 @@ export class AdminAccountManagementService {
           deactivatedAt: new Date(),
           reason: 'Account suspended by administrator',
           deactivatedBy: adminEmail,
-          autoRestore: true
+          autoRestore: true,
         });
         await event.save({ session });
       }
 
-      // Send suspension email
+      // 5. Email
       if (sendEmail && user.email) {
         await sendAccountSuspensionEmail({
           email: user.email,
           name: profile.fullName || user.name,
-          reason: reason,
+          reason,
           duration,
           expectedReactivation,
           suspendedBy: adminEmail,
-          appealDeadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-          supportEmail: "support@nomeo-events.com"
+          appealDeadline: new Date(Date.now() + 14 * 86_400_000),
+          supportEmail: 'support@nomeo-events.com',
         });
         stats.emailsSent++;
       }
@@ -356,10 +445,9 @@ export class AdminAccountManagementService {
 
       return {
         success: true,
-        message: `Account suspended successfully by admin${duration ? ` for ${duration} days` : ''}`,
-        stats
+        message: `Account suspended${duration ? ` for ${duration} days` : ''}. Subscription paused — time will be extended on lift.`,
+        stats,
       };
-
     } catch (error) {
       await session.abortTransaction();
       throw error;
@@ -386,7 +474,8 @@ export class AdminAccountManagementService {
       const stats = {
         eventsUnpublished: 0,
         registrationsAffected: 0,
-        emailsSent: 0
+        emailsSent: 0,
+        subscriptionDaysExtended: 0,
       };
 
       const user = await User.findById(userId).session(session);
@@ -403,7 +492,7 @@ export class AdminAccountManagementService {
         throw new Error('Account is pending deletion. Cannot lift suspension.');
       }
 
-      // Restore profile to active
+      // 1. Restore profile
       profile.activeStatus = 'active';
       profile.suspendedAt = undefined;
       profile.suspensionReason = undefined;
@@ -417,38 +506,29 @@ export class AdminAccountManagementService {
         suspendedAt: undefined,
         suspensionLiftedBy: adminEmail,
         suspensionLiftedAt: new Date(),
-        suspensionLiftedReason: 'Administrative action'
+        suspensionLiftedReason: 'Administrative action',
       };
       await profile.save({ session });
 
-      // Update user status
+      // 2. Update user status
       await User.findByIdAndUpdate(userId, { status: 'active' }).session(session);
 
-      // Restore subscription if it was affected
-      const subscription = await Subscription.findOne({
-        userId,
-        status: SubscriptionStatus.PAUSED,
-        'metadata.suspensionLifted': { $exists: false }
-      }).session(session);
+      // 3. Restore subscription + extend period by exact pause duration
+      const { restored, daysExtended } = await restoreSubscription(userId, adminEmail, session);
+      stats.subscriptionDaysExtended = daysExtended;
 
-      if (subscription) {
-        if (new Date() <= subscription.currentPeriodEnd) {
-          subscription.status = SubscriptionStatus.ACTIVE;
-          subscription.metadata.set('suspensionLifted', true);
-          subscription.metadata.set('suspensionLiftedAt', new Date().toISOString());
-          subscription.metadata.set('suspensionLiftedBy', adminEmail);
-          await subscription.save({ session });
-        }
+      if (!restored && daysExtended === 0) {
+        console.warn(`[adminLiftSuspension] Subscription for ${userId} lapsed during suspension — not restored.`);
       }
 
-      // Republish events that were unpublished during suspension
+      // 4. Republish events that were auto-hidden during suspension
       const events = await Event.find({
         organizerId: userId,
         status: EventStatus.DRAFT,
         isDeleted: false,
         isArchived: false,
         'deactivationMetadata.autoRestore': true,
-        'deactivationMetadata.reason': 'Account suspended by administrator'
+        'deactivationMetadata.reason': 'Account suspended by administrator',
       }).session(session);
 
       let eventsRestored = 0;
@@ -461,32 +541,29 @@ export class AdminAccountManagementService {
       }
       stats.eventsUnpublished = eventsRestored;
 
-      // Send notification email about suspension being lifted
+      // 5. Email
       if (sendEmail && user.email) {
         await this.sendSuspensionLiftedEmail({
           email: user.email,
           name: profile.fullName || user.name,
           liftedBy: adminEmail,
           liftedAt: new Date(),
-          eventsRestored: eventsRestored,
-          supportEmail: "support@nomeo-events.com"
+          eventsRestored,
+          daysExtended,
+          supportEmail: 'support@nomeo-events.com',
         });
         stats.emailsSent++;
       }
 
       await session.commitTransaction();
 
-      console.log(`✅ Admin lifted suspension for user ${userId}: ${eventsRestored} events restored`);
-
       return {
         success: true,
-        message: `Suspension lifted successfully by admin. ${eventsRestored} events restored.`,
-        stats
+        message: `Suspension lifted. ${eventsRestored} events restored. Subscription extended by ${daysExtended} days.`,
+        stats,
       };
-
     } catch (error) {
       await session.abortTransaction();
-      console.error('Admin lift suspension failed:', error);
       throw error;
     } finally {
       session.endSession();
@@ -514,7 +591,7 @@ export class AdminAccountManagementService {
         eventsDeleted: 0,
         registrationsCancelled: 0,
         refundsInitiated: 0,
-        emailsSent: 0
+        emailsSent: 0,
       };
 
       const user = await User.findById(userId).session(session);
@@ -524,11 +601,10 @@ export class AdminAccountManagementService {
       if (!profile) throw new Error('Profile not found');
 
       if (hardDelete) {
-        // HARD DELETE - Immediate permanent deletion
-        // Cancel subscription
-        const subscription = await Subscription.findOne({ 
+        // Cancel subscription outright — no restoration needed
+        const subscription = await Subscription.findOne({
           userId,
-          status: { $ne: SubscriptionStatus.CANCELLED }
+          status: { $ne: SubscriptionStatus.CANCELLED },
         }).session(session);
 
         if (subscription) {
@@ -536,10 +612,9 @@ export class AdminAccountManagementService {
           await subscription.save({ session });
         }
 
-        // Handle all events
-        const allEvents = await Event.find({ 
+        const allEvents = await Event.find({
           organizerId: userId,
-          isDeleted: false
+          isDeleted: false,
         }).session(session);
 
         stats.eventsDeleted = allEvents.length;
@@ -554,13 +629,13 @@ export class AdminAccountManagementService {
         for (const event of allEvents) {
           const registrations = await Registration.find({
             eventId: event._id,
-            status: { 
+            status: {
               $in: [
-                RegistrationStatus.CONFIRMED, 
+                RegistrationStatus.CONFIRMED,
                 RegistrationStatus.PENDING,
-                RegistrationStatus.WAITLISTED
-              ] 
-            }
+                RegistrationStatus.WAITLISTED,
+              ],
+            },
           }).session(session);
 
           let registrationsCancelled = 0;
@@ -568,20 +643,19 @@ export class AdminAccountManagementService {
 
           for (const registration of registrations) {
             await registration.cancel(
-              `Event cancelled: Organizer account permanently deleted by admin`,
+              'Event cancelled: Organizer account permanently deleted by admin',
               'by_admin'
             );
-
             registrationsCancelled++;
 
             if (registration.paymentStatus === PaymentStatus.COMPLETED) {
               refundsInitiated++;
             }
 
-            // Send cancellation email to attendee
-            const refundInfo = registration.paymentStatus === PaymentStatus.COMPLETED
-              ? `Your payment of ${registration.currency} ${registration.price} will be refunded within 7-14 business days.`
-              : 'No payment was made for this registration.';
+            const refundInfo =
+              registration.paymentStatus === PaymentStatus.COMPLETED
+                ? `Your payment of ${registration.currency} ${registration.price} will be refunded within 7-14 business days.`
+                : 'No payment was made for this registration.';
 
             await sendEventCancellationToAttendees({
               email: registration.attendeeEmail,
@@ -592,26 +666,25 @@ export class AdminAccountManagementService {
               registrationNumber: registration.registrationNumber,
               refundInfo,
               ticketType: registration.planName,
-              groupSize: registration.isGroupRegistration ? registration.groupSize : undefined
+              groupSize: registration.isGroupRegistration ? registration.groupSize : undefined,
             });
 
             stats.emailsSent++;
           }
 
           await event.softDelete();
-          
+
           eventsSummary.push({
             title: event.title,
             date: event.startDate.toISOString(),
             registrationsAffected: registrationsCancelled,
-            refundsInitiated
+            refundsInitiated,
           });
 
           stats.registrationsCancelled += registrationsCancelled;
           stats.refundsInitiated += refundsInitiated;
         }
 
-        // Send summary to organizer
         await sendOrganizerEventsCancelledEmail({
           email: user.email,
           name: profile.fullName || user.name,
@@ -621,19 +694,14 @@ export class AdminAccountManagementService {
           totalRegistrationsAffected: stats.registrationsCancelled,
           totalRefundsInitiated: stats.refundsInitiated,
           eventsSummary,
-          supportEmail: 'support@nomeo-events.com'
+          supportEmail: 'support@nomeo-events.com',
         });
         stats.emailsSent++;
 
-        // Delete notifications
-        await Notification.deleteMany({ 
-          $or: [
-            { receiverId: userId },
-            { senderId: userId }
-          ]
+        await Notification.deleteMany({
+          $or: [{ receiverId: userId }, { senderId: userId }],
         }).session(session);
 
-        // Delete user and profile
         await profile.deleteOne({ session });
         await user.deleteOne({ session });
 
@@ -642,11 +710,11 @@ export class AdminAccountManagementService {
             email: user.email,
             name: profile.fullName || user.name,
             reason: reason || `Permanently deleted by administrator: ${adminEmail}`,
-            deletionType: "hard",
+            deletionType: 'hard',
             affectedEvents: stats.eventsDeleted,
             affectedRegistrations: stats.registrationsCancelled,
             initiatedBy: adminEmail,
-            supportEmail: "support@nomeo-events.com"
+            supportEmail: 'support@nomeo-events.com',
           });
           stats.emailsSent++;
         }
@@ -655,18 +723,17 @@ export class AdminAccountManagementService {
 
         return {
           success: true,
-          message: `Account permanently deleted by admin. ${stats.eventsDeleted} events cancelled, ${stats.registrationsCancelled} attendees notified.`,
-          stats
+          message: `Account permanently deleted. ${stats.eventsDeleted} events cancelled, ${stats.registrationsCancelled} attendees notified.`,
+          stats,
         };
-
       } else {
-        // SOFT DELETE - 30-day grace period
+        // SOFT DELETE — 30-day grace period
         if (profile.metadata?.deletionScheduled) {
           throw new Error('Account is already scheduled for deletion');
         }
 
         const deletionDate = new Date();
-        const finalDeletionDate = new Date(deletionDate.getTime() + 30 * 86400000);
+        const finalDeletionDate = new Date(deletionDate.getTime() + 30 * 86_400_000);
 
         profile.activeStatus = 'deactivated';
         profile.metadata = {
@@ -675,7 +742,7 @@ export class AdminAccountManagementService {
           finalDeletionDate,
           deletionReason: reason || `Scheduled for deletion by admin (${adminEmail})`,
           deletedBy: adminId,
-          deletedByEmail: adminEmail
+          deletedByEmail: adminEmail,
         };
         await profile.save({ session });
 
@@ -684,10 +751,10 @@ export class AdminAccountManagementService {
             email: user.email,
             name: profile.fullName || user.name,
             reason: reason || `Scheduled for deletion by administrator: ${adminEmail}`,
-            deletionType: "soft",
+            deletionType: 'soft',
             scheduledDeletionDate: finalDeletionDate,
             initiatedBy: adminEmail,
-            supportEmail: "support@nomeo-events.com"
+            supportEmail: 'support@nomeo-events.com',
           });
           stats.emailsSent++;
         }
@@ -696,14 +763,12 @@ export class AdminAccountManagementService {
 
         return {
           success: true,
-          message: "Account scheduled for permanent deletion by admin. 30-day grace period started.",
-          stats
+          message: 'Account scheduled for permanent deletion. 30-day grace period started.',
+          stats,
         };
       }
-
     } catch (error) {
       await session.abortTransaction();
-      console.error('Admin account deletion failed:', error);
       throw error;
     } finally {
       session.endSession();
@@ -714,11 +779,11 @@ export class AdminAccountManagementService {
    * Get account status for admin view
    */
   static async getAdminAccountStatus(userId: string) {
-    const profile = await Profile.findOne({ userId }).select('activeStatus metadata suspensionReason suspendedAt');
-    
-    if (!profile) {
-      return { exists: false };
-    }
+    const profile = await Profile.findOne({ userId }).select(
+      'activeStatus metadata suspensionReason suspendedAt'
+    );
+
+    if (!profile) return { exists: false };
 
     return {
       exists: true,
@@ -732,13 +797,14 @@ export class AdminAccountManagementService {
       suspensionReason: profile.suspensionReason,
       expectedReactivation: profile.metadata?.expectedReactivation,
       deletedBy: profile.metadata?.deletedByEmail,
-      canReactivate: profile.activeStatus === 'deactivated' && !profile.metadata?.deletionScheduled,
-      canLiftSuspension: profile.activeStatus === 'suspended'
+      canReactivate:
+        profile.activeStatus === 'deactivated' && !profile.metadata?.deletionScheduled,
+      canLiftSuspension: profile.activeStatus === 'suspended',
     };
   }
 
   /**
-   * Helper method to send suspension lifted email
+   * Helper — suspension lifted email
    */
   private static async sendSuspensionLiftedEmail(params: {
     email: string;
@@ -746,22 +812,11 @@ export class AdminAccountManagementService {
     liftedBy: string;
     liftedAt: Date;
     eventsRestored: number;
+    daysExtended: number;
     supportEmail: string;
   }) {
-    // Implementation for sending suspension lifted email
-    // You can create a separate email function or use an existing email service
-    console.log(`Sending suspension lifted email to ${params.email}`);
-    
-    // Example implementation (you'll need to create the actual email function):
-    /*
-    await sendAccountSuspensionLiftedEmail({
-      email: params.email,
-      name: params.name,
-      liftedBy: params.liftedBy,
-      liftedAt: params.liftedAt,
-      eventsRestored: params.eventsRestored,
-      supportEmail: params.supportEmail
-    });
-    */
+    console.log(`Sending suspension lifted email to ${params.email} — ${params.daysExtended} days added back`);
+    // TODO: replace with your actual email function, e.g.:
+    // await sendAccountSuspensionLiftedEmail({ ...params });
   }
 }
