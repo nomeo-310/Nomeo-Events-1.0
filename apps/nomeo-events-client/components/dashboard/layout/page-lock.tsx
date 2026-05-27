@@ -49,7 +49,7 @@ const STATIC_PRESETS: Record<Exclude<LockCondition, 'email_unverified'>, LockCon
     title: 'Your trial has ended',
     description:
       'Your 14-day free trial has expired. Choose a plan to continue creating events and managing your profile.',
-    action: { label: 'View plans', href: '/pricing' },
+    action: { label: 'View plans', href: '/subscriptions' },
     secondaryAction: { label: 'Compare plans', href: '/pricing#comparison' },
   },
   subscription_required: {
@@ -57,7 +57,7 @@ const STATIC_PRESETS: Record<Exclude<LockCondition, 'email_unverified'>, LockCon
     title: 'Upgrade to access this',
     description:
       'This feature is available on higher plans. Upgrade to unlock it and everything else your tier includes.',
-    action: { label: 'Upgrade plan', href: '/pricing' },
+    action: { label: 'Upgrade plan', href: '/subscriptions' },
   },
   unverified: {
     icon: 'verify',

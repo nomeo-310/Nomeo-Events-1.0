@@ -25,7 +25,11 @@ import { PaymentDetailsModal } from "./payment-details-modal";
 interface Payment {
   _id: string;
   purpose: string;
-  eventId?: string;
+  eventId?: {
+    slug: string;
+    title: string;    
+    _id: string;
+  };
   registrationId?: string;
   subscriptionId?: string;
   planId?: string;
@@ -654,7 +658,7 @@ export default function PaymentPage() {
             <div className="flex gap-2">
               <ActionDropdown
                 trigger={
-                  <Button type="button" variant="outline" size="sm" className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                  <Button type="button" variant="outline" className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 h-10 px-3">
                     <HugeiconsIcon icon={FileSpreadsheetIcon} className="h-3.5 w-3.5 mr-2" />
                     Export
                   </Button>
@@ -670,8 +674,7 @@ export default function PaymentPage() {
                 type="button"
                 onClick={handleRefresh}
                 variant="outline"
-                size="sm"
-                className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 h-10 px-3"
               >
                 <HugeiconsIcon icon={RefreshIcon} className={`h-3.5 w-3.5 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
@@ -1071,10 +1074,10 @@ export default function PaymentPage() {
         size="md"
         footer={
           <div className="flex gap-2 justify-end">
-            <Button type="button" onClick={() => { setRefundModalOpen(false); setRefundReason(''); setRefundAmount(''); }} variant="outline" size="sm" className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+            <Button type="button" onClick={() => { setRefundModalOpen(false); setRefundReason(''); setRefundAmount(''); }} variant="outline" className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 h-10 px-3">
               Cancel
             </Button>
-            <Button type="button" onClick={handleRefund} size="sm" className="bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white">
+            <Button type="button" onClick={handleRefund}  className="bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white h-10 px-3">
               <HugeiconsIcon icon={MoneyBack01Icon} className="h-3.5 w-3.5 mr-1.5" /> Process Refund
             </Button>
           </div>

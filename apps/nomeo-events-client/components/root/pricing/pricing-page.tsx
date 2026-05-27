@@ -10,6 +10,7 @@ import { authClient } from '@/lib/auth-client';
 import { useModal } from '@/hooks/use-modal';
 import { AuthWrapper } from '@/components/root/auth/auth-wrapper';
 import { saveReturnUrl } from '@/lib/return-url';
+import { toast } from 'sonner';
 
 import { SelectedPlanForPayment, TierPricing, IntervalPricing } from './types';
 import { PricingSkeleton } from './pricing-skeleton';
@@ -64,45 +65,43 @@ export const PricingPage: React.FC = () => {
   }, [tiers, selectedTier]);
 
   // ── Subscribe flow ─────────────────────────────────────────────────────────
-const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing) => {
-  if (!session) { saveReturnUrl(); handleOpenLogin(); return; }
+  // No pre-created pending subscription. We only resolve planId + planSlug
+  // here so PaymentModal can call POST /api/payments/initiate with just
+  // { purpose, email, amount, planId }.
+  // The subscription record is created by POST /api/subscriptions AFTER
+  // payment is verified — mirroring exactly how registration works.
+  const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing) => {
+    if (!session) { saveReturnUrl(); handleOpenLogin(); return; }
 
-  try {
-    // Step 1: fetch planId (existing)
-    const res     = await fetch(`/api/plans/tier/${tier.tier}`);
-    const data    = await res.json();
-    const planDoc = data.success ? data.data.plans.find((p: any) => p.interval === pricing.interval) : null;
-    const planId  = planDoc?._id ?? '';
-    const slug = planDoc.slug;
+    try {
+      const res  = await fetch(`/api/plans/tier/${tier.tier}`);
+      const data = await res.json();
 
-    // Step 2: create a pending subscription so we have an ID to link payment to
-    let subscriptionId = '';
-    if (planId && pricing.priceKobo > 0) {
-      const subRes = await fetch('/api/subscriptions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          planId,
-          tier: tier.tier,
-          interval: pricing.interval,
-          amount: pricing.priceKobo / 100,
-          status: 'pending',           // ← pending until webhook confirms payment
-          trialDays: pricing.trialDays,
-        }),
+      if (!data.success) {
+        toast.error('Could not load plan details. Please try again.');
+        return;
+      }
+
+      const planDoc = data.data.plans.find((p: any) => p.interval === pricing.interval);
+
+      if (!planDoc) {
+        toast.error('Plan not found for this billing interval.');
+        return;
+      }
+
+      setSelectedPlanForPayment({
+        tier,
+        pricing,
+        planId: planDoc._id ?? '',
+        slug:   planDoc.slug ?? '',
+        subscriptionId: '', // intentionally empty — created post-payment
       });
-      const subData = await subRes.json();
-      subscriptionId = subData?.data?._id ?? subData?._id ?? '';
+
+      setShowConfirmationModal(true);
+    } catch {
+      toast.error('Something went wrong. Please try again.');
     }
-
-    setSelectedPlanForPayment({ tier, pricing, planId, subscriptionId, slug });
-    setShowConfirmationModal(true);
-
-  } catch {
-    // Fallback — open modal without subscriptionId, free plans don't need it
-    setSelectedPlanForPayment({ tier, pricing, planId: '', subscriptionId: '', slug: ''});
-    setShowConfirmationModal(true);
-  }
-};
+  };
 
   const handleConfirmSubscription = () => {
     setShowConfirmationModal(false);
@@ -127,7 +126,6 @@ const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing)
   const displayTier    = tiers.find((t) => t.tier === selectedTier);
   const displayPricing = displayTier ? getPricingForTier(displayTier) : null;
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950">
 
@@ -188,13 +186,11 @@ const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing)
               )}
             </button>
           </div>
-
         </div>
       </div>
 
       {/* Body */}
       <div className="container mx-auto px-4 pb-16 sm:pb-20">
-        {/* Mobile plan accordion */}
         <MobilePlanSelector
           tiers={tiers}
           selectedTier={selectedTier}
@@ -225,7 +221,6 @@ const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing)
           <div className="flex-1 min-w-0 space-y-4">
             {displayTier && displayPricing ? (
               <>
-                {/* Plan header card */}
                 <div className={cn(
                   'rounded-xl border p-4 sm:p-6',
                   displayTier.isPopular
@@ -287,7 +282,6 @@ const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing)
                   )}
                 </div>
 
-                {/* Limits */}
                 <div className="rounded-xl border border-gray-100 dark:border-gray-800 p-4 sm:p-6 bg-gray-50 dark:bg-gray-900/30">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Plan limits</h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -298,7 +292,6 @@ const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing)
                   </div>
                 </div>
 
-                {/* Features */}
                 <div className="rounded-xl border border-gray-100 dark:border-gray-800 p-4 sm:p-6 bg-gray-50 dark:bg-gray-900/30">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">All features</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-0.5">
@@ -325,8 +318,7 @@ const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing)
               <div className="space-y-2">
                 <h3 className="text-xl sm:text-2xl font-semibold text-white">Ready to grow your events?</h3>
                 <p className="text-indigo-100 text-xs sm:text-sm max-w-lg">
-                  Join thousands of event organizers. Start your 14-day free trial on any paid plan — no credit card required.
-                  Cancel anytime.
+                  Join thousands of event organizers. Start your 14-day free trial on any paid plan — no credit card required. Cancel anytime.
                 </p>
                 <div className="flex flex-wrap gap-3 justify-center lg:justify-start mt-3">
                   {['No credit card required', '14-day free trial', 'Cancel anytime'].map((item) => (
@@ -349,7 +341,7 @@ const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing)
         </div>
       )}
 
-      {/* ── Modals ────────────────────────────────────────────────────────────── */}
+      {/* ── Modals ─────────────────────────────────────────────────────────── */}
       {showConfirmationModal && selectedPlanForPayment && (
         <ConfirmationModal
           open={showConfirmationModal}
@@ -365,7 +357,6 @@ const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing)
         <PaymentModal
           planSlug={selectedPlanForPayment.slug}
           planId={selectedPlanForPayment.planId}
-          subscriptionId={selectedPlanForPayment.subscriptionId}  // ← add this
           tier={selectedPlanForPayment.tier}
           pricing={selectedPlanForPayment.pricing}
           interval={selectedInterval}

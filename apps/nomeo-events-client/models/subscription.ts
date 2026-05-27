@@ -201,7 +201,9 @@ SubscriptionSchema.statics.findActiveByUser = function (
     status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
     currentPeriodEnd: { $gte: new Date() },
   })
-    .populate('planId')
+    .populate({ path: 'planId', model: 'Plan' })
+    .populate({ path: 'payments', model: 'Payment' })
+    .lean(false)
     .exec();
 };
 

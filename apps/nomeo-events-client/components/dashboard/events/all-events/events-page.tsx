@@ -110,7 +110,7 @@ export default function EventsPage() {
               disabled={!allowCreation.allowed}
               type="button"
               onClick={() => router.push("/dashboard/events/create-event")}
-              className="disabled:bg-indigo-400 inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200 dark:shadow-indigo-900/30 self-start sm:self-auto"
+              className="disabled:bg-indigo-400 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200 dark:shadow-indigo-900/30 self-start sm:self-auto"
             >
               <HugeiconsIcon icon={PlusSignIcon} size={16} /> Create Event
             </button>

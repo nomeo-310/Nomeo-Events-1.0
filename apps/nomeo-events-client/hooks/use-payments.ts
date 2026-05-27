@@ -43,6 +43,175 @@ export interface Payment {
   updatedAt: string;
 }
 
+// New types for payment with plan details
+export interface PricingBreakdown {
+  originalKobo: number;
+  originalAmountFormatted: string;
+  discountKobo: number;
+  discountAmountFormatted: string;
+  finalKobo: number;
+  finalAmountFormatted: string;
+  discountPercentage: string;
+  couponApplied?: {
+    code: string;
+    description?: string;
+    discountType: string;
+    discountValue: number;
+    discountFormatted: string;
+  } | null;
+  discountApplied?: {
+    name: string;
+    description?: string;
+    discountType: string;
+    discountValue: number;
+    discountFormatted: string;
+  } | null;
+}
+
+export interface PlanFeature {
+  name: string;
+  description?: string;
+  included: boolean;
+  limit?: number;
+  unit?: string;
+  limitFormatted: string;
+}
+
+export interface PlanLimit {
+  maxEvents?: number;
+  maxEventsFormatted: string;
+  maxAttendeesPerEvent?: number;
+  maxAttendeesPerEventFormatted: string;
+  maxTeamMembers?: number;
+  maxTeamMembersFormatted: string;
+  storageGb?: number;
+  storageFormatted: string;
+}
+
+export interface PlanDiscount {
+  name: string;
+  description?: string;
+  discountType: string;
+  discountValue: number;
+  discountFormatted: string;
+  interval?: string;
+  validPeriod: {
+    startsAt?: string;
+    endsAt?: string;
+    isValid: boolean;
+  };
+}
+
+export interface PlanCoupon {
+  code: string;
+  description?: string;
+  discountType: string;
+  discountValue: number;
+  discountFormatted: string;
+  remainingRedemptions: string;
+  minAmountRequired: string;
+  applicableIntervals?: string[];
+  expiresAt?: string;
+  isExpired: boolean;
+}
+
+export interface PlanDetails {
+  _id: string;
+  name: string;
+  slug: string;
+  tier: string;
+  description?: string;
+  isActive: boolean;
+  isPublic: boolean;
+  pricing: {
+    basePriceKobo: number;
+    basePriceFormatted: string;
+    currency: string;
+    interval: string;
+    intervalFormatted: string;
+    isFree: boolean;
+    trialDays: number;
+    trialPeriodFormatted: string;
+  };
+  features: PlanFeature[];
+  limits: PlanLimit;
+  availableDiscounts: PlanDiscount[];
+  availableCoupons: PlanCoupon[];
+  sortOrder: number;
+  metadata: Record<string, any>;
+  paystackPlanCode?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentWithPlanDetails {
+  payment: {
+    _id: string;
+    purpose: PaymentPurpose;
+    provider: string;
+    amount: {
+      intended: number;
+      intendedFormatted: string;
+      paid: number;
+      paidFormatted: string;
+      discount: number;
+      discountFormatted: string;
+    };
+    couponApplied: {
+      code: string;
+      discountValue?: number;
+      discountFormatted: string | null;
+    } | null;
+    gateway: {
+      status: PaymentGatewayStatus;
+      reference: string;
+      paystackReference?: string;
+      channel?: string;
+      response?: string;
+      paidAt?: string;
+    };
+    paymentMethod: {
+      type?: string;
+      last4?: string;
+      bank?: string;
+      authorizationCode?: string;
+    } | null;
+    refund: {
+      refundedAt?: string;
+      amount?: number;
+      amountFormatted: string | null;
+      reference?: string;
+      reason?: string;
+    } | null;
+    context: {
+      registrationId?: string;
+      eventId?: string;
+      subscriptionId?: string;
+      planId?: string;
+    };
+    createdAt: string;
+    updatedAt: string;
+  };
+  planDetails: PlanDetails | null;
+  pricingBreakdown: PricingBreakdown | null;
+  summary: {
+    planName: string;
+    planTier: string;
+    billingInterval: string;
+    subtotal?: string;
+    discount?: string;
+    total?: string;
+    amountPaid: string | null;
+    paymentStatus: PaymentGatewayStatus;
+    trialPeriod: string;
+  } | null;
+}
+
+export interface PaymentWithPlanDetailsResponse {
+  success: boolean;
+  data: PaymentWithPlanDetails;
+}
+
 export interface Pagination {
   page: number;
   limit: number;
@@ -123,6 +292,7 @@ export const paymentKeys = {
   list: (filters: PaymentListFilters) => [...paymentKeys.lists(), filters] as const,
   details: () => [...paymentKeys.all, 'detail'] as const,
   detail: (id: string) => [...paymentKeys.details(), id] as const,
+  detailWithPlan: (id: string) => [...paymentKeys.details(), id, 'with-plan'] as const,
   verify: (reference: string) => [...paymentKeys.all, 'verify', reference] as const
 };
 
@@ -176,6 +346,36 @@ export function usePayment(id: string, options?: Omit<UseQueryOptions<{ success:
   return useQuery({
     queryKey: paymentKeys.detail(id),
     queryFn: () => apiFetch<{ success: boolean; data: Payment }>(`/api/payments/${id}`),
+    enabled: !!id,
+    ...options
+  });
+}
+
+/**
+ * Get a single payment by ID with complete plan details.
+ * Includes full plan information, pricing breakdown, features, limits, discounts, and coupons.
+ * 
+ * @example
+ * const { data, isLoading } = usePaymentWithPlanDetails('payment_id_here');
+ * 
+ * // Access payment details
+ * console.log(data?.data.payment.amount.paidFormatted);
+ * 
+ * // Access plan details
+ * console.log(data?.data.planDetails?.pricing.intervalFormatted);
+ * console.log(data?.data.planDetails?.features);
+ * 
+ * // Access pricing breakdown
+ * console.log(data?.data.pricingBreakdown?.originalAmountFormatted);
+ * console.log(data?.data.pricingBreakdown?.finalAmountFormatted);
+ * 
+ * // Access summary
+ * console.log(data?.data.summary?.planName);
+ */
+export function usePaymentWithPlanDetails( id: string,  options?: Omit<UseQueryOptions<PaymentWithPlanDetailsResponse>, 'queryKey' | 'queryFn'>) {
+  return useQuery<PaymentWithPlanDetailsResponse>({
+    queryKey: paymentKeys.detailWithPlan(id),
+    queryFn: () => apiFetch<PaymentWithPlanDetailsResponse>(`/api/payments/${id}/with-plan-details`),
     enabled: !!id,
     ...options
   });
@@ -275,6 +475,7 @@ export function useRefundPayment() {
       }),
     onSuccess: (_data, { paymentId }) => {
       queryClient.invalidateQueries({ queryKey: paymentKeys.detail(paymentId) });
+      queryClient.invalidateQueries({ queryKey: paymentKeys.detailWithPlan(paymentId) });
       queryClient.invalidateQueries({ queryKey: paymentKeys.lists() });
     }
   });

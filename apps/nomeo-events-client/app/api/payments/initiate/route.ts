@@ -34,10 +34,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // KEY CHANGE: subscriptionId is no longer required or expected.
+    // The subscription record doesn't exist yet at initiation time —
+    // it is created by POST /api/subscriptions after payment is verified,
+    // mirroring how event_registration works (no registrationId at initiation).
     if (purpose === PaymentPurpose.SUBSCRIPTION) {
-      if (!body.subscriptionId || !body.planId) {
+      if (!body.planId) {
         return NextResponse.json(
-          { success: false, message: 'subscriptionId and planId are required for subscription' },
+          { success: false, message: 'planId is required for subscription' },
           { status: 400 }
         );
       }
@@ -49,9 +53,9 @@ export async function POST(req: NextRequest) {
       {
         success: true,
         data: {
-          paymentId: result.payment._id,
-          reference: result.reference,
-          accessCode: result.accessCode,
+          paymentId:        result.payment._id,
+          reference:        result.reference,
+          accessCode:       result.accessCode,
           authorizationUrl: result.authorizationUrl,
         }
       },

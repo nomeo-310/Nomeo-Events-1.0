@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Cancel01Icon, Tick01Icon, Loading03Icon } from '@hugeicons/core-free-icons';
-// react-paystack accesses window at module load — lazy loaded below to avoid SSR crash.
 
 import { toast } from 'sonner';
 import { useCoupon } from '@/hooks/use-plans';
@@ -17,31 +16,31 @@ export enum PaymentPurpose {
   SUBSCRIPTION       = 'subscription',
 }
 
+// subscriptionId removed from props — subscription is created post-payment
 interface PaymentModalProps {
-  planId:         string;
-  planSlug:       string;
-  subscriptionId: string;
-  tier:           TierPricing;
-  pricing:        IntervalPricing;
-  interval:       PlanInterval;
-  userEmail:      string;
-  userName:       string;
-  onClose:        () => void;
-  onSuccess:      () => void;
+  planId:    string;
+  planSlug:  string;
+  tier:      TierPricing;
+  pricing:   IntervalPricing;
+  interval:  PlanInterval;
+  userEmail: string;
+  userName:  string;
+  onClose:   () => void;
+  onSuccess: () => void;
 }
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
-  planId, planSlug, subscriptionId, tier, pricing, interval,
+  planId, planSlug, tier, pricing, interval,
   userEmail, userName, onClose, onSuccess,
 }) => {
   const { validate, validating, result, clear } = useCoupon();
   const [couponCode, setCouponCode] = useState('');
-  const [processing, setProcessing] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
   const { subscribe, isSubscribing } = useSubscription();
   const queryClient = useQueryClient();
 
   // Lazy-load usePaystackPayment — react-paystack reads window at module load
-  // time which crashes SSR. Loading it inside useEffect is safe.
+  // time which crashes SSR.
   const [usePaystackPaymentHook, setUsePaystackPaymentHook] = useState<
     typeof import('react-paystack')['usePaystackPayment'] | null
   >(null);
@@ -50,49 +49,39 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     import('react-paystack').then((mod) => {
       setUsePaystackPaymentHook(() => mod.usePaystackPayment);
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Payment state ───────────────────────────────────────────────────────────
-  const [paymentReference, setPaymentReference] = useState<string | null>(null);
-  const [isInitiating, setIsInitiating] = useState(false);
-  const hasCompletedRef = useRef(false);
-
-  // ── CRITICAL: polling is only active after the user actually pays ───────────
-  // We keep a separate flag for this so polling never starts on mount —
-  // only after the Paystack modal closes following a real payment attempt.
-  // This is the main reason 200+ payment records were created: polling was
-  // starting immediately on mount and calling verify every 3s before the user
-  // even opened the Paystack modal, which in turn called the server repeatedly.
-  const [userHasPaid, setUserHasPaid] = useState(false);
-
-  const [retryCount, setRetryCount] = useState(0);
-  const { mutate: initiatePayment } = useInitiatePayment();
-
+  // ── Derived amount (coupon-aware) ──────────────────────────────────────────
   const finalAmount = result?.valid && result.discountAmount
     ? pricing.priceKobo - result.discountAmount
     : pricing.priceKobo;
 
   const isFree = finalAmount === 0;
 
-  // ── Initiate payment on mount and on retry ──────────────────────────────────
-  // Creates a Payment record on the server and gets a Paystack reference.
-  // Does NOT start polling — polling only starts after userHasPaid is set.
+  // ── Payment state — mirrors PaymentStep in registration exactly ────────────
+  const [paymentReference, setPaymentReference] = useState<string | null>(null);
+  const [userHasPaid,      setUserHasPaid]      = useState(false);
+  const [retryCount,       setRetryCount]       = useState(0);
+  const hasCompletedRef = useRef(false);
+
+  const { mutate: initiatePayment, isPending: isInitiating } = useInitiatePayment();
+
+  // Initiate on mount and on retry.
+  // Only planId sent — subscriptionId does NOT exist yet.
+  // The subscription is created in activateSubscription() after verify confirms.
   useEffect(() => {
-    if (isFree || !userEmail || !subscriptionId || !planId) return;
+    if (isFree || !userEmail || !planId) return;
 
     hasCompletedRef.current = false;
-    setPaymentReference(null);
-    setUserHasPaid(false); // reset so polling doesn't start prematurely on retry
-    setIsInitiating(true);
+    setUserHasPaid(false);
 
     initiatePayment(
       {
         purpose: PaymentPurpose.SUBSCRIPTION,
-        email: userEmail,
-        amount: finalAmount,
-        subscriptionId,
+        email:   userEmail,
+        amount:  finalAmount,
         planId,
+        // no subscriptionId here
         ...(result?.valid && {
           couponCode,
           couponDiscount: result.discountPercentage,
@@ -100,24 +89,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         }),
       },
       {
-        onSuccess: ({ data }) => {
-          setPaymentReference(data.reference);
-          setIsInitiating(false);
-        },
-        onError: () => {
-          toast.error('Could not prepare payment. Please try again.');
-          setIsInitiating(false);
-        },
+        onSuccess: ({ data }) => setPaymentReference(data.reference),
+        onError:   () => toast.error('Could not prepare payment. Please try again.'),
       }
     );
-  // retryCount re-runs this after abandonment. finalAmount re-runs after coupon.
+  // retryCount re-runs after abandonment; finalAmount re-runs after coupon applied
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryCount, finalAmount]);
 
-  // ── Poll verify — ONLY after user has attempted payment ────────────────────
-  // enabled is false until userHasPaid is set in handlePaystackClose/Success.
-  // This prevents the hundreds-of-payments problem where polling was creating
-  // verify calls (and therefore DB reads/writes) on every mount.
+  // ── Poll verify — only active after user interacts with Paystack ───────────
+  // Mirrors the registration PaymentStep guard exactly.
   const verifyQuery = useVerifyPayment(paymentReference ?? '', {
     enabled: !!paymentReference && userHasPaid && !hasCompletedRef.current,
     refetchInterval: (query) => {
@@ -133,9 +114,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     const responseRef = verifyQuery.data.data?.reference;
     const status      = verifyQuery.data.data?.gatewayStatus;
 
-    // Only act on data that belongs to the current reference.
-    // Stale cached data from a previous attempt would otherwise fire this
-    // effect immediately, showing the toast before the user does anything.
+    // Guard: only act on data belonging to the current reference.
+    // Prevents stale cache from a previous attempt firing immediately on retry.
     if (!paymentReference || responseRef !== paymentReference) return;
     if (!status) return;
 
@@ -143,42 +123,43 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       hasCompletedRef.current = true;
       activateSubscription(responseRef);
     } else if (status === 'failed' || status === 'abandoned') {
-      // Evict from cache so it never re-triggers this block
       queryClient.removeQueries({ queryKey: ['payments', 'verify', responseRef] });
       setUserHasPaid(false);
       setPaymentReference(null);
       setRetryCount((c) => c + 1);
       toast.error(
         status === 'abandoned'
-          ? 'Payment was not completed. Click Pay to try again.'
+          ? 'Payment not completed. Click Pay to try again.'
           : 'Payment failed. Please try again.'
       );
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [verifyQuery.data, paymentReference]);
 
-  // ── Activate subscription after payment confirmed ──────────────────────────
+  // ── Activate subscription — DB write happens here, post-payment ────────────
+  // Mirrors completeRegistration() in the registration modal exactly.
+  // POST /api/subscriptions receives { planSlug, paystackReference, couponCode? }
+  // and creates + activates the subscription atomically.
   const activateSubscription = async (reference: string) => {
-    setProcessing(true);
+    setIsConfirming(true);
     try {
       await subscribe({
         planSlug,
         paystackReference: reference,
         ...(result?.valid && couponCode ? { couponCode } : {}),
       });
-      toast.success('Payment successful! Your subscription is now active.');
+      toast.success('Subscription activated!');
       onSuccess();
-    } catch (err) {
-      console.error(err);
-      toast.error('Payment processed but activation failed. Please contact support.');
+    } catch {
+      toast.error('Payment confirmed but activation failed. Please contact support.');
     } finally {
-      setProcessing(false);
+      setIsConfirming(false);
     }
   };
 
   // ── Free subscription path ─────────────────────────────────────────────────
   const handleFreeSubscription = async () => {
-    setProcessing(true);
+    setIsConfirming(true);
     try {
       await subscribe({
         planSlug,
@@ -187,27 +168,23 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       });
       toast.success('Subscription started successfully!');
       onSuccess();
-    } catch (err) {
-      console.error(err);
+    } catch {
       toast.error('Failed to start subscription. Please try again.');
     } finally {
-      setProcessing(false);
+      setIsConfirming(false);
     }
   };
 
   // ── Paystack callbacks ─────────────────────────────────────────────────────
-  // onSuccess: user completed payment — start polling to confirm
   const handlePaystackSuccess = (response: { reference: string }) => {
     setUserHasPaid(true);
-    // Safety net: if reference somehow changed, update it
     if (response.reference && response.reference !== paymentReference) {
       setPaymentReference(response.reference);
     }
   };
 
-  // onClose: Paystack modal closed (paid or dismissed).
-  // Start polling regardless — if they paid, verify will return success.
-  // If they dismissed, verify will return pending then abandoned after timeout.
+  // onClose fires whether the user paid or dismissed.
+  // Polling starts either way — verify will return success or abandoned.
   const handlePaystackClose = () => {
     setUserHasPaid(true);
   };
@@ -238,9 +215,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     ] : []),
   ];
 
-  // ── usePaystackPayment ─────────────────────────────────────────────────────
-  // onSuccess and onClose are NOT part of HookConfig — they go as arguments
-  // onSuccess and onClose are passed as an object to initializePayment() — not in the config.
   const paystackConfig = {
     publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY!,
     email:     userEmail,
@@ -253,18 +227,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const initializePayment = usePaystackPaymentHook?.(paystackConfig) ?? null;
 
-  const canPay = !!paymentReference && !!initializePayment && !isInitiating && !processing && !isSubscribing && !hasCompletedRef.current;
+  // ── Derived UI flags ───────────────────────────────────────────────────────
+  const isPreparingReference = (isInitiating || !usePaystackPaymentHook) && !paymentReference;
+  const isAwaitingConfirmation = userHasPaid && (isConfirming || isSubscribing);
+  const canPay = !!paymentReference && !!initializePayment && !isInitiating && !isConfirming && !isSubscribing && !hasCompletedRef.current;
+  const priceDisplay = `₦${(finalAmount / 100).toLocaleString('en-NG')}`;
 
   const handlePayClick = () => {
     if (!canPay || !initializePayment) return;
-    // Callbacks passed here as arguments — this is the correct react-paystack API.
     initializePayment({ onSuccess: handlePaystackSuccess, onClose: handlePaystackClose });
   };
-
-  // ── Derived UI state ───────────────────────────────────────────────────────
-  const isConfirming       = userHasPaid && (processing || isSubscribing);
-  const isPreparingReference = isInitiating && !paymentReference;
-  const priceDisplay       = `₦${(finalAmount / 100).toLocaleString('en-NG')}`;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -380,13 +352,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           {pricing.trialDays > 0 && (
             <div className="bg-indigo-50 dark:bg-indigo-950 rounded-lg p-3 border border-indigo-100 dark:border-indigo-900">
               <p className="text-xs text-center text-indigo-600 dark:text-indigo-400">
-                ✨ You won't be charged for {pricing.trialDays} days — free trial included
+                You won't be charged for {pricing.trialDays} days — free trial included
               </p>
             </div>
           )}
 
-          {/* Confirming banner — only shown after user interacts with Paystack */}
-          {isConfirming && (
+          {/* Status banners */}
+          {isAwaitingConfirmation && (
             <div className="flex items-center gap-3 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800">
               <HugeiconsIcon icon={Loading03Icon} className="w-4 h-4 animate-spin text-indigo-600 dark:text-indigo-400 shrink-0" />
               <p className="text-xs text-indigo-700 dark:text-indigo-300">
@@ -395,7 +367,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
           )}
 
-          {/* Preparing banner */}
           {isPreparingReference && (
             <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
               <HugeiconsIcon icon={Loading03Icon} className="w-3 h-3 animate-spin shrink-0" />
@@ -416,14 +387,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             {isFree ? (
               <button
                 onClick={handleFreeSubscription}
-                disabled={processing || isSubscribing}
+                disabled={isConfirming || isSubscribing}
                 className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-50 transition-all active:scale-[0.98]"
               >
-                {processing || isSubscribing ? (
-                  <>
-                    <HugeiconsIcon icon={Loading03Icon} className="w-4 h-4 animate-spin inline mr-2" />
-                    Processing...
-                  </>
+                {isConfirming || isSubscribing ? (
+                  <><HugeiconsIcon icon={Loading03Icon} className="w-4 h-4 animate-spin inline mr-2" />Processing…</>
                 ) : 'Start Free Trial'}
               </button>
             ) : (
@@ -435,7 +403,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               >
                 {isPreparingReference ? (
                   <><HugeiconsIcon icon={Loading03Icon} className="w-4 h-4 animate-spin inline mr-2" />Preparing…</>
-                ) : isConfirming ? (
+                ) : isAwaitingConfirmation ? (
                   <><HugeiconsIcon icon={Loading03Icon} className="w-4 h-4 animate-spin inline mr-2" />Confirming…</>
                 ) : retryCount > 0 ? (
                   `Try Again — Pay ${priceDisplay}`

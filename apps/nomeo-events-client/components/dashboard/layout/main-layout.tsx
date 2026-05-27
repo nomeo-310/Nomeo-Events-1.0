@@ -7,7 +7,7 @@ import { authClient } from '@/lib/auth-client'
 import { useNotificationCounts } from '@/hooks/use-notification'
 import { TopBar } from './top-bar'
 import { MobileMenu } from './mobile-menu'
-import { BarChartIcon, Calendar02Icon, CreditCardIcon, DashboardSquare02Icon, ToolsIcon, User03Icon } from '@hugeicons/core-free-icons'
+import { Calendar02Icon, CreditCardIcon, DashboardSquare02Icon, GearsIcon, Ticket03Icon, User03Icon } from '@hugeicons/core-free-icons'
 import { Sidebar } from './side-bar'
 import { Breadcrumb } from './breadcrumb'
 import { PageLock } from './page-lock'
@@ -21,29 +21,25 @@ const menuItems = [
   { id: 'profile',   label: 'Profile',   path: '/dashboard/profile',   icon: User03Icon },
   { id: 'events',    label: 'Events',    path: '/dashboard/events',    icon: Calendar02Icon },
   { id: 'payments',  label: 'Payments',  path: '/dashboard/payments',  icon: CreditCardIcon },
-  { id: 'analytics', label: 'Analytics', path: '/dashboard/analytics', icon: BarChartIcon },
-  { id: 'settings',  label: 'Settings',  path: '/dashboard/settings',  icon: ToolsIcon },
+  { id: 'subscriptions',  label: 'Subscriptions',  path: '/dashboard/subscriptions',  icon: Ticket03Icon },
+  { id: 'settings',  label: 'Settings',  path: '/dashboard/settings',  icon: GearsIcon },
 ]
 
 const ALWAYS_UNLOCKED: string[] = [
   '/dashboard',
   '/dashboard/profile',
     '/dashboard/settings',
-  '/dashboard/payments',
+  '/dashboard/subscriptions',
 ]
 
 const REQUIRES_VERIFICATION: string[] = [
   '/dashboard/events',
-  '/dashboard/analytics',
-  // '/dashboard/settings',
-  // '/dashboard/payments',
+  '/dashboard/payments',
 ]
 
 const GATED_PATHS: string[] = [
   '/dashboard/events',
-  '/dashboard/analytics',
-  // '/dashboard/settings',
-  // '/dashboard/payments',
+  '/dashboard/payments',
 ]
 
 interface DashboardLayoutProps {

@@ -1,16 +1,3 @@
-// hooks/useSubscription.ts
-// 'use client'
-//
-// Single hook for subscription state, mutations, and UI access guards.
-// Merges useSubscription + useSubscriptionGuard into one import.
-//
-// Usage:
-//   const {
-//     subscription, isActive, subscribe, cancel, reactivate,
-//     checkEventCreation, checkCapacity, checkFeature,
-//     goToPricing, limits,
-//   } = useSubscription();
-
 'use client';
 
 import { useCallback } from 'react';
@@ -21,60 +8,70 @@ import axios from 'axios';
 export enum SubscriptionStatus {
   TRIALING  = 'trialing',
   ACTIVE    = 'active',
-  PAST_DUE  = 'past_due',   // Payment failed but within grace period
-  CANCELLED = 'cancelled',  // User cancelled; access until periodEnd
-  EXPIRED   = 'expired',    // Period ended and not renewed
-  PAUSED    = 'paused'      // Admin-paused (e.g. dispute)
+  PAST_DUE  = 'past_due',
+  CANCELLED = 'cancelled',
+  EXPIRED   = 'expired',
+  PAUSED    = 'paused',
 }
 
 export enum PlanInterval {
-  MONTHLY = 'monthly',
+  MONTHLY   = 'monthly',
   QUARTERLY = 'quarterly',
-  BIANNUAL = 'biannual',
-  ANNUAL = 'annual',
-  LIFETIME = 'lifetime'
+  BIANNUAL  = 'biannual',
+  ANNUAL    = 'annual',
+  LIFETIME  = 'lifetime',
 }
 
 export enum PlanTier {
-  FREE = 'free',
-  STARTER = 'starter',
-  BASIC = 'basic',
-  PRO = 'pro',
-  BUSINESS = 'business',
-  ENTERPRISE = 'enterprise'
+  FREE       = 'free',
+  STARTER    = 'starter',
+  BASIC      = 'basic',
+  PRO        = 'pro',
+  BUSINESS   = 'business',
+  ENTERPRISE = 'enterprise',
 }
 
 // ─── Subscription data type ───────────────────────────────────────────────────
+// Mirrors the top-level fields returned by GET /api/subscriptions.
+// isActive, isInTrial, daysUntilRenewal, and cancelAtPeriodEnd MUST stay
+// at the top level — the hook and layout read them as subscription?.isActive
+// etc. directly. They also appear inside `flags` for convenience but the
+// hook never reads from there.
 
 export interface SubscriptionData {
-  id: string;
-  status: SubscriptionStatus;
-  planTier: PlanTier;
-  planName: string;
-  planSlug: string;
-  interval: PlanInterval;
-  priceKobo: number;
-  finalPriceKobo: number;
-  currency: string;
-  trialEnd?: string;
-  currentPeriodStart: string;
-  currentPeriodEnd: string;
-  cancelAtPeriodEnd: boolean;
-  cancelledAt?: string;
-  maxEvents?: number;
-  maxAttendeesPerEvent?: number;
-  maxTeamMembers?: number;
-  storageGb?: number;
-  isActive: boolean;
-  isInTrial: boolean;
-  daysUntilRenewal: number;
+  id:                   string;
+  status:               SubscriptionStatus;
+  planTier:             PlanTier;
+  planName:             string;
+  planSlug:             string;
+  interval:             PlanInterval;
+  priceKobo:            number;
+  finalPriceKobo:       number;
+  currency:             string;
+  trialEnd?:            string;
+  currentPeriodStart:   string;
+  currentPeriodEnd:     string;
+
+  // ── Top-level computed fields ─────────────────────────────────────────────
+  // These are returned directly by the serializer — NOT nested under flags.
+  isActive:             boolean;
+  isInTrial:            boolean;
+  daysUntilRenewal:     number;
+  cancelAtPeriodEnd:    boolean;
+
+  // Optional rich fields from the populated serializer
+  cancelledAt?:         string;
+  maxEvents?:           number;
+  maxAttendeesPerEvent?:number;
+  maxTeamMembers?:      number;
+  storageGb?:           number;
 }
 
 // ─── Guard types ──────────────────────────────────────────────────────────────
 
 export interface CheckResult {
-  allowed: boolean;
-  reason?: string;
+  allowed:          boolean;
+  reason?:          string;
   upgradeRequired?: boolean;
 }
 
@@ -101,13 +98,13 @@ const FEATURE_MIN_TIER: Record<string, string> = {
 // ─── Mutation input types ─────────────────────────────────────────────────────
 
 interface CreateSubscriptionBody {
-  planSlug: string;
-  paystackReference: string;
-  couponCode?: string;
+  planSlug:           string;
+  paystackReference:  string;
+  couponCode?:        string;
 }
 
 interface CancelOptions {
-  reason?: string;
+  reason?:      string;
   immediately?: boolean;
 }
 
@@ -119,7 +116,7 @@ export const SUBSCRIPTION_QUERY_KEY = ['subscription'] as const;
 
 export function useSubscription() {
   const queryClient = useQueryClient();
-  const router = useRouter();
+  const router      = useRouter();
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const { data, error, isLoading } = useQuery({
@@ -130,11 +127,15 @@ export function useSubscription() {
       );
       return data.subscription;
     },
-    staleTime: 30_000,
+    staleTime:            30_000,
     refetchOnWindowFocus: false,
+    refetchOnMount:       true, // always refetch when layout mounts after payment
   });
 
   const subscription = data ?? null;
+
+  // Read isActive from the top-level field the serializer returns.
+  // Do NOT fall back to flags.isActive — the hook never reaches into flags.
   const isActive = subscription?.isActive ?? false;
 
   // ── Subscribe ──────────────────────────────────────────────────────────────
@@ -147,7 +148,12 @@ export function useSubscription() {
       return data.subscription;
     },
     onSuccess: (newSubscription) => {
+      // Set immediately so the layout reads isActive = true before the
+      // redirect lands — prevents the subscription_expired lock flashing.
       queryClient.setQueryData(SUBSCRIPTION_QUERY_KEY, newSubscription);
+      // Invalidate so the background refetch picks up the fully populated
+      // shape (plan, payments, etc.) from GET /api/subscriptions.
+      queryClient.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY });
     },
   });
 
@@ -195,15 +201,14 @@ export function useSubscription() {
   );
 
   // ── Guard: base check ──────────────────────────────────────────────────────
-  // Returns a blocked CheckResult if subscription is missing/expired,
-  // null if everything is fine. Used internally by all other checks.
   const baseCheck = useCallback((): CheckResult | null => {
     if (isLoading) return null;
-
     if (!subscription || !isActive) {
       return {
         allowed: false,
-        reason: subscription ? 'Your subscription has expired. Renew to continue.' : 'You need an active subscription for this.',
+        reason: subscription
+          ? 'Your subscription has expired. Renew to continue.'
+          : 'You need an active subscription for this.',
         upgradeRequired: true,
       };
     }
@@ -211,40 +216,25 @@ export function useSubscription() {
   }, [subscription, isActive, isLoading]);
 
   // ── Guard: event creation ──────────────────────────────────────────────────
-  // Pass current active event count — returns whether another can be created.
-  //
-  //   const { allowed, reason } = checkEventCreation(myEventCount);
-  //   <button disabled={!allowed} title={reason}>Create Event</button>
   const checkEventCreation = useCallback(
     (currentCount: number): CheckResult => {
       const base = baseCheck();
       if (base) return base;
-      
       const max = subscription?.maxEvents;
-      
-      // If no max limit (enterprise/unlimited) or max is 0 (unlimited)
-      if (!max || max === 0) {
-        return { allowed: true };
-      }
-      
-      // Check if at or over the limit
+      if (!max || max === 0) return { allowed: true };
       if (currentCount >= max) {
         return {
           allowed: false,
-          reason: `You've used ${currentCount}/${max} events on your plan. ${currentCount === max ? 'You cannot create more events.' : `You're ${currentCount - max} over your limit.`}`,
+          reason: `You've used ${currentCount}/${max} events on your plan.`,
           upgradeRequired: true,
         };
       }
-      
       return { allowed: true };
     },
     [baseCheck, subscription]
   );
 
   // ── Guard: attendee capacity ───────────────────────────────────────────────
-  // Pass the requested capacity for an event being created or updated.
-  //
-  //   const { allowed, reason } = checkCapacity(500);
   const checkCapacity = useCallback(
     (requestedCapacity: number): CheckResult => {
       const base = baseCheck();
@@ -263,10 +253,6 @@ export function useSubscription() {
   );
 
   // ── Guard: feature / tier ──────────────────────────────────────────────────
-  // Pass a feature key from FEATURE_MIN_TIER above.
-  //
-  //   const { allowed } = checkFeature('api_access');
-  //   const { allowed } = checkFeature('webhooks');
   const checkFeature = useCallback(
     (feature: string): CheckResult => {
       const base = baseCheck();
@@ -284,7 +270,6 @@ export function useSubscription() {
     [baseCheck, subscription]
   );
 
-  // ── Top-level guard state (no args needed) ─────────────────────────────────
   const top = baseCheck();
 
   return {
@@ -293,34 +278,30 @@ export function useSubscription() {
     isLoading,
     error,
     isActive,
-    isTrialing: subscription?.isInTrial ?? false,
+    isTrialing:      subscription?.isInTrial       ?? false,
     isCancelPending: subscription?.cancelAtPeriodEnd ?? false,
-    tier: subscription?.planTier ?? null,
-    daysLeft: subscription?.daysUntilRenewal ?? 0,
+    tier:            subscription?.planTier         ?? null,
+    daysLeft:        subscription?.daysUntilRenewal ?? 0,
 
-    // ── Limits snapshot ───────────────────────────────────────────────────────
-    limits: subscription
-      ? {
-          maxEvents: subscription.maxEvents,
-          maxAttendeesPerEvent: subscription.maxAttendeesPerEvent,
-          maxTeamMembers: subscription.maxTeamMembers,
-          storageGb: subscription.storageGb,
-        }
-      : null,
+    // ── Limits ────────────────────────────────────────────────────────────────
+    limits: subscription ? {
+      maxEvents:            subscription.maxEvents,
+      maxAttendeesPerEvent: subscription.maxAttendeesPerEvent,
+      maxTeamMembers:       subscription.maxTeamMembers,
+      storageGb:            subscription.storageGb,
+    } : null,
 
     // ── Mutations ─────────────────────────────────────────────────────────────
     subscribe,
     cancel,
     reactivate,
-    isSubscribing: subscribeMutation.isPending,
-    isCancelling: cancelMutation.isPending,
+    isSubscribing:  subscribeMutation.isPending,
+    isCancelling:   cancelMutation.isPending,
     isReactivating: reactivateMutation.isPending,
 
     // ── Guards ────────────────────────────────────────────────────────────────
-    // Top-level: is the subscription itself valid?
-    allowed: !top,
-    reason: top?.reason,
-    // Specific checks
+    allowed:            !top,
+    reason:             top?.reason,
     checkEventCreation,
     checkCapacity,
     checkFeature,
@@ -332,9 +313,6 @@ export function useSubscription() {
 }
 
 // ─── Invalidate from outside React ───────────────────────────────────────────
-// Usage:
-//   import { getQueryClient } from '@/lib/query-client';
-//   invalidateSubscription(getQueryClient());
 
 export function invalidateSubscription(queryClient: ReturnType<typeof useQueryClient>) {
   return queryClient.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY });

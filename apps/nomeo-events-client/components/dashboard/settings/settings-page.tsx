@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useSettings } from "@/hooks/use-settings";
-import type { Settings } from "@/hooks/use-settings"; // Import the Settings type
+import type { Settings } from "@/hooks/use-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -102,7 +102,7 @@ export default function SettingsPage({ user }: SettingsPageProps) {
         </p>
       </div>
 
-      {/* Tabs - same style as Events page */}
+      {/* Tabs */}
       <div className="flex flex-wrap gap-2 mb-8">
         {tabs.map((tab) => (
           <button
@@ -218,7 +218,6 @@ function AccountSection({ user, onUpdate, isPending }: SectionProps) {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   
-  // Password visibility states
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -370,35 +369,30 @@ function AccountSection({ user, onUpdate, isPending }: SectionProps) {
   const handleChangePassword = async () => {
     setPasswordError("");
     
-    // Validate current password
     if (!localSettings.currentPassword) {
       setPasswordError("Current password is required");
       toast.error("Current password is required");
       return;
     }
     
-    // Validate new password
     if (!localSettings.newPassword) {
       setPasswordError("New password is required");
       toast.error("New password is required");
       return;
     }
     
-    // Validate passwords match
     if (localSettings.newPassword !== localSettings.confirmPassword) {
       setPasswordError("New passwords do not match");
       toast.error("New passwords do not match");
       return;
     }
     
-    // Validate password length
     if (localSettings.newPassword.length < 8) {
       setPasswordError("Password must be at least 8 characters");
       toast.error("Password must be at least 8 characters");
       return;
     }
 
-    // Check if new password is same as current
     if (localSettings.currentPassword === localSettings.newPassword) {
       setPasswordError("New password must be different from your current password");
       toast.error("New password must be different from your current password");
@@ -679,7 +673,6 @@ function AccountSection({ user, onUpdate, isPending }: SectionProps) {
             ) : (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Current Password */}
                   <div className="space-y-2">
                     <Label>Current Password</Label>
                     <div className="relative">
@@ -713,10 +706,8 @@ function AccountSection({ user, onUpdate, isPending }: SectionProps) {
                     </div>
                   </div>
 
-                  {/* Empty div for grid alignment on large screens */}
                   <div className="hidden lg:block"></div>
 
-                  {/* New Password */}
                   <div className="space-y-2">
                     <Label>New Password</Label>
                     <div className="relative">
@@ -751,7 +742,6 @@ function AccountSection({ user, onUpdate, isPending }: SectionProps) {
                     <p className="text-xs text-gray-500">Password must be at least 8 characters</p>
                   </div>
 
-                  {/* Confirm Password */}
                   <div className="space-y-2">
                     <Label>Confirm New Password</Label>
                     <div className="relative">
@@ -786,7 +776,6 @@ function AccountSection({ user, onUpdate, isPending }: SectionProps) {
                   </div>
                 </div>
 
-                {/* Password Strength Indicator */}
                 {localSettings.newPassword && !isChangingPassword && (
                   <div className="mt-2">
                     <PasswordStrength password={localSettings.newPassword} />
@@ -1411,6 +1400,12 @@ function EventsSection({ settings, onUpdate, isPending }: SectionProps) {
     onUpdate(localSettings);
   };
 
+  const eventSwitches = [
+    { key: "autoApproveRegistrations", label: "Auto Approve Registrations", desc: "Automatically approve all registrations" },
+    { key: "sendReminderEmail", label: "Send Reminder Emails", desc: "Automatically send reminder emails to attendees" },
+    { key: "sendThankYouEmail", label: "Send Thank You Emails", desc: "Send thank you emails after registration" },
+  ];
+
   return (
     <div className="border rounded-lg p-4 lg:p-6 bg-white dark:bg-gray-900">
       <div className="mb-6">
@@ -1449,7 +1444,7 @@ function EventsSection({ settings, onUpdate, isPending }: SectionProps) {
             />
           </div>
 
-          <div className="space-y-2 lg:col-span-2">
+          <div className="lg:col-span-2 space-y-2">
             <Label>Default Refund Policy</Label>
             <Input
               value={localSettings.defaultRefundPolicy}
@@ -1459,42 +1454,20 @@ function EventsSection({ settings, onUpdate, isPending }: SectionProps) {
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div>
-              <Label>Auto Approve Registrations</Label>
-              <p className="text-xs text-gray-500 mt-1">Automatically approve all registrations</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {eventSwitches.map((item) => (
+            <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div>
+                <Label className="font-medium">{item.label}</Label>
+                <p className="text-xs text-gray-500 mt-1">{item.desc}</p>
+              </div>
+              <Switch
+                checked={localSettings[item.key as keyof typeof localSettings] as boolean}
+                onCheckedChange={(checked: boolean) => setLocalSettings({ ...localSettings, [item.key]: checked })}
+                className="data-[state=checked]:bg-indigo-600"
+              />
             </div>
-            <Switch
-              checked={localSettings.autoApproveRegistrations}
-              onCheckedChange={(checked: boolean) => setLocalSettings({ ...localSettings, autoApproveRegistrations: checked })}
-              className="data-[state=checked]:bg-indigo-600"
-            />
-          </div>
-
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div>
-              <Label>Send Reminder Emails</Label>
-              <p className="text-xs text-gray-500 mt-1">Automatically send reminder emails to attendees</p>
-            </div>
-            <Switch
-              checked={localSettings.sendReminderEmail}
-              onCheckedChange={(checked: boolean) => setLocalSettings({ ...localSettings, sendReminderEmail: checked })}
-              className="data-[state=checked]:bg-indigo-600"
-            />
-          </div>
-
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div>
-              <Label>Send Thank You Emails</Label>
-              <p className="text-xs text-gray-500 mt-1">Send thank you emails after registration</p>
-            </div>
-            <Switch
-              checked={localSettings.sendThankYouEmail}
-              onCheckedChange={(checked: boolean) => setLocalSettings({ ...localSettings, sendThankYouEmail: checked })}
-              className="data-[state=checked]:bg-indigo-600"
-            />
-          </div>
+          ))}
         </div>
 
         <Button onClick={handleSave} disabled={isPending} className="bg-indigo-600 hover:bg-indigo-700 px-6 h-10 lg:h-11">
@@ -1536,66 +1509,78 @@ function PrivacySection({ settings, onUpdate, isPending }: SectionProps) {
     }
   };
 
+  const privacyOptions = [
+    { key: "showEmailOnPublicProfile", label: "Show Email on Public Profile", desc: "Display your email address publicly" },
+    { key: "showPhoneOnPublicProfile", label: "Show Phone on Public Profile", desc: "Display your phone number publicly" },
+    { key: "showLocationOnPublicProfile", label: "Show Location on Public Profile", desc: "Display your location publicly" },
+    { key: "showEventHistory", label: "Show Event History", desc: "Let others see your event history" },
+    { key: "allowDirectMessages", label: "Allow Direct Messages", desc: "Allow others to send you messages" },
+    { key: "allowEventSharing", label: "Allow Event Sharing", desc: "Allow your events to be shared" },
+    { key: "allowAnalyticsTracking", label: "Allow Analytics Tracking", desc: "Help us improve with anonymous usage data" },
+  ];
+
   return (
-    <div className="border rounded-lg p-6 bg-white dark:bg-gray-900">
+    <div className="border rounded-lg p-4 lg:p-6 bg-white dark:bg-gray-900">
       <div className="mb-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Privacy Settings</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Control your privacy and data sharing</p>
       </div>
-      <div className="space-y-4">
-        {[
-          { key: "showEmailOnPublicProfile", label: "Show Email on Public Profile", desc: "Display your email address publicly" },
-          { key: "showPhoneOnPublicProfile", label: "Show Phone on Public Profile", desc: "Display your phone number publicly" },
-          { key: "showLocationOnPublicProfile", label: "Show Location on Public Profile", desc: "Display your location publicly" },
-          { key: "showEventHistory", label: "Show Event History", desc: "Let others see your event history" },
-          { key: "allowDirectMessages", label: "Allow Direct Messages", desc: "Allow others to send you messages" },
-          { key: "allowEventSharing", label: "Allow Event Sharing", desc: "Allow your events to be shared" },
-          { key: "allowAnalyticsTracking", label: "Allow Analytics Tracking", desc: "Help us improve with anonymous usage data" },
-        ].map((item) => (
-          <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div>
-              <Label className="font-medium">{item.label}</Label>
-              <p className="text-xs text-gray-500 mt-1">{item.desc}</p>
+      
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {privacyOptions.map((item) => (
+            <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div>
+                <Label className="font-medium">{item.label}</Label>
+                <p className="text-xs text-gray-500 mt-1">{item.desc}</p>
+              </div>
+              <Switch
+                checked={settings.privacy[item.key as keyof typeof settings.privacy] as boolean}
+                onCheckedChange={(checked: boolean) => {
+                  onUpdate({ [item.key]: checked });
+                }}
+                disabled={isPending}
+                className="data-[state=checked]:bg-indigo-600"
+              />
             </div>
-            <Switch
-              checked={settings.privacy[item.key as keyof typeof settings.privacy] as boolean}
-              onCheckedChange={(checked: boolean) => {
-                onUpdate({ [item.key]: checked });
-              }}
-              disabled={isPending}
-              className="data-[state=checked]:bg-indigo-600"
-            />
-          </div>
-        ))}
+          ))}
+        </div>
 
         <Separator className="my-4" />
 
-        <div className="space-y-2 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-          <div className="flex items-center justify-between">
-            <Label>Data Retention (days)</Label>
-            {isUpdating && (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-2 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg lg:col-span-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Data Retention (days)</Label>
+                <p className="text-xs text-gray-500 mt-1">How long to keep your data before deletion</p>
+              </div>
+              {isUpdating && (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+              )}
+            </div>
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              value={localRetentionDays === null ? "" : localRetentionDays}
+              onChange={handleRetentionChange}
+              onBlur={handleRetentionBlur}
+              placeholder="0"
+              className="border-gray-200 focus:ring-indigo-500 focus:border-indigo-500"
+              disabled={isPending}
+            />
+            {localRetentionDays === 0 && (
+              <p className="text-xs text-yellow-600 dark:text-yellow-500 mt-1">
+                ⚠️ Data will not be automatically deleted. Manual deletion required.
+              </p>
+            )}
+            {localRetentionDays && localRetentionDays > 0 && (
+              <p className="text-xs text-green-600 dark:text-green-500 mt-1">
+                ✓ Data will be automatically deleted after {localRetentionDays} days of inactivity
+              </p>
             )}
           </div>
-          <Input
-            type="number"
-            min="0"
-            step="1"
-            value={localRetentionDays === null ? "" : localRetentionDays}
-            onChange={handleRetentionChange}
-            onBlur={handleRetentionBlur}
-            placeholder="0"
-            className="border-gray-200 focus:ring-indigo-500 focus:border-indigo-500"
-            disabled={isPending}
-          />
-          <p className="text-xs text-gray-500">
-            How long to keep your data before deletion. Set to 0 to disable auto-deletion.
-          </p>
-          {localRetentionDays === 0 && (
-            <p className="text-xs text-yellow-600 dark:text-yellow-500 mt-1">
-              ⚠️ Data will not be automatically deleted. Manual deletion required.
-            </p>
-          )}
         </div>
       </div>
     </div>
@@ -1619,7 +1604,7 @@ function SecuritySection({ settings, onUpdate, isPending }: SectionProps) {
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage your account security</p>
       </div>
       <div className="space-y-6">
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-6">
           <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <div>
               <Label>Two-Factor Authentication</Label>
@@ -1633,7 +1618,7 @@ function SecuritySection({ settings, onUpdate, isPending }: SectionProps) {
           </div>
 
           {localSettings.twoFactorEnabled && (
-            <div className="space-y-2 ml-6">
+            <div className="space-y-2 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
               <Label>2FA Method</Label>
               <Select
                 value={localSettings.twoFactorMethod}
@@ -1655,7 +1640,7 @@ function SecuritySection({ settings, onUpdate, isPending }: SectionProps) {
             </div>
           )}
 
-          <div className="space-y-2">
+          <div className="space-y-2 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <Label>Session Timeout (minutes)</Label>
             <Input
               type="number"
@@ -1690,110 +1675,100 @@ function SecuritySection({ settings, onUpdate, isPending }: SectionProps) {
 function IntegrationsSection({ settings, onUpdate, isPending }: SectionProps) {
   if (!settings) return null;
   
+  const googleCalendarSwitches = [
+    { key: "connected", label: "Connected", desc: "Link your Google Calendar" },
+    { key: "syncEnabled", label: "Sync Enabled", desc: "Automatically sync events" },
+  ];
+
+  const zoomSwitches = [
+    { key: "connected", label: "Connected", desc: "Link your Zoom account" },
+  ];
+
+  const mailchimpSwitches = [
+    { key: "connected", label: "Connected", desc: "Link your Mailchimp account" },
+    { key: "syncEnabled", label: "Sync Enabled", desc: "Automatically sync audience" },
+  ];
+
   return (
     <div className="space-y-6">
-      <div className="border rounded-lg p-6 bg-white dark:bg-gray-900">
+      <div className="border rounded-lg p-4 lg:p-6 bg-white dark:bg-gray-900">
         <div className="mb-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Google Calendar</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Sync your events with Google Calendar</p>
         </div>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div>
-              <Label>Connected</Label>
-              <p className="text-xs text-gray-500 mt-1">Link your Google Calendar</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {googleCalendarSwitches.map((item) => (
+            <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div>
+                <Label className="font-medium">{item.label}</Label>
+                <p className="text-xs text-gray-500 mt-1">{item.desc}</p>
+              </div>
+              <Switch
+                checked={settings.integrations.googleCalendar[item.key as keyof typeof settings.integrations.googleCalendar] as boolean}
+                onCheckedChange={(checked: boolean) => {
+                  onUpdate({
+                    googleCalendar: { ...settings.integrations.googleCalendar, [item.key]: checked }
+                  });
+                }}
+                disabled={isPending || (item.key === "syncEnabled" && !settings.integrations.googleCalendar.connected)}
+                className="data-[state=checked]:bg-indigo-600"
+              />
             </div>
-            <Switch
-              checked={settings.integrations.googleCalendar.connected}
-              onCheckedChange={(checked: boolean) => {
-                onUpdate({
-                  googleCalendar: { ...settings.integrations.googleCalendar, connected: checked }
-                });
-              }}
-              disabled={isPending}
-              className="data-[state=checked]:bg-indigo-600"
-            />
-          </div>
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div>
-              <Label>Sync Enabled</Label>
-              <p className="text-xs text-gray-500 mt-1">Automatically sync events</p>
-            </div>
-            <Switch
-              checked={settings.integrations.googleCalendar.syncEnabled}
-              onCheckedChange={(checked: boolean) => {
-                onUpdate({
-                  googleCalendar: { ...settings.integrations.googleCalendar, syncEnabled: checked }
-                });
-              }}
-              disabled={isPending || !settings.integrations.googleCalendar.connected}
-              className="data-[state=checked]:bg-indigo-600"
-            />
-          </div>
+          ))}
         </div>
       </div>
 
-      <div className="border rounded-lg p-6 bg-white dark:bg-gray-900">
+      <div className="border rounded-lg p-4 lg:p-6 bg-white dark:bg-gray-900">
         <div className="mb-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Zoom Integration</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Connect and configure Zoom meetings</p>
         </div>
-        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-          <div>
-            <Label>Connected</Label>
-            <p className="text-xs text-gray-500 mt-1">Link your Zoom account</p>
-          </div>
-          <Switch
-            checked={settings.integrations.zoom.connected}
-            onCheckedChange={(checked: boolean) => {
-              onUpdate({
-                zoom: { ...settings.integrations.zoom, connected: checked }
-              });
-            }}
-            disabled={isPending}
-            className="data-[state=checked]:bg-indigo-600"
-          />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {zoomSwitches.map((item) => (
+            <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div>
+                <Label className="font-medium">{item.label}</Label>
+                <p className="text-xs text-gray-500 mt-1">{item.desc}</p>
+              </div>
+              <Switch
+                checked={settings.integrations.zoom[item.key as keyof typeof settings.integrations.zoom] as boolean}
+                onCheckedChange={(checked: boolean) => {
+                  onUpdate({
+                    zoom: { ...settings.integrations.zoom, [item.key]: checked }
+                  });
+                }}
+                disabled={isPending}
+                className="data-[state=checked]:bg-indigo-600"
+              />
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="border rounded-lg p-6 bg-white dark:bg-gray-900">
+      <div className="border rounded-lg p-4 lg:p-6 bg-white dark:bg-gray-900">
         <div className="mb-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Mailchimp</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Sync your contacts with Mailchimp</p>
         </div>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div>
-              <Label>Connected</Label>
-              <p className="text-xs text-gray-500 mt-1">Link your Mailchimp account</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {mailchimpSwitches.map((item) => (
+            <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div>
+                <Label className="font-medium">{item.label}</Label>
+                <p className="text-xs text-gray-500 mt-1">{item.desc}</p>
+              </div>
+              <Switch
+                checked={settings.integrations.mailchimp[item.key as keyof typeof settings.integrations.mailchimp] as boolean}
+                onCheckedChange={(checked: boolean) => {
+                  onUpdate({
+                    mailchimp: { ...settings.integrations.mailchimp, [item.key]: checked }
+                  });
+                }}
+                disabled={isPending || (item.key === "syncEnabled" && !settings.integrations.mailchimp.connected)}
+                className="data-[state=checked]:bg-indigo-600"
+              />
             </div>
-            <Switch
-              checked={settings.integrations.mailchimp.connected}
-              onCheckedChange={(checked: boolean) => {
-                onUpdate({
-                  mailchimp: { ...settings.integrations.mailchimp, connected: checked }
-                });
-              }}
-              disabled={isPending}
-              className="data-[state=checked]:bg-indigo-600"
-            />
-          </div>
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div>
-              <Label>Sync Enabled</Label>
-              <p className="text-xs text-gray-500 mt-1">Automatically sync audience</p>
-            </div>
-            <Switch
-              checked={settings.integrations.mailchimp.syncEnabled}
-              onCheckedChange={(checked: boolean) => {
-                onUpdate({
-                  mailchimp: { ...settings.integrations.mailchimp, syncEnabled: checked }
-                });
-              }}
-              disabled={isPending || !settings.integrations.mailchimp.connected}
-              className="data-[state=checked]:bg-indigo-600"
-            />
-          </div>
+          ))}
         </div>
       </div>
     </div>
@@ -1810,26 +1785,20 @@ function TeamSection({ settings, onUpdate, isPending }: SectionProps) {
     onUpdate(localSettings);
   };
 
+  const teamSwitches = [
+    { key: "allowTeamMembers", label: "Allow Team Members", desc: "Enable team collaboration" },
+    { key: "requireApproval", label: "Require Approval", desc: "Require approval for team members" },
+    { key: "auditLog", label: "Audit Log", desc: "Keep track of team activities" },
+  ];
+
   return (
-    <div className="border rounded-lg p-6 bg-white dark:bg-gray-900">
+    <div className="border rounded-lg p-4 lg:p-6 bg-white dark:bg-gray-900">
       <div className="mb-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Team Settings</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Configure team management preferences</p>
       </div>
       <div className="space-y-6">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div>
-              <Label>Allow Team Members</Label>
-              <p className="text-xs text-gray-500 mt-1">Enable team collaboration</p>
-            </div>
-            <Switch
-              checked={localSettings.allowTeamMembers}
-              onCheckedChange={(checked: boolean) => setLocalSettings({ ...localSettings, allowTeamMembers: checked })}
-              className="data-[state=checked]:bg-indigo-600"
-            />
-          </div>
-
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-2">
             <Label>Max Team Members</Label>
             <Input
@@ -1860,30 +1829,22 @@ function TeamSection({ settings, onUpdate, isPending }: SectionProps) {
               </SelectContent>
             </Select>
           </div>
+        </div>
 
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div>
-              <Label>Require Approval</Label>
-              <p className="text-xs text-gray-500 mt-1">Require approval for team members</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {teamSwitches.map((item) => (
+            <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div>
+                <Label className="font-medium">{item.label}</Label>
+                <p className="text-xs text-gray-500 mt-1">{item.desc}</p>
+              </div>
+              <Switch
+                checked={localSettings[item.key as keyof typeof localSettings] as boolean}
+                onCheckedChange={(checked: boolean) => setLocalSettings({ ...localSettings, [item.key]: checked })}
+                className="data-[state=checked]:bg-indigo-600"
+              />
             </div>
-            <Switch
-              checked={localSettings.requireApproval}
-              onCheckedChange={(checked: boolean) => setLocalSettings({ ...localSettings, requireApproval: checked })}
-              className="data-[state=checked]:bg-indigo-600"
-            />
-          </div>
-
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div>
-              <Label>Audit Log</Label>
-              <p className="text-xs text-gray-500 mt-1">Keep track of team activities</p>
-            </div>
-            <Switch
-              checked={localSettings.auditLog}
-              onCheckedChange={(checked: boolean) => setLocalSettings({ ...localSettings, auditLog: checked })}
-              className="data-[state=checked]:bg-indigo-600"
-            />
-          </div>
+          ))}
         </div>
 
         <Button onClick={handleSave} disabled={isPending} className="bg-indigo-600 hover:bg-indigo-700 px-6 h-10 lg:h-11">

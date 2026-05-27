@@ -6,8 +6,6 @@ import {
   Cancel01Icon as XIcon,
   CheckmarkCircle02Icon,
   Loading03Icon,
-  Calendar03Icon as CalendarIcon,
-  Building04Icon as BuildingIcon,
   CreditCardIcon,
   BankIcon,
   GlobeIcon,
@@ -18,8 +16,6 @@ import {
   RefreshIcon,
   CopyIcon,
   Alert02Icon as AlertIcon,
-  UserIcon,
-  Mail01Icon,
 } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -34,7 +30,11 @@ import autoTable from "jspdf-autotable";
 interface Payment {
   _id: string;
   purpose: string;
-  eventId?: string;
+  eventId?: {
+    slug: string;
+    title: string;
+    _id: string;
+  };
   registrationId?: string;
   subscriptionId?: string;
   planId?: string;
@@ -160,6 +160,8 @@ export function PaymentDetailsModal({ payment, open, onClose }: PaymentDetailsMo
   if (!open || !payment) return null;
 
   const statusConfig = getStatusConfig(payment.gatewayStatus);
+
+  console.log("Rendering PaymentDetailsModal for payment:", payment);
 
   const exportPaymentToPDF = async () => {
     setIsExporting(true);
@@ -425,7 +427,7 @@ export function PaymentDetailsModal({ payment, open, onClose }: PaymentDetailsMo
                   {/* Context Information */}
                   {(payment.eventId || payment.registrationId || payment.subscriptionId || payment.planId) && (
                     <Section title="Context Information" icon={TicketIcon}>
-                      {payment.eventId && <InfoRow label="Event ID" value={payment.eventId} copyable />}
+                      {payment.eventId && <InfoRow label="Event ID" value={payment.eventId?._id.toString()} copyable />}
                       {payment.registrationId && <InfoRow label="Registration ID" value={payment.registrationId} copyable />}
                       {payment.subscriptionId && <InfoRow label="Subscription ID" value={payment.subscriptionId} copyable />}
                       {payment.planId && <InfoRow label="Plan ID" value={payment.planId} copyable />}
