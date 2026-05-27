@@ -141,8 +141,6 @@ export const DashboardLayout = ({ children, user }: DashboardLayoutProps) => {
     if (!pathname || ALWAYS_UNLOCKED.includes(pathname)) return null
     if (isLoading) return null
 
-    console.log(profile)
-
     // Check for deactivated account (including scheduled deletion)
     if (profile?.activeStatus === 'deactivated') {
       if (profile.metadata?.deletionScheduled) {
@@ -166,7 +164,6 @@ export const DashboardLayout = ({ children, user }: DashboardLayoutProps) => {
   }
 
   const lockCondition = getLock();
-  console.log(lockCondition)
 
   // If account is deactivated or scheduled for deletion, sign out immediately
   if (lockCondition === 'deactivated' || lockCondition === 'deletion_scheduled') {
