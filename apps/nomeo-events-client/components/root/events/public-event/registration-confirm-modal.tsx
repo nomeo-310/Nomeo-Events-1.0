@@ -7,7 +7,6 @@ import {
   Alert02Icon as AlertIcon,
   CheckmarkCircle01Icon as CheckCircleIcon,
   Mail01Icon as MailIcon,
-  InformationCircleIcon as InfoIcon,
   LockIcon,
   CreditCardIcon as CardIcon,
 } from '@hugeicons/core-free-icons';

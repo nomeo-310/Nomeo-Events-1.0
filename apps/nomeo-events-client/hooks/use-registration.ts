@@ -127,6 +127,8 @@ export interface RegisterInput {
   attendeeGender?: string;
   attendeeCompany?: string;
   attendeeTitle?: string;
+  paymentReference?: string; 
+  paymentStatus?: string;
   parentalConsentProvided?: boolean;
   parentalConsentByName?: string;
   parentalConsentByEmail?: string;

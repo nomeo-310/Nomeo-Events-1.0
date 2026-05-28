@@ -44,7 +44,6 @@ import { formatDate, formatDateTime, formatTime, toTitleCase } from "./public-ev
 import { toast } from "sonner";
 import { RegistrationConfirmModal } from "./registration-confirm-modal";
 import { useRegistration, type RegisterInput } from "@/hooks/use-registration";
-import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 
