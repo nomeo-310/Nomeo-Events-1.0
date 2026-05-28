@@ -3,7 +3,7 @@
 import { connectDB } from "@/lib/mongoose";
 import { Event } from "@/models/event";
 import { Registration, RegistrationStatus, PaymentStatus } from "@/models/registration";
-import { Payment, PaymentGatewayStatus, PaymentPurpose, PaymentProvider } from "@/models/payment";
+import { Payment, PaymentGatewayStatus, PaymentPurpose } from "@/models/payment";
 import { Ticket, TicketStatus } from "@/models/ticket";
 import { NextResponse } from "next/server";
 import QRCode from "qrcode";
@@ -16,50 +16,95 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const body = await req.json();
     const { id } = await params;
+    const attendeeEmail = body.attendeeEmail.toLowerCase().trim();
 
     const event = await Event.findById(id);
     if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
-    // ─── Duplicate registration check ───
-    const existingRegistration = await Registration.findOne({
-      eventId: id,
-      attendeeEmail: body.attendeeEmail.toLowerCase().trim()
-    });
-
-    if (existingRegistration) {
-      if (existingRegistration.status === RegistrationStatus.CANCELLED) {
-        await Registration.findByIdAndDelete(existingRegistration._id);
-      } else {
-        return NextResponse.json({
-          error: "You have already registered for this event",
-          alreadyRegistered: true,
-          registrationNumber: existingRegistration.registrationNumber,
-          status: existingRegistration.status
-        }, { status: 400 });
-      }
-    }
-
-    // ─── Plan validation ───
+    // ─── Plan validation ───────────────────────────────────────────────────────
     const eventPlans = event.plans || [];
     const selectedPlan = eventPlans.find((p: any) => p.type === body.planType);
     if (!selectedPlan) {
       return NextResponse.json({ error: "Invalid plan type" }, { status: 400 });
     }
 
-    // ─── Ticket count ───
-    let totalTickets = 1;
-    if (body.isGroupRegistration && body.groupSize > 1) {
-      totalTickets = Number(body.groupSize);
-    } else if (body.isCorporateRegistration && body.companySize > 1) {
-      totalTickets = Number(body.companySize);
+    const isFree = selectedPlan.price === 0;
+
+    // ─── KEY CHANGE: resolve payment status from the DB, not from the request ──
+    // The frontend sends paymentReference after verify succeeds.
+    // We look up the Payment record ourselves — never trust body.paymentStatus.
+    // This eliminates the hasPaymentData fragility entirely.
+    let verifiedPayment: any = null;
+
+    if (!isFree && body.paymentReference) {
+      verifiedPayment = await Payment.findOne({
+        reference: body.paymentReference,
+        purpose: PaymentPurpose.EVENT_REGISTRATION,
+        eventId: event._id,
+      });
+
+      if (!verifiedPayment) {
+        return NextResponse.json(
+          { error: "Payment record not found for this event." },
+          { status: 400 }
+        );
+      }
+
+      if (verifiedPayment.gatewayStatus !== PaymentGatewayStatus.SUCCESS) {
+        return NextResponse.json(
+          { error: "Payment has not been confirmed. Please complete payment first." },
+          { status: 400 }
+        );
+      }
+
+      // Guard: payment already linked to a DIFFERENT attendee's registration.
+      // Only check this if registrationId is already set — meaning this payment
+      // was previously confirmed. On first run it will always be null, which is
+      // the normal case and should fall through without blocking.
+      if (verifiedPayment.registrationId) {
+        const linkedReg = await Registration.findById(verifiedPayment.registrationId);
+        if (linkedReg && linkedReg.attendeeEmail !== attendeeEmail) {
+          return NextResponse.json(
+            { error: "Payment has already been used for another registration." },
+            { status: 409 }
+          );
+        }
+        // Same email → idempotent retry, fall through to upgrade/confirm below
+      }
     }
 
-    // ─── Seat pre-checks ───
+    // isFree with no payment reference OR paid with verified payment — both proceed.
+    // Paid with no payment reference → pending branch below.
+    const hasVerifiedPayment = !!verifiedPayment;
+
+    // ─── Duplicate registration check ─────────────────────────────────────────
+    const existingRegistration = await Registration.findOne({ eventId: id, attendeeEmail });
+
+    if (existingRegistration) {
+      if (existingRegistration.status === RegistrationStatus.CANCELLED) {
+        await Registration.findByIdAndDelete(existingRegistration._id);
+      } else if ( existingRegistration.status === RegistrationStatus.CONFIRMED || existingRegistration.status === RegistrationStatus.PENDING && !hasVerifiedPayment) {
+        return NextResponse.json({
+          error: "You have already registered for this event",
+          alreadyRegistered: true,
+          registrationNumber: existingRegistration.registrationNumber,
+          status: existingRegistration.status,
+        }, { status: 400 });
+      }
+      // PENDING + hasVerifiedPayment → upgrade the existing pending registration below
+    }
+
+    // ─── Ticket count ──────────────────────────────────────────────────────────
+    let totalTickets = 1;
+    if (body.isGroupRegistration && body.groupSize > 1) totalTickets = Number(body.groupSize);
+    else if (body.isCorporateRegistration && body.companySize > 1) totalTickets = Number(body.companySize);
+
+    // ─── Seat pre-checks ───────────────────────────────────────────────────────
     if (event.availableSeats < totalTickets) {
       return NextResponse.json({
-        error: `Not enough seats available. Requested: ${totalTickets}, Available: ${event.availableSeats}`
+        error: `Not enough seats available. Requested: ${totalTickets}, Available: ${event.availableSeats}`,
       }, { status: 400 });
     }
 
@@ -67,12 +112,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const planAvailable = selectedPlan.availableSeats ?? selectedPlan.maxSeats;
       if (planAvailable < totalTickets) {
         return NextResponse.json({
-          error: `Not enough seats for the ${selectedPlan.name} plan. Requested: ${totalTickets}, Available: ${planAvailable}`
+          error: `Not enough seats for the ${selectedPlan.name} plan. Requested: ${totalTickets}, Available: ${planAvailable}`,
         }, { status: 400 });
       }
     }
 
-    // ─── Age validation and parental consent tracking ───
+    // ─── Age validation ────────────────────────────────────────────────────────
     let requiresParentalConsentEmail = false;
     let parentName = '';
     let parentEmail = '';
@@ -87,17 +132,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (event.ageRequirement.maxAge && body.attendeeAge > event.ageRequirement.maxAge) {
         return NextResponse.json({ error: `Maximum age allowed is ${event.ageRequirement.maxAge} years old` }, { status: 400 });
       }
-      
-      // Check if parental consent is required
       if (event.ageRequirement.requiresParentalConsent && body.attendeeAge < 18) {
         if (!body.parentalConsentProvided) {
-          return NextResponse.json({ 
-            error: "Parental consent is required for attendees under 18", 
-            requiresParentalConsent: true 
+          return NextResponse.json({
+            error: "Parental consent is required for attendees under 18",
+            requiresParentalConsent: true,
           }, { status: 400 });
         }
-        
-        // If parental consent is provided, we'll send a confirmation email to the parent
         if (body.parentalConsentProvided && body.parentalConsentByName && body.parentalConsentByEmail) {
           requiresParentalConsentEmail = true;
           parentName = body.parentalConsentByName;
@@ -106,7 +147,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
-    // ─── Age group bucket ───
+    // ─── Age group ────────────────────────────────────────────────────────────
     let ageGroup = '';
     if (body.attendeeAge) {
       if (body.attendeeAge <= 25) ageGroup = '18-25';
@@ -115,91 +156,91 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       else ageGroup = '50+';
     }
 
-    const isFree = selectedPlan.price === 0;
-    const hasPaymentData = !!(body.paymentReference && body.paymentStatus === PaymentGatewayStatus.SUCCESS);
-
-    // ─── PAID: wrap everything in a transaction ───
-    if (!isFree) {
-      if (!hasPaymentData) {
-        // No payment info provided yet — create a pending registration only
-        const registration = new Registration({
-          ...buildRegistrationFields(body, id, selectedPlan, totalTickets, ageGroup),
-          status: RegistrationStatus.PENDING,
-          paymentStatus: PaymentStatus.PENDING,
-        });
-        await registration.save();
-
+    // ─── PAID — no verified payment yet → create/return pending ───────────────
+    if (!isFree && !hasVerifiedPayment) {
+      if (existingRegistration?.status === RegistrationStatus.PENDING) {
+        // Already pending, just return the existing registration ID so the
+        // frontend can retry payment against the same registration
         return NextResponse.json({
           success: true,
-          message: "Registration created. Awaiting payment confirmation.",
+          message: "Registration already pending. Complete payment to confirm.",
           data: {
-            registrationId: registration._id,
-            registrationNumber: registration.registrationNumber,
-          }
+            registrationId: existingRegistration._id,
+            registrationNumber: existingRegistration.registrationNumber,
+          },
         });
       }
 
-      // Payment data present — use a transaction so registration + payment are atomic
+      const registration = new Registration({
+        ...buildRegistrationFields(body, id, selectedPlan, totalTickets, ageGroup),
+        status: RegistrationStatus.PENDING,
+        paymentStatus: PaymentStatus.PENDING,
+      });
+      await registration.save();
+
+      return NextResponse.json({
+        success: true,
+        message: "Registration created. Awaiting payment confirmation.",
+        data: {
+          registrationId: registration._id,
+          registrationNumber: registration.registrationNumber,
+        },
+      });
+    }
+
+    // ─── PAID — verified payment present → confirm in transaction ─────────────
+    if (!isFree && hasVerifiedPayment) {
       const session = await mongoose.startSession();
       session.startTransaction();
 
       try {
-        const registration = new Registration({
+        // Upgrade existing pending registration or create a new confirmed one
+        const registration = existingRegistration || new Registration();
+        registration.set({
           ...buildRegistrationFields(body, id, selectedPlan, totalTickets, ageGroup),
           status: RegistrationStatus.CONFIRMED,
           paymentStatus: PaymentStatus.COMPLETED,
         });
         await registration.save({ session });
 
-        const totalAmountInKobo = selectedPlan.price * totalTickets * 100;
-        const paymentRecord = new Payment({
-          purpose: PaymentPurpose.EVENT_REGISTRATION,
-          provider: PaymentProvider.PAYSTACK,
-          registrationId: registration._id,
-          eventId: event._id,
-          amount: totalAmountInKobo,
-          amountPaid: totalAmountInKobo,
-          discountAmount: 0,
-          currency: selectedPlan.currency || 'NGN',
-          reference: body.paymentReference,
-          paystackReference: body.paymentReference,
-          gatewayStatus: PaymentGatewayStatus.SUCCESS,
-          gatewayResponse: body.paymentMessage || "Approved",
-          paidAt: new Date(),
-        });
-        await paymentRecord.save({ session });
+        // Link payment → registration (only fields not already set by verify)
+        verifiedPayment.registrationId = registration._id;
+        if (!verifiedPayment.paystackReference) {
+          verifiedPayment.paystackReference = body.paymentReference;
+        }
+        if (!verifiedPayment.paidAt) {
+          verifiedPayment.paidAt = new Date();
+        }
+        await verifiedPayment.save({ session });
 
-        registration.paymentId = paymentRecord._id;
+        // Link registration → payment
+        registration.paymentId = verifiedPayment._id;
         await registration.save({ session });
 
         await session.commitTransaction();
         session.endSession();
 
-        // ─── Post-commit: seats, ticket, emails ───
-        const result = await confirmRegistration({
-          event, 
-          registration, 
-          paymentRecord, 
+        return await confirmRegistration({
+          event,
+          registration,
+          paymentRecord: verifiedPayment,
           selectedPlan,
-          body, 
-          totalTickets, 
-          isFree,
+          body,
+          totalTickets,
+          isFree: false,
           requiresParentalConsentEmail,
           parentName,
-          parentEmail
+          parentEmail,
         });
-
-        return result;
 
       } catch (txError: any) {
         await session.abortTransaction();
         session.endSession();
-        console.error('Transaction aborted:', txError.message);
         throw txError;
       }
     }
 
-    // ─── FREE: no transaction needed, just save and confirm ───
+    // ─── FREE ──────────────────────────────────────────────────────────────────
     const registration = new Registration({
       ...buildRegistrationFields(body, id, selectedPlan, totalTickets, ageGroup),
       status: RegistrationStatus.CONFIRMED,
@@ -208,20 +249,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     await registration.save();
 
     return await confirmRegistration({
-      event, 
-      registration, 
-      paymentRecord: null, 
+      event,
+      registration,
+      paymentRecord: null,
       selectedPlan,
-      body, 
-      totalTickets, 
-      isFree,
+      body,
+      totalTickets,
+      isFree: true,
       requiresParentalConsentEmail,
       parentName,
-      parentEmail
+      parentEmail,
     });
 
   } catch (error: any) {
-    console.error('Registration error:', error.message);
+    console.error('[register]', error.message);
 
     if (error.code === 11000) {
       if (error.keyPattern?.registrationNumber) {
@@ -230,19 +271,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (error.keyPattern?.eventId && error.keyPattern?.attendeeEmail) {
         return NextResponse.json({
           error: "You have already registered for this event with this email address.",
-          alreadyRegistered: true
+          alreadyRegistered: true,
         }, { status: 400 });
       }
     }
 
     return NextResponse.json({
       error: "Registration failed. Please try again.",
-      message: error.message
+      message: error.message,
     }, { status: 500 });
   }
 }
 
-// ─── Shared field builder ───────────────────────────────────────────────────
+// ─── Shared field builder ──────────────────────────────────────────────────────
 function buildRegistrationFields(body: any, eventId: string, selectedPlan: any, totalTickets: number, ageGroup: string) {
   return {
     eventId,
@@ -279,27 +320,14 @@ function buildRegistrationFields(body: any, eventId: string, selectedPlan: any, 
   };
 }
 
-// ─── Post-save confirmation steps (seats + ticket + emails) ──────────────────
-async function confirmRegistration({ event, registration, 
-  paymentRecord, 
-  selectedPlan, 
-  body, 
-  totalTickets, 
-  isFree,
-  requiresParentalConsentEmail,
-  parentName,
-  parentEmail
+// ─── Post-save confirmation (seats + ticket + emails) ─────────────────────────
+async function confirmRegistration({
+  event, registration, paymentRecord, selectedPlan, body,
+  totalTickets, isFree, requiresParentalConsentEmail, parentName, parentEmail,
 }: {
-  event: any;
-  registration: any;
-  paymentRecord: any;
-  selectedPlan: any;
-  body: any;
-  totalTickets: number;
-  isFree: boolean;
-  requiresParentalConsentEmail: boolean;
-  parentName: string;
-  parentEmail: string;
+  event: any; registration: any; paymentRecord: any; selectedPlan: any;
+  body: any; totalTickets: number; isFree: boolean;
+  requiresParentalConsentEmail: boolean; parentName: string; parentEmail: string;
 }): Promise<NextResponse> {
 
   // 1. Atomically deduct global seats
@@ -334,13 +362,11 @@ async function confirmRegistration({ event, registration,
         await registration.save();
         return NextResponse.json({ error: `Not enough seats for the ${selectedPlan.name} plan.` }, { status: 409 });
       }
-
       planUpdate = await Event.findOneAndUpdate(
         { _id: event._id, 'plans.type': body.planType, 'plans.availableSeats': { $exists: false } },
         { $set: { 'plans.$.availableSeats': newAvailable } },
         { new: true }
       );
-
       if (!planUpdate) {
         planUpdate = await Event.findOneAndUpdate(
           { _id: event._id, plans: { $elemMatch: { type: body.planType, availableSeats: { $gte: totalTickets } } } },
@@ -397,13 +423,14 @@ async function confirmRegistration({ event, registration,
   registration.ticketId = ticket._id;
   await registration.save();
 
-  // 4. Send confirmation emails (non-blocking, but we await to catch errors)
+  // 4. Emails
   try {
     const startDateStr = event.startDate instanceof Date ? event.startDate.toISOString() : String(event.startDate);
-    const endDateStr = event.endDate ? (event.endDate instanceof Date ? event.endDate.toISOString() : String(event.endDate)) : undefined;
+    const endDateStr = event.endDate
+      ? (event.endDate instanceof Date ? event.endDate.toISOString() : String(event.endDate))
+      : undefined;
     const isVirtualEvent = !event.location?.venue || event.location.venue === 'Online';
 
-    // Send registration confirmation to attendee
     await sendRegistrationEmail({
       email: body.attendeeEmail.toLowerCase().trim(),
       name: body.attendeeName,
@@ -429,7 +456,6 @@ async function confirmRegistration({ event, registration,
       specialInstructions: (event as any).registrationInstructions || (event as any).instructions || event.location?.notes || '',
     });
 
-    // Send parental consent confirmation email if required
     if (requiresParentalConsentEmail && parentEmail && parentName) {
       await sendParentalConsentEmail({
         parentName,
@@ -442,12 +468,9 @@ async function confirmRegistration({ event, registration,
         registrationNumber: registration.registrationNumber,
         ticketNumber: ticket.ticketNumber,
       });
-      console.log(`✅ Parental consent email sent to ${parentEmail}`);
     }
-
   } catch (emailError) {
-    console.error('❌ Failed to send registration email:', emailError);
-    // Don't fail the registration if email fails, just log the error
+    console.error('Failed to send registration email:', emailError);
   }
 
   return NextResponse.json({
@@ -464,11 +487,8 @@ async function confirmRegistration({ event, registration,
         paymentId: paymentRecord._id,
         paymentReference: paymentRecord.reference,
       }),
-      ...(requiresParentalConsentEmail && {
-        parentalConsentSent: true,
-        parentEmail,
-      }),
-    }
+      ...(requiresParentalConsentEmail && { parentalConsentSent: true, parentEmail }),
+    },
   });
 }
 
