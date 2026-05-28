@@ -116,7 +116,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     const isFree = selectedPlan.price === 0;
-    const hasPaymentData = !!(body.paymentReference && body.paymentTransactionId);
+    const hasPaymentData = !!(body.paymentReference && body.paymentStatus === PaymentGatewayStatus.SUCCESS);
 
     // ─── PAID: wrap everything in a transaction ───
     if (!isFree) {
