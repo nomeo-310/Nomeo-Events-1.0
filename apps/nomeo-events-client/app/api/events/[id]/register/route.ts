@@ -32,17 +32,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const isFree = selectedPlan.price === 0;
 
-    // ─── KEY CHANGE: resolve payment status from the DB, not from the request ──
-    // The frontend sends paymentReference after verify succeeds.
-    // We look up the Payment record ourselves — never trust body.paymentStatus.
-    // This eliminates the hasPaymentData fragility entirely.
+    // ─── Resolve payment from DB — never trust body.paymentStatus ─────────────
     let verifiedPayment: any = null;
 
     if (!isFree && body.paymentReference) {
       verifiedPayment = await Payment.findOne({
         reference: body.paymentReference,
-        purpose: PaymentPurpose.EVENT_REGISTRATION,
-        eventId: event._id,
+        purpose:   PaymentPurpose.EVENT_REGISTRATION,
+        eventId:   event._id,
       });
 
       if (!verifiedPayment) {
@@ -59,10 +56,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         );
       }
 
-      // Guard: payment already linked to a DIFFERENT attendee's registration.
-      // Only check this if registrationId is already set — meaning this payment
-      // was previously confirmed. On first run it will always be null, which is
-      // the normal case and should fall through without blocking.
+      // Guard: payment already linked to a DIFFERENT attendee
       if (verifiedPayment.registrationId) {
         const linkedReg = await Registration.findById(verifiedPayment.registrationId);
         if (linkedReg && linkedReg.attendeeEmail !== attendeeEmail) {
@@ -71,12 +65,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             { status: 409 }
           );
         }
-        // Same email → idempotent retry, fall through to upgrade/confirm below
+        // Same email → idempotent retry, fall through
       }
     }
 
-    // isFree with no payment reference OR paid with verified payment — both proceed.
-    // Paid with no payment reference → pending branch below.
     const hasVerifiedPayment = !!verifiedPayment;
 
     // ─── Duplicate registration check ─────────────────────────────────────────
@@ -85,7 +77,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (existingRegistration) {
       if (existingRegistration.status === RegistrationStatus.CANCELLED) {
         await Registration.findByIdAndDelete(existingRegistration._id);
-      } else if ( existingRegistration.status === RegistrationStatus.CONFIRMED || existingRegistration.status === RegistrationStatus.PENDING && !hasVerifiedPayment) {
+      } else if (
+        existingRegistration.status === RegistrationStatus.CONFIRMED ||
+        (existingRegistration.status === RegistrationStatus.PENDING && !hasVerifiedPayment)
+      ) {
         return NextResponse.json({
           error: "You have already registered for this event",
           alreadyRegistered: true,
@@ -93,7 +88,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           status: existingRegistration.status,
         }, { status: 400 });
       }
-      // PENDING + hasVerifiedPayment → upgrade the existing pending registration below
+      // PENDING + hasVerifiedPayment → upgrade below
     }
 
     // ─── Ticket count ──────────────────────────────────────────────────────────
@@ -156,16 +151,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       else ageGroup = '50+';
     }
 
-    // ─── PAID — no verified payment yet → create/return pending ───────────────
+    // ─── PAID — no verified payment yet → pending ──────────────────────────────
+    // No seat deduction here — seats only deducted on confirmation.
     if (!isFree && !hasVerifiedPayment) {
       if (existingRegistration?.status === RegistrationStatus.PENDING) {
-        // Already pending, just return the existing registration ID so the
-        // frontend can retry payment against the same registration
         return NextResponse.json({
           success: true,
           message: "Registration already pending. Complete payment to confirm.",
           data: {
-            registrationId: existingRegistration._id,
+            registrationId:     existingRegistration._id,
             registrationNumber: existingRegistration.registrationNumber,
           },
         });
@@ -173,7 +167,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
       const registration = new Registration({
         ...buildRegistrationFields(body, id, selectedPlan, totalTickets, ageGroup),
-        status: RegistrationStatus.PENDING,
+        status:        RegistrationStatus.PENDING,
         paymentStatus: PaymentStatus.PENDING,
       });
       await registration.save();
@@ -182,45 +176,115 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         success: true,
         message: "Registration created. Awaiting payment confirmation.",
         data: {
-          registrationId: registration._id,
+          registrationId:     registration._id,
           registrationNumber: registration.registrationNumber,
         },
       });
     }
 
-    // ─── PAID — verified payment present → confirm in transaction ─────────────
+    // ─── PAID — verified payment → confirm + deduct seats in ONE transaction ───
+    // KEY FIX: seat deduction is now inside the transaction alongside
+    // registration confirmation. If seats fail, the whole transaction rolls
+    // back — no orphaned confirmed+paid registrations with cancelled status.
     if (!isFree && hasVerifiedPayment) {
       const session = await mongoose.startSession();
       session.startTransaction();
 
       try {
-        // Upgrade existing pending registration or create a new confirmed one
+        // 1. Confirm/upgrade registration
         const registration = existingRegistration || new Registration();
         registration.set({
           ...buildRegistrationFields(body, id, selectedPlan, totalTickets, ageGroup),
-          status: RegistrationStatus.CONFIRMED,
+          status:        RegistrationStatus.CONFIRMED,
           paymentStatus: PaymentStatus.COMPLETED,
         });
         await registration.save({ session });
 
-        // Link payment → registration (only fields not already set by verify)
+        // 2. Link payment ↔ registration
         verifiedPayment.registrationId = registration._id;
-        if (!verifiedPayment.paystackReference) {
-          verifiedPayment.paystackReference = body.paymentReference;
-        }
-        if (!verifiedPayment.paidAt) {
-          verifiedPayment.paidAt = new Date();
-        }
+        if (!verifiedPayment.paystackReference) verifiedPayment.paystackReference = body.paymentReference;
+        if (!verifiedPayment.paidAt) verifiedPayment.paidAt = new Date();
         await verifiedPayment.save({ session });
 
-        // Link registration → payment
         registration.paymentId = verifiedPayment._id;
         await registration.save({ session });
+
+        // 3. Deduct global seats — inside the transaction so it rolls back
+        //    atomically if anything else fails.
+        const globalUpdate = await Event.findOneAndUpdate(
+          { _id: event._id, availableSeats: { $gte: totalTickets } },
+          { $inc: { availableSeats: -totalTickets } },
+          { new: true, session }
+        );
+
+        if (!globalUpdate) {
+          await session.abortTransaction();
+          session.endSession();
+          return NextResponse.json(
+            { error: "Sorry, the last available seats were just taken. Please contact support." },
+            { status: 409 }
+          );
+        }
+
+        // 4. Deduct plan seats — also inside the transaction
+        if (selectedPlan.maxSeats !== undefined) {
+          const planHasSeatsField =
+            selectedPlan.availableSeats !== undefined &&
+            selectedPlan.availableSeats !== null;
+
+          let planUpdate = null;
+
+          if (planHasSeatsField) {
+            planUpdate = await Event.findOneAndUpdate(
+              {
+                _id:   event._id,
+                plans: { $elemMatch: { type: body.planType, availableSeats: { $gte: totalTickets } } },
+              },
+              { $inc: { 'plans.$.availableSeats': -totalTickets } },
+              { new: true, session }
+            );
+          } else {
+            const newAvailable = selectedPlan.maxSeats - totalTickets;
+            if (newAvailable < 0) {
+              await session.abortTransaction();
+              session.endSession();
+              return NextResponse.json(
+                { error: `Not enough seats for the ${selectedPlan.name} plan.` },
+                { status: 409 }
+              );
+            }
+            planUpdate = await Event.findOneAndUpdate(
+              { _id: event._id, 'plans.type': body.planType, 'plans.availableSeats': { $exists: false } },
+              { $set: { 'plans.$.availableSeats': newAvailable } },
+              { new: true, session }
+            );
+            if (!planUpdate) {
+              planUpdate = await Event.findOneAndUpdate(
+                {
+                  _id:   event._id,
+                  plans: { $elemMatch: { type: body.planType, availableSeats: { $gte: totalTickets } } },
+                },
+                { $inc: { 'plans.$.availableSeats': -totalTickets } },
+                { new: true, session }
+              );
+            }
+          }
+
+          if (!planUpdate) {
+            await session.abortTransaction();
+            session.endSession();
+            return NextResponse.json(
+              { error: "Plan seats were just taken. Please contact support." },
+              { status: 409 }
+            );
+          }
+        }
 
         await session.commitTransaction();
         session.endSession();
 
-        return await confirmRegistration({
+        // 5. Ticket + emails — outside transaction (non-critical, non-reversible)
+        return await generateTicketAndSendEmails({
           event,
           registration,
           paymentRecord: verifiedPayment,
@@ -236,19 +300,93 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       } catch (txError: any) {
         await session.abortTransaction();
         session.endSession();
+        console.error('[register] transaction aborted:', txError.message);
         throw txError;
       }
     }
 
     // ─── FREE ──────────────────────────────────────────────────────────────────
+    // For free registrations: confirm, deduct seats, generate ticket.
+    // No payment involved so no transaction needed — seat deduction is
+    // still atomic via findOneAndUpdate.
     const registration = new Registration({
       ...buildRegistrationFields(body, id, selectedPlan, totalTickets, ageGroup),
-      status: RegistrationStatus.CONFIRMED,
+      status:        RegistrationStatus.CONFIRMED,
       paymentStatus: PaymentStatus.COMPLETED,
     });
     await registration.save();
 
-    return await confirmRegistration({
+    // Deduct seats for free registration
+    const globalUpdate = await Event.findOneAndUpdate(
+      { _id: event._id, availableSeats: { $gte: totalTickets } },
+      { $inc: { availableSeats: -totalTickets } },
+      { new: true }
+    );
+
+    if (!globalUpdate) {
+      registration.status = RegistrationStatus.CANCELLED;
+      await registration.save();
+      return NextResponse.json(
+        { error: "Seats were just taken. Please try again." },
+        { status: 409 }
+      );
+    }
+
+    if (selectedPlan.maxSeats !== undefined) {
+      const planHasSeatsField =
+        selectedPlan.availableSeats !== undefined &&
+        selectedPlan.availableSeats !== null;
+      let planUpdate = null;
+
+      if (planHasSeatsField) {
+        planUpdate = await Event.findOneAndUpdate(
+          {
+            _id:   event._id,
+            plans: { $elemMatch: { type: body.planType, availableSeats: { $gte: totalTickets } } },
+          },
+          { $inc: { 'plans.$.availableSeats': -totalTickets } },
+          { new: true }
+        );
+      } else {
+        const newAvailable = selectedPlan.maxSeats - totalTickets;
+        if (newAvailable < 0) {
+          await Event.findByIdAndUpdate(event._id, { $inc: { availableSeats: totalTickets } });
+          registration.status = RegistrationStatus.CANCELLED;
+          await registration.save();
+          return NextResponse.json(
+            { error: `Not enough seats for the ${selectedPlan.name} plan.` },
+            { status: 409 }
+          );
+        }
+        planUpdate = await Event.findOneAndUpdate(
+          { _id: event._id, 'plans.type': body.planType, 'plans.availableSeats': { $exists: false } },
+          { $set: { 'plans.$.availableSeats': newAvailable } },
+          { new: true }
+        );
+        if (!planUpdate) {
+          planUpdate = await Event.findOneAndUpdate(
+            {
+              _id:   event._id,
+              plans: { $elemMatch: { type: body.planType, availableSeats: { $gte: totalTickets } } },
+            },
+            { $inc: { 'plans.$.availableSeats': -totalTickets } },
+            { new: true }
+          );
+        }
+      }
+
+      if (!planUpdate) {
+        await Event.findByIdAndUpdate(event._id, { $inc: { availableSeats: totalTickets } });
+        registration.status = RegistrationStatus.CANCELLED;
+        await registration.save();
+        return NextResponse.json(
+          { error: "Plan seats were just taken. Please try again." },
+          { status: 409 }
+        );
+      }
+    }
+
+    return await generateTicketAndSendEmails({
       event,
       registration,
       paymentRecord: null,
@@ -266,7 +404,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (error.code === 11000) {
       if (error.keyPattern?.registrationNumber) {
-        return NextResponse.json({ error: "Registration number conflict. Please try again." }, { status: 409 });
+        return NextResponse.json(
+          { error: "Registration number conflict. Please try again." },
+          { status: 409 }
+        );
       }
       if (error.keyPattern?.eventId && error.keyPattern?.attendeeEmail) {
         return NextResponse.json({
@@ -283,121 +424,76 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 }
 
-// ─── Shared field builder ──────────────────────────────────────────────────────
-function buildRegistrationFields(body: any, eventId: string, selectedPlan: any, totalTickets: number, ageGroup: string) {
+// ─── Field builder ─────────────────────────────────────────────────────────────
+function buildRegistrationFields(
+  body: any,
+  eventId: string,
+  selectedPlan: any,
+  totalTickets: number,
+  ageGroup: string
+) {
   return {
     eventId,
-    attendeeName: body.attendeeName,
-    attendeeEmail: body.attendeeEmail.toLowerCase().trim(),
-    attendeePhone: body.attendeePhone,
-    attendeeAge: body.attendeeAge,
-    attendeeGender: body.attendeeGender,
-    attendeeCompany: body.attendeeCompany,
-    attendeeTitle: body.attendeeTitle,
-    planType: body.planType,
-    planName: selectedPlan.name,
-    price: body.isGroupRegistration ? selectedPlan.price * totalTickets : selectedPlan.price,
-    currency: selectedPlan.currency || 'NGN',
-    isGroupRegistration: body.isGroupRegistration || false,
-    groupSize: body.isGroupRegistration ? totalTickets : undefined,
-    groupName: body.groupName,
-    groupMembers: body.groupMembers || [],
+    attendeeName:            body.attendeeName,
+    attendeeEmail:           body.attendeeEmail.toLowerCase().trim(),
+    attendeePhone:           body.attendeePhone,
+    attendeeAge:             body.attendeeAge,
+    attendeeGender:          body.attendeeGender,
+    attendeeCompany:         body.attendeeCompany,
+    attendeeTitle:           body.attendeeTitle,
+    planType:                body.planType,
+    planName:                selectedPlan.name,
+    price:                   body.isGroupRegistration
+                               ? selectedPlan.price * totalTickets
+                               : selectedPlan.price,
+    currency:                selectedPlan.currency || 'NGN',
+    isGroupRegistration:     body.isGroupRegistration || false,
+    groupSize:               body.isGroupRegistration ? totalTickets : undefined,
+    groupName:               body.groupName,
+    groupMembers:            body.groupMembers || [],
     isCorporateRegistration: body.isCorporateRegistration || false,
-    companyName: body.companyName,
-    companySize: body.isCorporateRegistration ? totalTickets : undefined,
-    companyMembers: body.companyMembers || [],
-    specialRequests: body.specialRequests,
-    dietaryRestrictions: body.dietaryRestrictions || [],
-    accessibilityNeeds: body.accessibilityNeeds || [],
+    companyName:             body.companyName,
+    companySize:             body.isCorporateRegistration ? totalTickets : undefined,
+    companyMembers:          body.companyMembers || [],
+    specialRequests:         body.specialRequests,
+    dietaryRestrictions:     body.dietaryRestrictions || [],
+    accessibilityNeeds:      body.accessibilityNeeds || [],
     ageGroup,
     parentalConsentProvided: body.parentalConsentProvided || false,
-    parentalConsentByName: body.parentalConsentByName,
-    parentalConsentByEmail: body.parentalConsentByEmail,
-    parentalConsentAt: body.parentalConsentProvided ? new Date() : undefined,
-    ageVerified: true,
-    registeredAt: new Date(),
-    metadata: new Map(),
+    parentalConsentByName:   body.parentalConsentByName,
+    parentalConsentByEmail:  body.parentalConsentByEmail,
+    parentalConsentAt:       body.parentalConsentProvided ? new Date() : undefined,
+    ageVerified:             true,
+    registeredAt:            new Date(),
+    metadata:                new Map(),
   };
 }
 
-// ─── Post-save confirmation (seats + ticket + emails) ─────────────────────────
-async function confirmRegistration({
-  event, registration, paymentRecord, selectedPlan, body,
-  totalTickets, isFree, requiresParentalConsentEmail, parentName, parentEmail,
-}: {
+// ─── Ticket generation + emails ───────────────────────────────────────────────
+// Called AFTER the transaction commits. Runs outside the transaction because
+// QR generation and email sending are not reversible — there's no point
+// including them in a DB transaction.
+async function generateTicketAndSendEmails({ event, registration, paymentRecord, selectedPlan, body, totalTickets, isFree, requiresParentalConsentEmail, parentName, parentEmail }: {
   event: any; registration: any; paymentRecord: any; selectedPlan: any;
   body: any; totalTickets: number; isFree: boolean;
   requiresParentalConsentEmail: boolean; parentName: string; parentEmail: string;
 }): Promise<NextResponse> {
 
-  // 1. Atomically deduct global seats
-  const globalUpdate = await Event.findOneAndUpdate(
-    { _id: event._id, availableSeats: { $gte: totalTickets } },
-    { $inc: { availableSeats: -totalTickets } },
-    { new: true }
-  );
-
-  if (!globalUpdate) {
-    registration.status = RegistrationStatus.CANCELLED;
-    await registration.save();
-    return NextResponse.json({ error: "Seats were just taken. Please try again." }, { status: 409 });
-  }
-
-  // 2. Atomically deduct plan seats
-  if (selectedPlan.maxSeats !== undefined) {
-    const planHasSeatsField = selectedPlan.availableSeats !== undefined && selectedPlan.availableSeats !== null;
-    let planUpdate = null;
-
-    if (planHasSeatsField) {
-      planUpdate = await Event.findOneAndUpdate(
-        { _id: event._id, plans: { $elemMatch: { type: body.planType, availableSeats: { $gte: totalTickets } } } },
-        { $inc: { 'plans.$.availableSeats': -totalTickets } },
-        { new: true }
-      );
-    } else {
-      const newAvailable = selectedPlan.maxSeats - totalTickets;
-      if (newAvailable < 0) {
-        await Event.findByIdAndUpdate(event._id, { $inc: { availableSeats: totalTickets } });
-        registration.status = RegistrationStatus.CANCELLED;
-        await registration.save();
-        return NextResponse.json({ error: `Not enough seats for the ${selectedPlan.name} plan.` }, { status: 409 });
-      }
-      planUpdate = await Event.findOneAndUpdate(
-        { _id: event._id, 'plans.type': body.planType, 'plans.availableSeats': { $exists: false } },
-        { $set: { 'plans.$.availableSeats': newAvailable } },
-        { new: true }
-      );
-      if (!planUpdate) {
-        planUpdate = await Event.findOneAndUpdate(
-          { _id: event._id, plans: { $elemMatch: { type: body.planType, availableSeats: { $gte: totalTickets } } } },
-          { $inc: { 'plans.$.availableSeats': -totalTickets } },
-          { new: true }
-        );
-      }
-    }
-
-    if (!planUpdate) {
-      await Event.findByIdAndUpdate(event._id, { $inc: { availableSeats: totalTickets } });
-      registration.status = RegistrationStatus.CANCELLED;
-      await registration.save();
-      return NextResponse.json({ error: "Plan seats were just taken. Please try again." }, { status: 409 });
-    }
-  }
-
-  // 3. Generate ticket
   const ticketNumber = await generateTicketNumber(event);
-  const qrCodeData = JSON.stringify({
+  const qrCodeData   = JSON.stringify({
     ticketNumber,
     registrationId: registration._id.toString(),
-    eventId: event._id.toString(),
-    attendeeName: body.attendeeName,
-    attendeeEmail: body.attendeeEmail.toLowerCase().trim(),
-    price: body.isGroupRegistration ? selectedPlan.price * totalTickets : selectedPlan.price,
-    planType: body.planType,
-    eventTitle: event.title,
-    eventDate: event.startDate,
-    eventVenue: event.location?.venue || 'TBA',
-    ...(body.isGroupRegistration && { groupSize: totalTickets, groupName: body.groupName }),
+    eventId:        event._id.toString(),
+    attendeeName:   body.attendeeName,
+    attendeeEmail:  body.attendeeEmail.toLowerCase().trim(),
+    price:          body.isGroupRegistration
+                      ? selectedPlan.price * totalTickets
+                      : selectedPlan.price,
+    planType:       body.planType,
+    eventTitle:     event.title,
+    eventDate:      event.startDate,
+    eventVenue:     event.location?.venue || 'TBA',
+    ...(body.isGroupRegistration   && { groupSize: totalTickets, groupName: body.groupName }),
     ...(body.isCorporateRegistration && { companySize: totalTickets, companyName: body.companyName }),
   });
 
@@ -405,86 +501,98 @@ async function confirmRegistration({
 
   const ticket = new Ticket({
     registrationId: registration._id,
-    eventId: event._id,
-    paymentId: paymentRecord?._id,
+    eventId:        event._id,
+    paymentId:      paymentRecord?._id,
     ticketNumber,
-    qrCode: qrCodeImage,
+    qrCode:         qrCodeImage,
     qrCodeData,
-    planType: body.planType,
-    planName: selectedPlan.name,
-    price: body.isGroupRegistration ? selectedPlan.price * totalTickets : selectedPlan.price,
-    currency: selectedPlan.currency || 'NGN',
-    quantity: totalTickets,
-    status: TicketStatus.ACTIVE,
-    expiresAt: event.endDate,
+    planType:       body.planType,
+    planName:       selectedPlan.name,
+    price:          body.isGroupRegistration
+                      ? selectedPlan.price * totalTickets
+                      : selectedPlan.price,
+    currency:       selectedPlan.currency || 'NGN',
+    quantity:       totalTickets,
+    status:         TicketStatus.ACTIVE,
+    expiresAt:      event.endDate,
   });
 
   await ticket.save();
+
   registration.ticketId = ticket._id;
   await registration.save();
 
-  // 4. Emails
   try {
-    const startDateStr = event.startDate instanceof Date ? event.startDate.toISOString() : String(event.startDate);
-    const endDateStr = event.endDate
+    const startDateStr   = event.startDate instanceof Date
+      ? event.startDate.toISOString()
+      : String(event.startDate);
+    const endDateStr     = event.endDate
       ? (event.endDate instanceof Date ? event.endDate.toISOString() : String(event.endDate))
       : undefined;
     const isVirtualEvent = !event.location?.venue || event.location.venue === 'Online';
 
     await sendRegistrationEmail({
-      email: body.attendeeEmail.toLowerCase().trim(),
-      name: body.attendeeName,
-      registrationNumber: registration.registrationNumber,
-      eventTitle: event.title,
-      eventDate: startDateStr,
-      eventEndDate: endDateStr,
-      eventVenue: event.location?.venue || (isVirtualEvent ? 'Online' : 'TBA'),
-      eventType: isVirtualEvent ? 'virtual' : 'physical',
-      planName: selectedPlan.name,
-      planType: body.planType,
-      price: body.isGroupRegistration ? selectedPlan.price * totalTickets : selectedPlan.price,
-      currency: selectedPlan.currency || 'NGN',
-      ticketNumber: ticket.ticketNumber,
-      qrCode: ticket.qrCode,
-      paymentReference: paymentRecord?.reference,
-      paymentAmount: paymentRecord?.amountPaid,
+      email:               body.attendeeEmail.toLowerCase().trim(),
+      name:                body.attendeeName,
+      registrationNumber:  registration.registrationNumber,
+      eventTitle:          event.title,
+      eventDate:           startDateStr,
+      eventEndDate:        endDateStr,
+      eventVenue:          event.location?.venue || (isVirtualEvent ? 'Online' : 'TBA'),
+      eventType:           isVirtualEvent ? 'virtual' : 'physical',
+      planName:            selectedPlan.name,
+      planType:            body.planType,
+      price:               body.isGroupRegistration
+                             ? selectedPlan.price * totalTickets
+                             : selectedPlan.price,
+      currency:            selectedPlan.currency || 'NGN',
+      ticketNumber:        ticket.ticketNumber,
+      qrCode:              ticket.qrCode,
+      paymentReference:    paymentRecord?.reference,
+      paymentAmount:       paymentRecord?.amountPaid,
       isFree,
       isGroupRegistration: body.isGroupRegistration || false,
-      groupSize: totalTickets,
-      groupName: body.groupName,
-      registrationType: body.isCorporateRegistration ? 'corporate' : body.isGroupRegistration ? 'group' : 'individual',
-      specialInstructions: (event as any).registrationInstructions || (event as any).instructions || event.location?.notes || '',
+      groupSize:           totalTickets,
+      groupName:           body.groupName,
+      registrationType:    body.isCorporateRegistration
+                             ? 'corporate'
+                             : body.isGroupRegistration ? 'group' : 'individual',
+      specialInstructions: (event as any).registrationInstructions
+                             || (event as any).instructions
+                             || event.location?.notes
+                             || '',
     });
 
     if (requiresParentalConsentEmail && parentEmail && parentName) {
       await sendParentalConsentEmail({
         parentName,
         parentEmail,
-        attendeeName: body.attendeeName,
-        attendeeAge: body.attendeeAge,
-        eventTitle: event.title,
-        eventDate: startDateStr,
-        eventVenue: event.location?.venue || (isVirtualEvent ? 'Online' : 'TBA'),
+        attendeeName:       body.attendeeName,
+        attendeeAge:        body.attendeeAge,
+        eventTitle:         event.title,
+        eventDate:          startDateStr,
+        eventVenue:         event.location?.venue || (isVirtualEvent ? 'Online' : 'TBA'),
         registrationNumber: registration.registrationNumber,
-        ticketNumber: ticket.ticketNumber,
+        ticketNumber:       ticket.ticketNumber,
       });
     }
   } catch (emailError) {
-    console.error('Failed to send registration email:', emailError);
+    // Email failure must never fail the registration — log and continue
+    console.error('[register] Failed to send confirmation email:', emailError);
   }
 
   return NextResponse.json({
     success: true,
     message: "Registration successful! Confirmation email sent.",
     data: {
-      registrationId: registration._id,
+      registrationId:     registration._id,
       registrationNumber: registration.registrationNumber,
-      ticketId: ticket._id,
-      ticketNumber: ticket.ticketNumber,
-      qrCode: ticket.qrCode,
-      totalSeatsBooked: totalTickets,
+      ticketId:           ticket._id,
+      ticketNumber:       ticket.ticketNumber,
+      qrCode:             ticket.qrCode,
+      totalSeatsBooked:   totalTickets,
       ...(paymentRecord && {
-        paymentId: paymentRecord._id,
+        paymentId:        paymentRecord._id,
         paymentReference: paymentRecord.reference,
       }),
       ...(requiresParentalConsentEmail && { parentalConsentSent: true, parentEmail }),
@@ -493,7 +601,10 @@ async function confirmRegistration({
 }
 
 async function generateTicketNumber(event: any): Promise<string> {
-  const eventPrefix = event.title.replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase();
+  const eventPrefix = event.title
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .substring(0, 4)
+    .toUpperCase();
   const count = await Ticket.countDocuments({ eventId: event._id });
   return `${eventPrefix}-${(count + 1).toString().padStart(6, '0')}`;
 }
