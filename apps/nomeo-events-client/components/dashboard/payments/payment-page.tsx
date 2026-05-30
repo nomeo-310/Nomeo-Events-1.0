@@ -1,16 +1,19 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useMemo, useEffect, useRef, type ComponentProps } from "react";
 import { format } from "date-fns";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Loading01Icon, CheckmarkSquare04Icon, PartyIcon, UnavailableIcon, DocumentValidationIcon, Search01Icon, FilterHorizontalIcon, RefreshIcon, File01Icon, FileSpreadsheetIcon, CreditCardIcon, AlertCircleIcon, CheckmarkCircle02Icon, CancelCircleIcon, TimeIcon, 
-  Invoice01Icon as ReceiptIcon, MoreHorizontalCircle01Icon, Delete03Icon, Refresh03Icon as RefreshCircle02Icon,
-  MoneyExchange01Icon as MoneyBack01Icon, ViewIcon, Cancel01Icon
-} from "@hugeicons/core-free-icons";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { 
+  Loading01Icon, CheckmarkSquare04Icon, PartyIcon, UnavailableIcon, 
+  DocumentValidationIcon, Search01Icon, FilterHorizontalIcon, RefreshIcon, 
+  File01Icon, FileSpreadsheetIcon, CreditCardIcon, AlertCircleIcon, 
+  CheckmarkCircle02Icon, CancelCircleIcon, TimeIcon, Invoice01Icon as ReceiptIcon, 
+  MoreHorizontalCircle01Icon, Delete03Icon, Refresh03Icon as RefreshCircle02Icon,
+  MoneyExchange01Icon as MoneyBack01Icon, ViewIcon, Cancel01Icon
+} from "@hugeicons/core-free-icons";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -21,55 +24,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PaginationWithInfo } from "@/components/ui/pagination";
 import { PaymentDetailsModal } from "./payment-details-modal";
 
-// Types
-interface Payment {
-  _id: string;
-  purpose: string;
-  eventId?: {
-    slug: string;
-    title: string;    
-    _id: string;
-  };
-  registrationId?: string;
-  subscriptionId?: string;
-  planId?: string;
-  amount: number;
-  amountPaid: number;
-  discountAmount: number;
-  currency: string;
-  reference: string;
-  paystackReference?: string;
-  accessCode?: string;
-  authorizationUrl?: string;
-  gatewayStatus: string;
-  gatewayResponse?: string;
-  channel?: string;
-  ipAddress?: string;
-  paidAt?: string;
-  cardType?: string;
-  cardLast4?: string;
-  cardBank?: string;
-  createdAt: string;
-  updatedAt: string;
-  couponCode?: string;
-  couponDiscount?: number;
-  provider?: string;
-  refundedAt?: string;
-  refundAmount?: number;
-  refundReference?: string;
-  refundReason?: string;
-}
+type PaymentDetailsModalPayment = ComponentProps<typeof PaymentDetailsModal>["payment"];
 
-interface PaymentResponse {
-  success: boolean;
-  payments: Payment[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-}
+// Import the existing hooks
+import { 
+  usePayments, 
+  useRefundPayment,
+  Payment, 
+  PaymentGatewayStatus,
+  PaymentPurpose,
+  type PaymentListFilters
+} from "@/hooks/use-payments";
+import { createPortal } from "react-dom";
 
 // Helper functions
 const formatAmount = (amount: number) => {
@@ -80,7 +46,7 @@ const formatAmount = (amount: number) => {
   }).format(amount / 100);
 };
 
-const getStatusBadge = (status: string) => {
+const getStatusBadge = (status: string): "default" | "secondary" | "destructive" | "outline" => {
   const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
     success: "default",
     pending: "secondary",
@@ -338,197 +304,59 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PaymentPage() {
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 20,
-    total: 0,
-    totalPages: 0
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [isExporting, setIsExporting] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [purposeFilter, setPurposeFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [purposeFilter, setPurposeFilter] = useState<string>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectedPayment, setSelectedPayment] = useState<any | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [refundReason, setRefundReason] = useState('');
   const [refundAmount, setRefundAmount] = useState('');
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
-  // Fetch payments with filters
-  const fetchPayments = async () => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        limit: "20"
-      });
-
-      if (statusFilter !== "all") {
-        params.append("gatewayStatus", statusFilter);
-      }
-      if (purposeFilter !== "all") {
-        params.append("purpose", purposeFilter);
-      }
-
-      const response = await fetch(`/api/payments?${params.toString()}`);
-      const data: PaymentResponse = await response.json();
-
-      if (data.success) {
-        setPayments(data.payments);
-        setPagination(data.pagination);
-      } else {
-        toast.error("Failed to fetch payments");
-      }
-    } catch (error) {
-      console.error("Error fetching payments:", error);
-      toast.error("An error occurred while fetching payments");
-    } finally {
-      setIsLoading(false);
-    }
+  // Build filters for React Query
+  const filters: PaymentListFilters = {
+    page: currentPage,
+    limit: 20,
+    ...(statusFilter !== "all" && { gatewayStatus: statusFilter as PaymentGatewayStatus }),
+    ...(purposeFilter !== "all" && { purpose: purposeFilter as PaymentPurpose }),
   };
 
-  // Initial fetch and refetch when filters change
-  useEffect(() => {
-    fetchPayments();
-  }, [currentPage, statusFilter, purposeFilter]);
-
-  // Filter payments locally for search
-  const filteredPayments = payments.filter((payment) => {
-    const matchesSearch = searchTerm === "" || 
-      payment.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      payment._id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (payment.paystackReference && payment.paystackReference.toLowerCase().includes(searchTerm.toLowerCase()));
-    return matchesSearch;
+  // Use the existing usePayments hook from your hooks file
+  const { 
+    data, 
+    isLoading, 
+    error, 
+    refetch,
+    isFetching,
+  } = usePayments(filters, {
+    placeholderData: (previousData) => previousData,
   });
 
-  // Export handlers
-  const handleExportCSV = () => {
-    const data = selected.size > 0 ? payments.filter(p => selected.has(p._id)) : filteredPayments;
-    if (data.length === 0) {
-      toast.error("No payments to export");
-      return;
-    }
-    exportToCSV(data, `payments_${format(new Date(), 'yyyy-MM-dd-HHmm')}`);
-    toast.success(`Exported ${data.length} payments to CSV`);
+  // Use the refund mutation hook
+  const { mutateAsync: refundPayment, isPending: isRefunding } = useRefundPayment();
+
+  const payments = data?.payments || [];
+  const pagination = data?.pagination || {
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0,
   };
 
-  const handleExportPDF = async () => {
-    const data = selected.size > 0 ? payments.filter(p => selected.has(p._id)) : filteredPayments;
-    if (data.length === 0) {
-      toast.error("No payments to export");
-      return;
-    }
-    setIsExporting(true);
-    try {
-      await exportPaymentsTableToPDF(data, {
-        search: searchTerm,
-        status: statusFilter,
-        purpose: purposeFilter
-      });
-      toast.success(`Exported ${data.length} payments to PDF`);
-    } catch (error) {
-      toast.error("Failed to export PDF");
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    await fetchPayments();
-    toast.success("Payments refreshed");
-  };
-
-  const clearFilters = () => {
-    setSearchTerm("");
-    setStatusFilter("all");
-    setPurposeFilter("all");
-    setCurrentPage(1);
-    setSelected(new Set());
-  };
-
-  const handleSelectAll = () => {
-    setSelected(
-      selected.size === filteredPayments.length && filteredPayments.length > 0
-        ? new Set()
-        : new Set(filteredPayments.map((p) => p._id))
+  // Filter payments locally for search
+  const filteredPayments = useMemo(() => {
+    if (!searchTerm) return payments;
+    return payments.filter((payment) =>
+      payment.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      payment._id.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  };
+  }, [payments, searchTerm]);
 
-  const toggleSelect = (id: string) => {
-    const next = new Set(selected);
-    next.has(id) ? next.delete(id) : next.add(id);
-    setSelected(next);
-  };
-
-  // Payment actions
-  const handleRefund = async () => {
-    if (!selectedPayment) return;
-    try {
-      const response = await fetch(`/api/payments/${selectedPayment._id}/refund`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          reason: refundReason,
-          amount: refundAmount ? parseInt(refundAmount) * 100 : undefined
-        }),
-      });
-      
-      if (response.ok) {
-        toast.success('Refund processed successfully');
-        setRefundModalOpen(false);
-        setRefundReason('');
-        setRefundAmount('');
-        fetchPayments();
-      } else {
-        toast.error('Refund failed');
-      }
-    } catch (error) {
-      toast.error('An error occurred');
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!selectedPayment) return;
-    try {
-      const response = await fetch(`/api/payments/${selectedPayment._id}`, {
-        method: 'DELETE',
-      });
-      
-      if (response.ok) {
-        toast.success('Payment record deleted');
-        setDeleteModalOpen(false);
-        fetchPayments();
-      } else {
-        toast.error('Delete failed');
-      }
-    } catch (error) {
-      toast.error('An error occurred');
-    }
-  };
-
-  const handleReinitiate = async (payment: Payment) => {
-    try {
-      const response = await fetch(`/api/payments/${payment._id}/reinitiate`, {
-        method: 'POST',
-      });
-      
-      if (response.ok) {
-        toast.success('Payment reinitiated successfully');
-        fetchPayments();
-      } else {
-        toast.error('Reinitiation failed');
-      }
-    } catch (error) {
-      toast.error('An error occurred');
-    }
-  };
-
-  // CSV Export function
+  // Export handlers
   const exportToCSV = (paymentsData: Payment[], filename: string) => {
     const headers = [
       'Reference', 'Paystack Reference', 'Purpose', 'Amount', 'Amount Paid', 
@@ -538,20 +366,20 @@ export default function PaymentPage() {
 
     const rows = paymentsData.map((payment) => [
       payment.reference,
-      payment.paystackReference || '',
+      (payment as any).paystackReference || '',
       payment.purpose,
       (payment.amount / 100).toString(),
       (payment.amountPaid / 100).toString(),
       (payment.discountAmount / 100).toString(),
       payment.currency,
       payment.gatewayStatus,
-      payment.channel || '',
+      (payment as any).channel || '',
       format(new Date(payment.createdAt), 'yyyy-MM-dd HH:mm:ss'),
       format(new Date(payment.updatedAt), 'yyyy-MM-dd HH:mm:ss'),
       payment.paidAt ? format(new Date(payment.paidAt), 'yyyy-MM-dd HH:mm:ss') : '',
-      payment.cardType || '',
-      payment.cardLast4 || '',
-      payment.cardBank || '',
+      (payment as any).cardType || '',
+      (payment as any).cardLast4 || '',
+      (payment as any).cardBank || '',
       payment.couponCode || '',
     ]);
 
@@ -576,7 +404,6 @@ export default function PaymentPage() {
     URL.revokeObjectURL(url);
   };
 
-  // PDF Export function
   const exportPaymentsTableToPDF = async (paymentsData: Payment[], filters: any) => {
     const doc = new jsPDF({ orientation: 'landscape' });
     
@@ -610,9 +437,9 @@ export default function PaymentPage() {
       payment.purpose.replace('_', ' '),
       formatAmount(payment.amount),
       payment.gatewayStatus,
-      payment.channel?.toUpperCase() || 'N/A',
+      (payment as any).channel?.toUpperCase() || 'N/A',
       format(new Date(payment.createdAt), 'MMM dd, yyyy'),
-      payment.paystackReference?.substring(0, 15) || 'N/A',
+      (payment as any).paystackReference?.substring(0, 15) || 'N/A',
     ]);
     
     autoTable(doc, {
@@ -636,6 +463,120 @@ export default function PaymentPage() {
     doc.save(`payments_report_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.pdf`);
   };
 
+  const handleExportCSV = () => {
+    const data = selected.size > 0 ? payments.filter(p => selected.has(p._id)) : filteredPayments;
+    if (data.length === 0) {
+      toast.error("No payments to export");
+      return;
+    }
+    exportToCSV(data, `payments_${format(new Date(), 'yyyy-MM-dd-HHmm')}`);
+    toast.success(`Exported ${data.length} payments to CSV`);
+  };
+
+  const handleExportPDF = async () => {
+    const data = selected.size > 0 ? payments.filter(p => selected.has(p._id)) : filteredPayments;
+    if (data.length === 0) {
+      toast.error("No payments to export");
+      return;
+    }
+    setIsExporting(true);
+    try {
+      await exportPaymentsTableToPDF(data, {
+        search: searchTerm,
+        status: statusFilter,
+        purpose: purposeFilter
+      });
+      toast.success(`Exported ${data.length} payments to PDF`);
+    } catch (error) {
+      toast.error("Failed to export PDF");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    await refetch();
+    toast.success("Payments refreshed");
+  };
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("all");
+    setPurposeFilter("all");
+    setCurrentPage(1);
+    setSelected(new Set());
+  };
+
+  const handleSelectAll = () => {
+    setSelected(
+      selected.size === filteredPayments.length && filteredPayments.length > 0
+        ? new Set()
+        : new Set(filteredPayments.map((p) => p._id))
+    );
+  };
+
+  const toggleSelect = (id: string) => {
+    const next = new Set(selected);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelected(next);
+  };
+
+  // Payment actions using the hooks
+  const handleRefund = async () => {
+    if (!selectedPayment) return;
+    try {
+      await refundPayment({
+        paymentId: selectedPayment._id,
+        reason: refundReason,
+        amount: refundAmount ? parseInt(refundAmount) * 100 : undefined
+      });
+      setRefundModalOpen(false);
+      setRefundReason('');
+      setRefundAmount('');
+      toast.success('Refund processed successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Refund failed');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedPayment) return;
+    try {
+      const response = await fetch(`/api/payments/${selectedPayment._id}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        toast.success('Payment record deleted');
+        setDeleteModalOpen(false);
+        await refetch(); // Refetch after delete
+      } else {
+        toast.error('Delete failed');
+      }
+    } catch (error) {
+      toast.error('An error occurred');
+    }
+  };
+
+  const handleReinitiate = async (payment: Payment) => {
+    try {
+      const response = await fetch(`/api/payments/${payment._id}/reinitiate`, {
+        method: 'POST',
+      });
+      
+      if (response.ok) {
+        toast.success('Payment reinitiated successfully');
+        await refetch(); // Refetch after reinitiate
+      } else {
+        toast.error('Reinitiation failed');
+      }
+    } catch (error) {
+      toast.error('An error occurred');
+    }
+  };
+
+  const isLoadingState = isLoading && payments.length === 0;
+  const isRefreshing = isFetching;
   const hasFilters = searchTerm || statusFilter !== "all" || purposeFilter !== "all";
 
   return (
@@ -650,6 +591,9 @@ export default function PaymentPage() {
             <div>
               <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
                 Payments
+                {isRefreshing && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-600 border-t-transparent" />
+                )}
               </h1>
               <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">
                 Manage and track all payment transactions
@@ -675,8 +619,9 @@ export default function PaymentPage() {
                 onClick={handleRefresh}
                 variant="outline"
                 className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 h-10 px-3"
+                disabled={isRefreshing}
               >
-                <HugeiconsIcon icon={RefreshIcon} className={`h-3.5 w-3.5 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                <HugeiconsIcon icon={RefreshIcon} className={`h-3.5 w-3.5 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
             </div>
@@ -706,6 +651,29 @@ export default function PaymentPage() {
             ))}
           </div>
         </div>
+
+        {/* Error State */}
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/50 rounded-xl">
+            <div className="flex items-center gap-3">
+              <HugeiconsIcon icon={AlertCircleIcon} className="h-5 w-5 text-red-500 dark:text-red-400" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-800 dark:text-red-300">Failed to load payments</p>
+                <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">{error.message}</p>
+              </div>
+              <Button
+                type="button"
+                onClick={() => refetch()}
+                variant="outline"
+                size="sm"
+                className="border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/50"
+              >
+                <HugeiconsIcon icon={RefreshIcon} className="h-3 w-3 mr-1.5" />
+                Try Again
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="mb-5 flex flex-col sm:flex-row gap-2.5">
@@ -776,7 +744,13 @@ export default function PaymentPage() {
               <span className="text-sm font-medium text-indigo-900 dark:text-indigo-200">selected</span>
             </div>
             <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" className="border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50">
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm" 
+                className="border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50"
+                onClick={handleExportCSV}
+              >
                 <HugeiconsIcon icon={FileSpreadsheetIcon} className="h-3 w-3 mr-1.5" /> Export Selected
               </Button>
             </div>
@@ -785,7 +759,7 @@ export default function PaymentPage() {
 
         {/* Desktop Table */}
         <div className="hidden md:block bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
-          {isLoading && payments.length === 0 ? (
+          {isLoadingState ? (
             <div className="pb-6"><PaymentsSkeleton /></div>
           ) : filteredPayments.length === 0 ? (
             <div className="py-20 text-center">
@@ -873,11 +847,11 @@ export default function PaymentPage() {
                         </TableCell>
                         <TableCell className="text-center">
                           <span className="text-xs font-mono text-gray-600 dark:text-gray-400">
-                            {payment.channel?.toUpperCase() || 'N/A'}
+                            {(payment as any).channel?.toUpperCase() || 'N/A'}
                           </span>
-                          {payment.cardLast4 && (
+                          {(payment as any).cardLast4 && (
                             <p className="text-[10px] text-gray-400 dark:text-gray-500">
-                              •••• {payment.cardLast4}
+                              •••• {(payment as any).cardLast4}
                             </p>
                           )}
                         </TableCell>
@@ -908,7 +882,9 @@ export default function PaymentPage() {
                                 { label: 'View Details', icon: ViewIcon, onClick: () => { setSelectedPayment(payment); setIsModalOpen(true); } },
                                 ...(payment.gatewayStatus === 'success' && !payment.refundedAt
                                   ? [{ divider: true, section: 'Actions' } as const,
-                                     { label: 'Process Refund', icon: MoneyBack01Icon, onClick: () => { setSelectedPayment(payment); setRefundModalOpen(true); } }]
+                                     { label: isRefunding ? 'Processing...' : 'Process Refund', 
+                                       icon: MoneyBack01Icon, 
+                                       onClick: () => { setSelectedPayment(payment); setRefundModalOpen(true); } }]
                                   : []),
                                 ...(payment.gatewayStatus === 'failed' || payment.gatewayStatus === 'abandoned'
                                   ? [{ label: 'Reinitiate Payment', icon: RefreshCircle02Icon, onClick: () => handleReinitiate(payment) }]
@@ -945,7 +921,7 @@ export default function PaymentPage() {
 
         {/* Mobile View */}
         <div className="md:hidden space-y-3">
-          {isLoading && payments.length === 0 ? (
+          {isLoadingState ? (
             <PaymentsSkeleton />
           ) : filteredPayments.length === 0 ? (
             <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-10 text-center">
@@ -974,7 +950,7 @@ export default function PaymentPage() {
                       {payment.purpose.replace('_', ' ')}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">
-                      {payment.paystackReference || 'No ref'}
+                      {(payment as any).paystackReference || 'No ref'}
                     </p>
                   </div>
                   <Badge variant={getStatusBadge(payment.gatewayStatus)} className="gap-1 shrink-0">
@@ -990,16 +966,16 @@ export default function PaymentPage() {
                   </div>
                   <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
                     <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wide">Channel</p>
-                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase">{payment.channel || 'N/A'}</p>
+                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase">{(payment as any).channel || 'N/A'}</p>
                   </div>
                   <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
                     <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wide">Date</p>
                     <p className="text-xs text-gray-600 dark:text-gray-400">{format(new Date(payment.createdAt), 'dd MMM yyyy')}</p>
                   </div>
-                  {payment.cardLast4 && (
+                  {(payment as any).cardLast4 && (
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
                       <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wide">Card</p>
-                      <p className="text-xs font-mono text-gray-600 dark:text-gray-400">•••• {payment.cardLast4}</p>
+                      <p className="text-xs font-mono text-gray-600 dark:text-gray-400">•••• {(payment as any).cardLast4}</p>
                     </div>
                   )}
                 </div>
@@ -1074,11 +1050,32 @@ export default function PaymentPage() {
         size="md"
         footer={
           <div className="flex gap-2 justify-end">
-            <Button type="button" onClick={() => { setRefundModalOpen(false); setRefundReason(''); setRefundAmount(''); }} variant="outline" className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 h-10 px-3">
+            <Button 
+              type="button" 
+              onClick={() => { setRefundModalOpen(false); setRefundReason(''); setRefundAmount(''); }} 
+              variant="outline" 
+              className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 h-10 px-3"
+              disabled={isRefunding}
+            >
               Cancel
             </Button>
-            <Button type="button" onClick={handleRefund}  className="bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white h-10 px-3">
-              <HugeiconsIcon icon={MoneyBack01Icon} className="h-3.5 w-3.5 mr-1.5" /> Process Refund
+            <Button 
+              type="button" 
+              onClick={handleRefund}  
+              className="bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white h-10 px-3"
+              disabled={isRefunding}
+            >
+              {isRefunding ? (
+                <>
+                  <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent mr-1.5" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <HugeiconsIcon icon={MoneyBack01Icon} className="h-3.5 w-3.5 mr-1.5" />
+                  Process Refund
+                </>
+              )}
             </Button>
           </div>
         }
@@ -1130,10 +1127,21 @@ export default function PaymentPage() {
         size="md"
         footer={
           <div className="flex gap-2 justify-end">
-            <Button type="button" onClick={() => setDeleteModalOpen(false)} variant="outline" size="sm" className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+            <Button 
+              type="button" 
+              onClick={() => setDeleteModalOpen(false)} 
+              variant="outline" 
+              size="sm" 
+              className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
               Cancel
             </Button>
-            <Button type="button" onClick={handleDelete} size="sm" className="bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white">
+            <Button 
+              type="button" 
+              onClick={handleDelete} 
+              size="sm" 
+              className="bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white"
+            >
               <HugeiconsIcon icon={Delete03Icon} className="h-3.5 w-3.5 mr-1.5" /> Delete Permanently
             </Button>
           </div>
