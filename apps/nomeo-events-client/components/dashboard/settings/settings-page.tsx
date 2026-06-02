@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import { PasswordStrength } from "@/components/ui/password-strength";
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 
 // ==================== TYPE DEFINITIONS ====================
 interface User {
@@ -222,6 +223,8 @@ function AccountSection({ user, onUpdate, isPending }: SectionProps) {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  const queryClient = useQueryClient();
+
   const handleSendOtp = async () => {
     setEmailError("");
     
@@ -338,6 +341,7 @@ function AccountSection({ user, onUpdate, isPending }: SectionProps) {
           otp: "" 
         });
 
+        queryClient.clear();
         await authClient.signOut();
         router.refresh();
       } else {
@@ -424,7 +428,9 @@ function AccountSection({ user, onUpdate, isPending }: SectionProps) {
           confirmPassword: "" 
         });
 
+        queryClient.clear();
         await authClient.signOut();
+        router.refresh();
       } else {
         const errorMessage = data.error || "Failed to change password";
         setPasswordError(errorMessage);

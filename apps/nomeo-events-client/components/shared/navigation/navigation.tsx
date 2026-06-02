@@ -27,6 +27,7 @@ import AvatarButton from "./avatar-button";
 import UserDropdown from "./user-dropdown";
 import MobileDrawer from "./mobile-drawer";
 import { useNotificationSummary } from "@/hooks/use-notification";
+import { useQueryClient } from "@tanstack/react-query";
 
 const Navigation = () => {
   const router = useRouter();
@@ -62,6 +63,8 @@ const Navigation = () => {
   const isActive = (href: string): boolean =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
+    const queryClient = useQueryClient();
+
   const handleOpenLogin = useCallback(() => {
     openModal({
       title: "",
@@ -75,9 +78,12 @@ const Navigation = () => {
 
   const handleLogout = useCallback(async () => {
     setUserMenuOpen(false);
+    queryClient.clear();
     await authClient.signOut();
     router.push("/");
     router.refresh();
+
+    window.location.href = "/";
   }, [router]);
 
   // FIXED: Use arrow function that returns the opposite boolean value
