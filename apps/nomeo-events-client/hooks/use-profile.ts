@@ -114,7 +114,6 @@ export function useUpdateProfile() {
     mutationFn: (patch: Partial<BaseProfile>) => profileApi.updateProfile(patch),
     onSuccess: (data) => {
       queryClient.setQueryData(profileKeys.me(), data);
-      toast.success('Profile updated successfully');
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || 'Failed to update profile');
