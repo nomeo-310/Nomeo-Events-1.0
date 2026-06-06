@@ -2,8 +2,11 @@ import { NextRequest } from 'next/server';
 import { requireSuperAdmin } from '@/lib/admin/authorization';
 import { connectDB } from '@/lib/mongoose';
 import { Payment, PaymentPurpose } from '@/models/payment';
-import { ok, err, paginate } from '@/lib/api-response';
+import { err, paginate } from '@/lib/api-response';
 import mongoose from 'mongoose';
+import { Plan } from '@/models/plan';
+import { User } from '@/models/user';
+import { Subscription } from '@/models/subscription';
 
 /**
  * GET /api/admin/payments/subscriptions/:subscriptionId
@@ -12,15 +15,14 @@ import mongoose from 'mongoose';
  *
  * Full payment history for a specific subscription (most recent first).
  */
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { subscriptionId: string } }
-) {
+export async function GET(req: NextRequest,{ params }: { params: Promise<{ subscriptionId: string }> }) {
   try {
     await requireSuperAdmin();
     await connectDB();
 
-    if (!mongoose.isValidObjectId(params.subscriptionId)) {
+    const { subscriptionId } = await params;
+
+    if (!mongoose.isValidObjectId(subscriptionId)) {
       return err('Invalid subscriptionId', 400);
     }
 
@@ -31,7 +33,7 @@ export async function GET(
 
     const filter = {
       purpose:        PaymentPurpose.SUBSCRIPTION,
-      subscriptionId: new mongoose.Types.ObjectId(params.subscriptionId),
+      subscriptionId: new mongoose.Types.ObjectId(subscriptionId),
     };
 
     const [data, total] = await Promise.all([
@@ -39,8 +41,10 @@ export async function GET(
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('planId', 'name tier interval priceKobo')
-        .lean(),
+        .populate({path: 'planId', model: Plan, select: 'name tier interval priceKobo'})
+        .populate({ path: 'subscriptionId', model: Subscription, select: 'status userId',
+          populate: { path: 'userId', model: User, select: 'name email avatar image' } 
+        },),
       Payment.countDocuments(filter),
     ]);
 

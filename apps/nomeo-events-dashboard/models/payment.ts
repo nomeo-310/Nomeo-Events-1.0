@@ -173,7 +173,7 @@ PaymentSchema.pre('validate', function () {
   }
 });
 
-PaymentSchema.index({ reference: 1 }, { unique: true });
+
 PaymentSchema.index({ purpose: 1, gatewayStatus: 1 });
 PaymentSchema.index({ registrationId: 1 });
 PaymentSchema.index({ subscriptionId: 1 });

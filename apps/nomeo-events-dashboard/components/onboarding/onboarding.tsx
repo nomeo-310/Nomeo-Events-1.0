@@ -24,7 +24,7 @@ export function Onboarding({ needsOnboarding, userData }: OnboardingProviderProp
       <OnboardingModal
         isOpen={true}
         onComplete={() => {
-          window.location.href = '/admin/dashboard';
+          window.location.href = '/';
         }}
         userData={userData}
       />

@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
         lastLoginAt: loginTimestamp,
         lastLoginIP: ipAddress,
       },
-      $inc: { loginCount: 1 },
+      $inc: { loginCount: needsOnboarding ? 0 : 1 }, // Only increment login count if not onboarding (first login doesn't count)
     };
     
     const userUpdateFields: any = {

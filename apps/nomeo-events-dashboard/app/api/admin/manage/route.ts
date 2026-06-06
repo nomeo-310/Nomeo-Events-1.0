@@ -8,9 +8,7 @@ import { requireSuperAdmin, requireAdmin } from "@/lib/admin/authorization";
 import { createAdminUser } from "@/lib/admin/create-admin";
 import mongoose from "mongoose";
 import { sendAdminActionEmail } from "@/lib/email/send-admin-action-email";
-import { getAuth } from "@/lib/auth/auth";
 import { verifyPassword, hashPassword } from "better-auth/crypto";
-import bcrypt from "bcryptjs";
 
 // Role hierarchy for validation
 const ROLE_HIERARCHY: Record<AdminRole, number> = {
@@ -47,7 +45,7 @@ export async function GET(request: NextRequest) {
   try {
     await connectDB();
     
-    const loggedInUser = await requireAdmin();
+    const loggedInUser = await requireSuperAdmin();
     
     if (!loggedInUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -280,7 +278,7 @@ export async function PATCH(request: NextRequest) {
       Object.assign(targetAdmin, updateData);
       
       // Check if this is a first-time user (not onboarded yet)
-      const isFirstTimeUser = !targetAdmin.isOnboarded && targetAdmin.loginCount === 0;
+      const isFirstTimeUser = !targetAdmin.isOnboarded && targetAdmin.loginCount <= 1;
       
       if (isFirstTimeUser) {
         targetAdmin.isOnboarded = true;
@@ -603,12 +601,15 @@ export async function PUT(request: NextRequest) {
       // Send email notification
       await sendAdminActionEmail({
         email: targetAdmin.email,
-        name: targetAdmin.name || targetAdmin.displayName,
+        name: targetAdmin.displayName || targetAdmin.name,
         action: "password_reset",
-        details: "Your password has been reset by a super administrator",
+        details: `Your admin account password has been reset by ${loggedInUser.name}.`,
         performedBy: loggedInUser.name,
         performedByEmail: loggedInUser.email,
-      }).catch(err => console.error("Failed to send email:", err));
+        newPassword: newPassword,
+        loginUrl: `${process.env.NEXT_PUBLIC_APP_URL}/admin/login`,
+        reason: 'Password reset by super admin based on admin request.'
+      });
       
       return NextResponse.json({
         success: true,
@@ -648,7 +649,6 @@ export async function PUT(request: NextRequest) {
       }
       
       // Verify current password
-      const auth = await getAuth();
       const db = mongoose.connection.db!;
       
       const accountRecord = await db.collection("account").findOne({ 
@@ -694,10 +694,22 @@ export async function PUT(request: NextRequest) {
       
       // If this is first-time setup (onboarding), activate the account
       let wasActivated = false;
+
       if (action === "first-time-setup" && !targetAdmin.isActive) {
         targetAdmin.isActive = true;
         targetAdmin.adminStatus = "active";
         // DO NOT set isOnboarded yet - that happens on profile update
+        await targetAdmin.save();
+        
+        await db.collection("user").updateOne(
+          { _id: targetUser._id },
+          { $set: { updatedAt: new Date() } }
+        );
+      }
+
+      if (!targetAdmin.isActive) {
+        targetAdmin.isActive = true;
+        targetAdmin.adminStatus = "active";
         await targetAdmin.save();
         
         await db.collection("user").updateOne(

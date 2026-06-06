@@ -230,7 +230,6 @@ const RegistrationSchema = new Schema<IRegistrationDocument>(
 );
 
 RegistrationSchema.index({ eventId: 1, attendeeEmail: 1 }, { unique: true, sparse: true });
-RegistrationSchema.index({ registrationNumber: 1 }, { unique: true });
 RegistrationSchema.index({ status: 1, paymentStatus: 1 });
 RegistrationSchema.index({ attendeeEmail: 1 });
 

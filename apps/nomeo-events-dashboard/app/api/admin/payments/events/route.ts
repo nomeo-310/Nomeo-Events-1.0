@@ -3,6 +3,8 @@ import { requireSuperAdmin } from '@/lib/admin/authorization';
 import { connectDB } from '@/lib/mongoose';
 import { Payment, PaymentGatewayStatus, PaymentPurpose } from '@/models/payment';
 import { err, paginate } from '@/lib/api-response';
+import { Registration } from '@/models/registration';
+import { Event } from '@/models/event';
 
 /**
  * GET /api/admin/payments/events
@@ -61,8 +63,8 @@ export async function GET(req: NextRequest) {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('eventId',        'title slug startDate')
-        .populate('registrationId', 'registrationNumber attendeeName attendeeEmail planType planName')
+        .populate({path: 'eventId',  model: Event, select: 'title slug startDate'})
+        .populate({path: 'registrationId', model: Registration, select: 'registrationNumber attendeeName attendeeEmail planType planName'})
         .lean(),
       Payment.countDocuments(filter),
     ]);

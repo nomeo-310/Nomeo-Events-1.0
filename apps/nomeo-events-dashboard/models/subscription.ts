@@ -1,6 +1,6 @@
 // models/subscription.ts
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import { PlanInterval, PlanTier, DiscountType, Plan } from './plan';
+import { DiscountType } from './plan';
 import { Notification } from './notification';
 import { ObjectId } from 'mongodb';
 
@@ -11,7 +11,7 @@ export enum SubscriptionStatus {
   ACTIVE    = 'active',
   PAST_DUE  = 'past_due',
   CANCELLED = 'cancelled',
-  EXPIRED   = 'expired',   // fixed: was EXPIblue
+  EXPIRED   = 'expired',
   PAUSED    = 'paused',
 }
 
@@ -28,10 +28,10 @@ export interface ISubscription {
 
   status: SubscriptionStatus;
 
-  // Plan snapshot
-  planTier:  PlanTier;
+  // Plan snapshot (using strings for dynamic values)
+  planTier:  string;    // Changed from enum to string
   planName:  string;
-  interval:  PlanInterval;
+  interval:  string;    // Changed from enum to string
   priceKobo: number;
   currency:  string;
 
@@ -97,11 +97,11 @@ const SubscriptionSchema = new Schema<ISubscriptionDocument, ISubscriptionModel>
       default: SubscriptionStatus.TRIALING,
     },
 
-    // Plan snapshot
-    planTier: { type: String, enum: Object.values(PlanTier),     required: true },
-    planName: { type: String,                                    required: true },
-    interval: { type: String, enum: Object.values(PlanInterval), required: true },
-    priceKobo:{ type: Number, required: true, min: 0 },
+    // Plan snapshot - now using strings (no enum validation)
+    planTier: { type: String, required: true },  // Changed: removed enum
+    planName: { type: String, required: true },
+    interval: { type: String, required: true },  // Changed: removed enum
+    priceKobo: { type: Number, required: true, min: 0 },
     currency: { type: String, default: 'NGN' },
 
     // Discount snapshot
@@ -109,7 +109,7 @@ const SubscriptionSchema = new Schema<ISubscriptionDocument, ISubscriptionModel>
     couponDiscount:     Number,
     couponDiscountType: { type: String, enum: Object.values(DiscountType) },
     discountKobo:  { type: Number, default: 0, min: 0 },
-    finalPriceKobo:{ type: Number, required: true, min: 0 },
+    finalPriceKobo: { type: Number, required: true, min: 0 },
 
     // Trial
     trialStart: Date,
@@ -200,8 +200,10 @@ SubscriptionSchema.statics.findActiveByUser = function (
     .exec();
 };
 
-SubscriptionSchema.statics.findFreePlan = function () {
-  return Plan.findOne({ $or: [{ priceKobo: 0 }, { tier: PlanTier.FREE }] }).exec();
+SubscriptionSchema.statics.findFreePlan = async function () {
+  const { Plan } = await import('./plan');
+  // Find free plan by priceKobo === 0 (no enum dependency)
+  return Plan.findOne({ priceKobo: 0 }).exec();
 };
 
 SubscriptionSchema.statics.initialSubscription = async function (
@@ -211,8 +213,8 @@ SubscriptionSchema.statics.initialSubscription = async function (
   const existing = await this.findOne({ userId: new mongoose.Types.ObjectId(userId) });
   if (existing) throw new Error('User already has a subscription');
 
-  const freePlan = await Plan.findOne({ $or: [{ priceKobo: 0 }, { tier: PlanTier.FREE }] });
-  if (!freePlan) throw new Error('No free plan found. Please seed a free plan first.');
+  const freePlan = await this.findFreePlan();
+  if (!freePlan) throw new Error('No free plan found. Please create a free plan first.');
 
   const now       = new Date();
   const trialDays = freePlan.trialDays ?? 0;
@@ -299,7 +301,7 @@ SubscriptionSchema.index({ userId: 1 });
 SubscriptionSchema.index({ planId: 1, status: 1 });
 SubscriptionSchema.index({ currentPeriodEnd: 1, status: 1 });
 SubscriptionSchema.index({ paystackSubscriptionCode: 1 });
-// Added: these support the list-route filters heavily
+// Updated: these support the list-route filters with dynamic strings
 SubscriptionSchema.index({ planTier: 1, status: 1 });
 SubscriptionSchema.index({ interval: 1, status: 1 });
 SubscriptionSchema.index({ createdAt: -1 });

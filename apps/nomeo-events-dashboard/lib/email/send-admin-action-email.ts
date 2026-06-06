@@ -1,3 +1,4 @@
+// lib/email/send-admin-action-email.ts
 import { transporter } from "../transport";
 
 interface AdminActionEmailParams {
@@ -11,6 +12,8 @@ interface AdminActionEmailParams {
   oldRole?: string;
   reason?: string;
   supportEmail?: string;
+  newPassword?: string;  // ✅ ADD THIS
+  loginUrl?: string;      // ✅ ADD THIS
 }
 
 export async function sendAdminActionEmail(params: AdminActionEmailParams) {
@@ -24,13 +27,19 @@ export async function sendAdminActionEmail(params: AdminActionEmailParams) {
     newRole,
     oldRole,
     reason,
-    supportEmail = "support@nomeo-events.com"
+    supportEmail = "support@nomeo-events.com",
+    newPassword,      // ✅ ADD THIS
+    loginUrl          // ✅ ADD THIS
   } = params;
 
   const year = new Date().getFullYear();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://nomeo-events.com";
 
+  // Check if this is a password reset action
+  const isPasswordReset = action === "password_reset" && newPassword;
+
   const getActionColor = () => {
+    if (isPasswordReset) return "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)";
     switch (action) {
       case "promote": return "linear-gradient(135deg, #10b981 0%, #059669 100%)";
       case "demote": return "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)";
@@ -42,6 +51,7 @@ export async function sendAdminActionEmail(params: AdminActionEmailParams) {
   };
 
   const getActionTitle = () => {
+    if (isPasswordReset) return "Password Reset";
     switch (action) {
       case "promote": return "Role Promotion";
       case "demote": return "Role Demotion";
@@ -77,12 +87,33 @@ export async function sendAdminActionEmail(params: AdminActionEmailParams) {
           .greeting { color: #374151; font-size: 15px; margin-bottom: 12px; }
           .greeting strong { color: #111827; }
           .alert-box {
-            background: #f3f4f6; border-left: 4px solid ${action === "promote" ? "#10b981" : action === "demote" ? "#f59e0b" : action === "suspend" ? "#ef4444" : "#3b82f6"};
+            background: #f3f4f6; border-left: 4px solid ${isPasswordReset ? "#ef4444" : action === "promote" ? "#10b981" : action === "demote" ? "#f59e0b" : action === "suspend" ? "#ef4444" : "#3b82f6"};
             padding: 16px; border-radius: 0 8px 8px 0;
             margin-bottom: 20px;
           }
           .alert-box h3 { color: #374151; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
           .alert-box p { color: #4b5563; font-size: 13px; margin: 0; }
+          
+          /* ✅ NEW: Password box for password reset */
+          .password-box {
+            background: #fef3c7; border: 1px solid #fde68a;
+            border-radius: 12px; padding: 20px; text-align: center;
+            margin-bottom: 20px;
+          }
+          .password-label { color: #92400e; font-size: 13px; font-weight: 500; margin-bottom: 12px; }
+          .password {
+            font-family: 'Courier New', monospace;
+            font-size: 24px; font-weight: bold; letter-spacing: 2px;
+            color: #dc2626; background: white;
+            padding: 10px 16px; border-radius: 8px;
+            display: inline-block; border: 1px solid #fde68a;
+          }
+          .button {
+            display: inline-block; background: #4F46E5; color: white;
+            text-decoration: none; padding: 10px 20px; border-radius: 6px;
+            font-size: 14px; margin: 10px 0;
+          }
+          
           .info-card {
             background: #eff6ff; border-radius: 8px; padding: 16px; margin-bottom: 20px;
           }
@@ -117,6 +148,22 @@ export async function sendAdminActionEmail(params: AdminActionEmailParams) {
               <p>${details}</p>
             </div>
 
+            ${isPasswordReset ? `
+              <div class="password-box">
+                <div class="password-label">🔐 Your New Password:</div>
+                <div class="password">${newPassword}</div>
+                <p style="margin-top: 12px; font-size: 12px; color: #92400e;">
+                  Please keep this password secure. You will be required to change it after logging in.
+                </p>
+              </div>
+              
+              ${loginUrl ? `
+                <div style="text-align: center;">
+                  <a href="${loginUrl}" class="button">Login to Admin Dashboard</a>
+                </div>
+              ` : ''}
+            ` : ''}
+
             <div class="info-card">
               <p><strong>📊 Update Details:</strong></p>
               <p>• Action By: ${performedBy} (${performedByEmail})</p>
@@ -124,9 +171,18 @@ export async function sendAdminActionEmail(params: AdminActionEmailParams) {
               ${oldRole && newRole ? `<p>• Role Change: ${oldRole} → ${newRole}</p>` : ''}
             </div>
 
-            ${reason ? `
+            ${reason && !isPasswordReset ? `
               <div class="reason-box">
                 <p><strong>📝 Reason Provided:</strong><br>${reason}</p>
+              </div>
+            ` : ''}
+
+            ${isPasswordReset ? `
+              <div class="info-card" style="background: #fef2f2;">
+                <p><strong>🔒 Security Tips:</strong></p>
+                <p>• Do not share this password with anyone</p>
+                <p>• Change your password immediately after login</p>
+                <p>• Contact support if you didn't request this reset</p>
               </div>
             ` : ''}
 
@@ -157,14 +213,29 @@ Dear ${name},
 
 ${details}
 
+${isPasswordReset ? `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YOUR NEW PASSWORD:
+${newPassword}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${loginUrl ? `Login here: ${loginUrl}\n` : ''}
+Please keep this password secure. You will be required to change it after logging in.
+` : ''}
+
 Update Details:
 • Action By: ${performedBy} (${performedByEmail})
 • Action Date: ${new Date().toLocaleString()}
 ${oldRole && newRole ? `• Role Change: ${oldRole} → ${newRole}` : ''}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${reason ? `Reason: ${reason}\n` : ''}
+${reason && !isPasswordReset ? `\nReason: ${reason}\n` : ''}
+
+${isPasswordReset ? `
+Security Tips:
+• Do not share this password with anyone
+• Change your password immediately after login
+• Contact support if you didn't request this reset
+` : ''}
 
 Questions? Contact: ${supportEmail}
 
@@ -174,7 +245,7 @@ Questions? Contact: ${supportEmail}
   await transporter.sendMail({
     from: `"Nomeo Events Admin" <${process.env.SMTP_SERVER_USERNAME}>`,
     to: email,
-    subject: `Admin Account Update: ${getActionTitle()} - Nomeo Events`,
+    subject: `${isPasswordReset ? '🔐 ' : ''}Admin Account Update: ${getActionTitle()} - Nomeo Events`,
     text,
     html,
   });

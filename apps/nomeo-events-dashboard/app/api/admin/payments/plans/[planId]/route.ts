@@ -4,6 +4,7 @@ import { connectDB } from '@/lib/mongoose';
 import { Payment, PaymentGatewayStatus, PaymentPurpose } from '@/models/payment';
 import { ok, err, paginate } from '@/lib/api-response';
 import mongoose from 'mongoose';
+import { Subscription } from '@/models/subscription';
 
 /**
  * GET /api/admin/payments/plans/:planId
@@ -20,7 +21,7 @@ import mongoose from 'mongoose';
  */
 export async function GET( req: NextRequest, { params }: { params: Promise<{ planId: string }> }) {
   const { planId } = await params;
-  
+
   try {
     await requireSuperAdmin();
     await connectDB();
@@ -56,7 +57,7 @@ export async function GET( req: NextRequest, { params }: { params: Promise<{ pla
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('subscriptionId', 'status')
+        .populate({ path: 'subscriptionId', model: Subscription, select: 'status' })
         .lean(),
 
       Payment.countDocuments(filter),

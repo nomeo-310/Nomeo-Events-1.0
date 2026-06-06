@@ -1,8 +1,9 @@
+// hooks/use-subscription-management.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { toast } from 'sonner';
 
-// ====================== TYPES ======================
+// ====================== TYPES (Updated for dynamic plans) ======================
 
 export type SubscriptionStatus =
   | 'trialing'
@@ -12,8 +13,9 @@ export type SubscriptionStatus =
   | 'expired'
   | 'paused';
 
-export type PlanTier = 'free' | 'starter' | 'basic' | 'pro' | 'business' | 'enterprise';
-export type PlanInterval = 'monthly' | 'quarterly' | 'biannual' | 'annual' | 'lifetime';
+// ✅ Changed from hardcoded enums to strings (dynamic)
+export type PlanTier = string;  // Now dynamic - can be "free", "pro", "premium", etc.
+export type PlanInterval = string;  // Now dynamic - can be "monthly", "weekly", "quarterly", etc.
 export type DiscountType = 'percentage' | 'fixed';
 
 // ── Subscription document ─────────────────────────────────────────────────────
@@ -29,12 +31,13 @@ export interface ISubscription {
   _id: string;
   userId: SubscriptionUser | string;
   planId: string;
+  planSlug?: string;  // ✅ Add plan slug for reference
 
   paystackSubscriptionCode?: string;
 
   status: SubscriptionStatus;
 
-  // Plan snapshot
+  // Plan snapshot (now using strings instead of enums)
   planTier:  PlanTier;
   planName:  string;
   interval:  PlanInterval;
@@ -203,6 +206,27 @@ export interface SubscriptionStats {
   };
 }
 
+// ── NEW: Available tiers and intervals from database ─────────────────────────
+
+export interface AvailablePlanTier {
+  _id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface AvailablePlanInterval {
+  _id: string;
+  name: string;
+  slug: string;
+  monthsCount: number;
+  multiplier: number;
+  isActive: boolean;
+  sortOrder: number;
+}
+
 // ── Param types ───────────────────────────────────────────────────────────────
 
 export interface GetSubscriptionsParams {
@@ -332,12 +356,10 @@ const subscriptionApi = {
   export: async (params: ExportSubscriptionsParams = {}): Promise<void> => {
     const response = await axios.get('/api/admin/subscriptions/export', {
       params,
-      // For CSV the server sends a file — handle as blob
       responseType: params.format === 'json' ? 'json' : 'blob',
     });
 
     if (params.format === 'json') {
-      // Trigger JSON download
       const blob = new Blob([JSON.stringify(response.data, null, 2)], {
         type: 'application/json',
       });
@@ -346,12 +368,23 @@ const subscriptionApi = {
       triggerDownload(response.data as Blob, `subscriptions-${Date.now()}.csv`);
     }
   },
+
+  // ── NEW: Get available tiers and intervals for filters ───────────────────
+  getAvailableTiers: async (): Promise<AvailablePlanTier[]> => {
+    const { data } = await axios.get('/api/admin/plans/tiers');
+    return data.data;
+  },
+
+  getAvailableIntervals: async (): Promise<AvailablePlanInterval[]> => {
+    const { data } = await axios.get('/api/admin/plans/intervals');
+    return data.data;
+  },
 };
 
 function triggerDownload(blob: Blob, filename: string) {
-  const url  = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.href  = url;
+  link.href = url;
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
@@ -360,12 +393,14 @@ function triggerDownload(blob: Blob, filename: string) {
 // ====================== QUERY KEYS ======================
 
 export const subscriptionKeys = {
-  all:     ['subscriptions'] as const,
-  lists:   () => [...subscriptionKeys.all, 'list'] as const,
-  list:    (params: GetSubscriptionsParams) => [...subscriptionKeys.lists(), params] as const,
+  all: ['subscriptions'] as const,
+  lists: () => [...subscriptionKeys.all, 'list'] as const,
+  list: (params: GetSubscriptionsParams) => [...subscriptionKeys.lists(), params] as const,
   details: () => [...subscriptionKeys.all, 'detail'] as const,
-  detail:  (id: string) => [...subscriptionKeys.details(), id] as const,
-  stats:   (period?: number) => [...subscriptionKeys.all, 'stats', period ?? 30] as const,
+  detail: (id: string) => [...subscriptionKeys.details(), id] as const,
+  stats: (period?: number) => [...subscriptionKeys.all, 'stats', period ?? 30] as const,
+  availableTiers: () => [...subscriptionKeys.all, 'availableTiers'] as const,
+  availableIntervals: () => [...subscriptionKeys.all, 'availableIntervals'] as const,
 };
 
 // ====================== QUERY HOOKS ======================
@@ -375,13 +410,13 @@ export const subscriptionKeys = {
  */
 export const useGetSubscriptions = (params: GetSubscriptionsParams = {}) => {
   return useQuery({
-    queryKey:     subscriptionKeys.list(params),
-    queryFn:      () => subscriptionApi.getSubscriptions(params),
-    staleTime:    1000 * 60 * 2, // 2 min — subscription state changes more often than admin data
+    queryKey: subscriptionKeys.list(params),
+    queryFn: () => subscriptionApi.getSubscriptions(params),
+    staleTime: 1000 * 60 * 2,
     placeholderData: (prev) => prev,
     select: (data) => ({
       subscriptions: data.subscriptions,
-      pagination:    data.pagination,
+      pagination: data.pagination,
     }),
   });
 };
@@ -392,23 +427,44 @@ export const useGetSubscriptions = (params: GetSubscriptionsParams = {}) => {
 export const useGetSubscription = (id: string | null) => {
   return useQuery({
     queryKey: subscriptionKeys.detail(id ?? ''),
-    queryFn:  () => {
+    queryFn: () => {
       if (!id) throw new Error('Subscription ID is required');
       return subscriptionApi.getSubscription(id);
     },
-    enabled:   !!id,
+    enabled: !!id,
     staleTime: 1000 * 60 * 2,
   });
 };
 
 /**
  * Hook: Subscription stats dashboard (MRR, ARR, churn, trials, growth…)
- * @param period  Number of days to look back (default 30)
  */
 export const useGetSubscriptionStats = (period = 30) => {
   return useQuery({
-    queryKey:  subscriptionKeys.stats(period),
-    queryFn:   () => subscriptionApi.getStats(period),
+    queryKey: subscriptionKeys.stats(period),
+    queryFn: () => subscriptionApi.getStats(period),
+    staleTime: 1000 * 60 * 5,
+  });
+};
+
+/**
+ * NEW: Hook: Get available tiers for filters
+ */
+export const useGetAvailableTiers = () => {
+  return useQuery({
+    queryKey: subscriptionKeys.availableTiers(),
+    queryFn: () => subscriptionApi.getAvailableTiers(),
+    staleTime: 1000 * 60 * 5,
+  });
+};
+
+/**
+ * NEW: Hook: Get available intervals for filters
+ */
+export const useGetAvailableIntervals = () => {
+  return useQuery({
+    queryKey: subscriptionKeys.availableIntervals(),
+    queryFn: () => subscriptionApi.getAvailableIntervals(),
     staleTime: 1000 * 60 * 5,
   });
 };
@@ -417,7 +473,6 @@ export const useGetSubscriptionStats = (period = 30) => {
 
 /**
  * Hook: Perform a single action on a subscription
- * (cancel, pause, resume, extend, markActive, markPastDue)
  */
 export const useSubscriptionAction = () => {
   const queryClient = useQueryClient();
@@ -449,7 +504,7 @@ export const useCancelSubscription = () => {
     cancel: (id: string, reason?: string, immediately?: boolean) =>
       action.mutateAsync({ id, action: 'cancel', reason, immediately }),
     isPending: action.isPending,
-    error:     action.error,
+    error: action.error,
   };
 };
 
@@ -459,10 +514,10 @@ export const useCancelSubscription = () => {
 export const usePauseSubscription = () => {
   const action = useSubscriptionAction();
   return {
-    pause:     (id: string, reason?: string) =>
+    pause: (id: string, reason?: string) =>
       action.mutateAsync({ id, action: 'pause', reason }),
     isPending: action.isPending,
-    error:     action.error,
+    error: action.error,
   };
 };
 
@@ -472,10 +527,10 @@ export const usePauseSubscription = () => {
 export const useResumeSubscription = () => {
   const action = useSubscriptionAction();
   return {
-    resume:    (id: string, reason?: string) =>
+    resume: (id: string, reason?: string) =>
       action.mutateAsync({ id, action: 'resume', reason }),
     isPending: action.isPending,
-    error:     action.error,
+    error: action.error,
   };
 };
 
@@ -485,10 +540,10 @@ export const useResumeSubscription = () => {
 export const useExtendSubscription = () => {
   const action = useSubscriptionAction();
   return {
-    extend:    (id: string, days: number, reason?: string) =>
+    extend: (id: string, days: number, reason?: string) =>
       action.mutateAsync({ id, action: 'extend', days, reason }),
     isPending: action.isPending,
-    error:     action.error,
+    error: action.error,
   };
 };
 
@@ -500,8 +555,8 @@ export const useMarkSubscriptionActive = () => {
   return {
     markActive: (id: string) =>
       action.mutateAsync({ id, action: 'markActive' }),
-    isPending:  action.isPending,
-    error:      action.error,
+    isPending: action.isPending,
+    error: action.error,
   };
 };
 
@@ -513,14 +568,13 @@ export const useMarkSubscriptionPastDue = () => {
   return {
     markPastDue: (id: string) =>
       action.mutateAsync({ id, action: 'markPastDue' }),
-    isPending:   action.isPending,
-    error:       action.error,
+    isPending: action.isPending,
+    error: action.error,
   };
 };
 
 /**
  * Hook: Bulk action on multiple subscriptions
- * (cancel, pause, resume, extend, export)
  */
 export const useBulkSubscriptionAction = () => {
   const queryClient = useQueryClient();
@@ -566,32 +620,31 @@ export const useExportSubscriptions = () => {
 // ====================== CONVENIENCE HOOKS ======================
 
 /**
- * Hook: Compute quick stats from the list response (client-side, no extra request)
- * Useful for summary cards when the full /stats endpoint is overkill.
+ * Hook: Compute quick stats from the list response (client-side)
  */
 export const useSubscriptionSummary = () => {
-  const { data, isLoading } = useGetSubscriptions({ limit: 1000, includeInactive: true } as any);
+  const { data, isLoading } = useGetSubscriptions({ limit: 1000 } as any);
 
   const summary = {
-    total:    0,
-    active:   0,
+    total: 0,
+    active: 0,
     trialing: 0,
-    pastDue:  0,
-    paused:   0,
-    cancelled:0,
-    expired:  0,
-    byTier:   {} as Record<PlanTier, number>,
+    pastDue: 0,
+    paused: 0,
+    cancelled: 0,
+    expired: 0,
+    byTier: {} as Record<string, number>,  // Now dynamic
   };
 
   if (data?.subscriptions) {
     data.subscriptions.forEach((sub) => {
       summary.total++;
-      if (sub.status === 'active')    summary.active++;
-      if (sub.status === 'trialing')  summary.trialing++;
-      if (sub.status === 'past_due')  summary.pastDue++;
-      if (sub.status === 'paused')    summary.paused++;
+      if (sub.status === 'active') summary.active++;
+      if (sub.status === 'trialing') summary.trialing++;
+      if (sub.status === 'past_due') summary.pastDue++;
+      if (sub.status === 'paused') summary.paused++;
       if (sub.status === 'cancelled') summary.cancelled++;
-      if (sub.status === 'expired')   summary.expired++;
+      if (sub.status === 'expired') summary.expired++;
       summary.byTier[sub.planTier] = (summary.byTier[sub.planTier] ?? 0) + 1;
     });
   }
@@ -600,43 +653,42 @@ export const useSubscriptionSummary = () => {
 };
 
 /**
- * Hook: Combined subscription management — every action in one place.
- * Mirrors useAdminManagement() from the admin hook.
+ * Hook: Combined subscription management — every action in one place
  */
 export const useSubscriptionManagement = () => {
-  const action       = useSubscriptionAction();
-  const bulkAction   = useBulkSubscriptionAction();
-  const exportSubs   = useExportSubscriptions();
+  const action = useSubscriptionAction();
+  const bulkAction = useBulkSubscriptionAction();
+  const exportSubs = useExportSubscriptions();
 
   return {
     // Single-subscription actions
-    cancelSubscription:     (id: string, reason?: string, immediately?: boolean) =>
+    cancelSubscription: (id: string, reason?: string, immediately?: boolean) =>
       action.mutateAsync({ id, action: 'cancel', reason, immediately }),
-    pauseSubscription:      (id: string, reason?: string) =>
+    pauseSubscription: (id: string, reason?: string) =>
       action.mutateAsync({ id, action: 'pause', reason }),
-    resumeSubscription:     (id: string, reason?: string) =>
+    resumeSubscription: (id: string, reason?: string) =>
       action.mutateAsync({ id, action: 'resume', reason }),
-    extendSubscription:     (id: string, days: number, reason?: string) =>
+    extendSubscription: (id: string, days: number, reason?: string) =>
       action.mutateAsync({ id, action: 'extend', days, reason }),
     markSubscriptionActive: (id: string) =>
       action.mutateAsync({ id, action: 'markActive' }),
-    markSubscriptionPastDue:(id: string) =>
+    markSubscriptionPastDue: (id: string) =>
       action.mutateAsync({ id, action: 'markPastDue' }),
 
     // Bulk actions
-    bulkAction:  bulkAction.mutateAsync,
+    bulkAction: bulkAction.mutateAsync,
 
     // Export
     exportSubscriptions: exportSubs.mutateAsync,
 
     // Loading states
-    isActioning:   action.isPending,
+    isActioning: action.isPending,
     isBulkActioning: bulkAction.isPending,
-    isExporting:   exportSubs.isPending,
+    isExporting: exportSubs.isPending,
 
     // Errors
-    actionError:   action.error,
-    bulkError:     bulkAction.error,
-    exportError:   exportSubs.error,
+    actionError: action.error,
+    bulkError: bulkAction.error,
+    exportError: exportSubs.error,
   };
 };

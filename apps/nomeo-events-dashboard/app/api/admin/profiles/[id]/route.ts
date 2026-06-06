@@ -16,8 +16,7 @@ async function checkAdminAccess(user: any) {
   return null;
 }
 
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   await connectDB();
   

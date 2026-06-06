@@ -1,9 +1,10 @@
 // app/api/admin/plans/bulk/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongoose';
-import { Plan, PlanTier, PlanInterval } from '@/models/plan';
+import { Plan } from '@/models/plan';
+import { PlanTier } from '@/models/plan-tier';
+import { PlanInterval } from '@/models/plan-interval';
 import { requireSuperAdmin } from '@/lib/admin/authorization';
-import type { IPlanDocument } from '@/models/plan';
 
 export async function DELETE(req: NextRequest) {
   try {
@@ -16,46 +17,74 @@ export async function DELETE(req: NextRequest) {
     const slugs = slugsParam ? slugsParam.split(',').filter((s: string) => s.trim()) : null;
 
     if (tier) {
-      if (!Object.values(PlanTier).includes(tier as PlanTier)) {
+      // Check if tier exists in PlanTier collection
+      const tierDoc = await PlanTier.findOne({ slug: tier.toLowerCase() });
+      if (!tierDoc) {
         return NextResponse.json(
-          { success: false, error: `Invalid tier. Must be one of: ${Object.values(PlanTier).join(', ')}` },
+          { 
+            success: false, 
+            error: `Tier '${tier}' does not exist. Available tiers: ${(await PlanTier.find({}).select('slug')).map(t => t.slug).join(', ')}` 
+          },
           { status: 400 }
         );
       }
 
-      const result = await Plan.deleteMany({ tier: tier as PlanTier });
+      // Get plans being deleted (for response)
+      const plansToDelete = await Plan.find({ tier: tierDoc.slug }).select('name slug interval');
+      const result = await Plan.deleteMany({ tier: tierDoc.slug });
 
       return NextResponse.json({
         success: true,
         message: `Deleted ${result.deletedCount} plan(s) from tier '${tier}' by ${user.email}`,
-        data: { deletedCount: result.deletedCount, tier },
+        data: { 
+          deletedCount: result.deletedCount, 
+          tier: tierDoc,
+          deletedPlans: plansToDelete
+        },
       });
     }
 
     if (interval) {
-      if (!Object.values(PlanInterval).includes(interval as PlanInterval)) {
+      // Check if interval exists in PlanInterval collection
+      const intervalDoc = await PlanInterval.findOne({ slug: interval.toLowerCase() });
+      if (!intervalDoc) {
         return NextResponse.json(
-          { success: false, error: `Invalid interval. Must be one of: ${Object.values(PlanInterval).join(', ')}` },
+          { 
+            success: false, 
+            error: `Interval '${interval}' does not exist. Available intervals: ${(await PlanInterval.find({}).select('slug')).map(i => i.slug).join(', ')}` 
+          },
           { status: 400 }
         );
       }
 
-    const result = await Plan.deleteMany({ interval: interval as PlanInterval });
+      // Get plans being deleted (for response)
+      const plansToDelete = await Plan.find({ interval: intervalDoc.slug }).select('name slug tier');
+      const result = await Plan.deleteMany({ interval: intervalDoc.slug });
 
       return NextResponse.json({
         success: true,
         message: `Deleted ${result.deletedCount} plan(s) with interval '${interval}' by ${user.email}`,
-        data: { deletedCount: result.deletedCount, interval },
+        data: { 
+          deletedCount: result.deletedCount, 
+          interval: intervalDoc,
+          deletedPlans: plansToDelete
+        },
       });
     }
 
     if (slugs && slugs.length > 0) {
+      // Get plans being deleted (for response)
+      const plansToDelete = await Plan.find({ slug: { $in: slugs } }).select('name slug tier interval');
       const result = await Plan.deleteMany({ slug: { $in: slugs } });
 
       return NextResponse.json({
         success: true,
         message: `Deleted ${result.deletedCount} plan(s) [${slugs.join(', ')}] by ${user.email}`,
-        data: { deletedCount: result.deletedCount, slugs },
+        data: { 
+          deletedCount: result.deletedCount, 
+          slugs,
+          deletedPlans: plansToDelete
+        },
       });
     }
 
@@ -91,47 +120,101 @@ export async function POST(req: NextRequest) {
     const update = { $set: { isActive } };
 
     if (tier) {
-      if (!Object.values(PlanTier).includes(tier as PlanTier)) {
+      // Check if tier exists in PlanTier collection
+      const tierDoc = await PlanTier.findOne({ slug: tier.toLowerCase() });
+      if (!tierDoc) {
         return NextResponse.json(
-          { success: false, error: `Invalid tier. Must be one of: ${Object.values(PlanTier).join(', ')}` },
+          { 
+            success: false, 
+            error: `Tier '${tier}' does not exist. Available tiers: ${(await PlanTier.find({}).select('slug')).map(t => t.slug).join(', ')}` 
+          },
           { status: 400 }
         );
       }
 
-      const result = await Plan.updateMany({ tier: tier as PlanTier }, update);
+      // Get plans being updated (for response)
+      const plansToUpdate = await Plan.find({ tier: tierDoc.slug }).select('name slug interval isActive');
+      const result = await Plan.updateMany({ tier: tierDoc.slug }, update);
 
       return NextResponse.json({
         success: true,
         message: `${action}d ${result.modifiedCount} plan(s) in tier '${tier}' by ${user.email}`,
-        data: { modifiedCount: result.modifiedCount, tier, action },
+        data: { 
+          modifiedCount: result.modifiedCount,
+          matchedCount: result.matchedCount,
+          tier: tierDoc,
+          action,
+          updatedPlans: plansToUpdate.map(p => ({
+            name: p.name,
+            slug: p.slug,
+            interval: p.interval,
+            wasActive: p.isActive,
+            nowActive: isActive
+          }))
+        },
       });
     }
 
     if (interval) {
-      if (!Object.values(PlanInterval).includes(interval as PlanInterval)) {
+      // Check if interval exists in PlanInterval collection
+      const intervalDoc = await PlanInterval.findOne({ slug: interval.toLowerCase() });
+      if (!intervalDoc) {
         return NextResponse.json(
-          { success: false, error: `Invalid interval. Must be one of: ${Object.values(PlanInterval).join(', ')}` },
+          { 
+            success: false, 
+            error: `Interval '${interval}' does not exist. Available intervals: ${(await PlanInterval.find({}).select('slug')).map(i => i.slug).join(', ')}` 
+          },
           { status: 400 }
         );
       }
 
-      const result = await Plan.updateMany({ interval: interval as PlanInterval }, update);
+      // Get plans being updated (for response)
+      const plansToUpdate = await Plan.find({ interval: intervalDoc.slug }).select('name slug tier isActive');
+      const result = await Plan.updateMany({ interval: intervalDoc.slug }, update);
 
       return NextResponse.json({
         success: true,
         message: `${action}d ${result.modifiedCount} plan(s) with interval '${interval}' by ${user.email}`,
-        data: { modifiedCount: result.modifiedCount, interval, action },
+        data: { 
+          modifiedCount: result.modifiedCount,
+          matchedCount: result.matchedCount,
+          interval: intervalDoc,
+          action,
+          updatedPlans: plansToUpdate.map(p => ({
+            name: p.name,
+            slug: p.slug,
+            tier: p.tier,
+            wasActive: p.isActive,
+            nowActive: isActive
+          }))
+        },
       });
     }
 
     if (slugs && Array.isArray(slugs) && slugs.length > 0) {
       const validSlugs = (slugs as unknown[]).filter((s): s is string => typeof s === 'string');
+      
+      // Get plans being updated (for response)
+      const plansToUpdate = await Plan.find({ slug: { $in: validSlugs } }).select('name slug tier interval isActive');
       const result = await Plan.updateMany({ slug: { $in: validSlugs } }, update);
 
       return NextResponse.json({
         success: true,
         message: `${action}d ${result.modifiedCount} plan(s) [${validSlugs.join(', ')}] by ${user.email}`,
-        data: { modifiedCount: result.modifiedCount, slugs: validSlugs, action },
+        data: { 
+          modifiedCount: result.modifiedCount,
+          matchedCount: result.matchedCount,
+          slugs: validSlugs,
+          action,
+          updatedPlans: plansToUpdate.map(p => ({
+            name: p.name,
+            slug: p.slug,
+            tier: p.tier,
+            interval: p.interval,
+            wasActive: p.isActive,
+            nowActive: isActive
+          }))
+        },
       });
     }
 

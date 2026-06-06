@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -35,6 +35,10 @@ import {
   ActivityIcon,
   Alert02Icon as AlertTriangleIcon,
   SecurityCheckIcon as ShieldCheckIcon,
+  PieChartIcon,
+  BarChartHorizontalIcon as ChartLineIcon,
+  CoinsIcon,
+  AwardIcon,
 } from "@hugeicons/core-free-icons";
 import { toast } from "sonner";
 
@@ -150,6 +154,43 @@ const getStatusLabel = (status: SubscriptionStatus): string => {
 };
 
 // ============================================
+// CUSTOM PROGRESS BAR COMPONENT
+// ============================================
+
+const CustomProgress = ({ value, className }: { value: number; className?: string }) => {
+  return (
+    <div className={cn("h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden", className)}>
+      <div 
+        className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all duration-300"
+        style={{ width: `${Math.min(Math.max(value, 0), 100)}%` }}
+      />
+    </div>
+  );
+};
+
+// ============================================
+// TAB BUTTON COMPONENT (Consistent with Payments page)
+// ============================================
+
+const StatsTabButton = ({ label, icon, isActive, onClick }: { label: string; icon?: any; isActive: boolean; onClick: () => void }) => {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "px-4 py-2 lg:py-3 text-sm font-medium rounded-md transition-all inline-flex items-center gap-2",
+        isActive
+          ? "bg-blue-600 text-white shadow-sm"
+          : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+      )}
+    >
+      {icon && <HugeiconsIcon icon={icon} className="h-4 w-4" />}
+      {label}
+    </button>
+  );
+};
+
+// ============================================
 // SUB-COMPONENTS
 // ============================================
 
@@ -190,6 +231,45 @@ const SubscriptionsSkeleton = () => (
         <SkeletonLine className="h-7 w-7 rounded-lg" />
       </div>
     ))}
+  </div>
+);
+
+const SubscriptionDetailsSkeleton = () => (
+  <div className="space-y-6">
+    <div className="flex items-start gap-4 pb-4 border-b border-gray-100 dark:border-gray-800">
+      <SkeletonLine className="h-16 w-16 rounded-full ring-4 ring-white dark:ring-gray-900 flex-shrink-0" />
+      <div className="flex-1 space-y-2">
+        <SkeletonLine className="h-7 w-48" />
+        <SkeletonLine className="h-4 w-64" />
+        <div className="flex gap-2 mt-2">
+          <SkeletonLine className="h-6 w-20 rounded-full" />
+          <SkeletonLine className="h-6 w-24 rounded-full" />
+        </div>
+      </div>
+    </div>
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <SkeletonLine className="h-24 rounded-lg" />
+      <SkeletonLine className="h-24 rounded-lg" />
+      <SkeletonLine className="h-24 rounded-lg" />
+      <SkeletonLine className="h-24 rounded-lg" />
+    </div>
+    <div className="space-y-3">
+      <SkeletonLine className="h-20 rounded-lg" />
+      <SkeletonLine className="h-20 rounded-lg" />
+    </div>
+    <div className="grid grid-cols-2 gap-4">
+      <SkeletonLine className="h-16 rounded-lg" />
+      <SkeletonLine className="h-16 rounded-lg" />
+    </div>
+    <div className="space-y-3">
+      <SkeletonLine className="h-6 w-40" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <SkeletonLine className="h-24 rounded-lg" />
+        <SkeletonLine className="h-24 rounded-lg" />
+        <SkeletonLine className="h-24 rounded-lg" />
+        <SkeletonLine className="h-24 rounded-lg" />
+      </div>
+    </div>
   </div>
 );
 
@@ -295,24 +375,419 @@ const ActionDropdown = ({ items, trigger }: { items: (DropdownItem | { divider: 
 // STAT CARD
 // ============================================
 
-const StatCard = ({ title, value, subtitle, valueColor = 'gray' }: { 
+const StatCard = ({ title, value, subtitle, icon, valueColor = 'gray' }: { 
   title: string; 
   value: string | number; 
   subtitle?: string; 
-  valueColor?: 'gray' | 'green' | 'red' | 'blue';
+  icon?: any;
+  valueColor?: 'gray' | 'green' | 'red' | 'blue' | 'purple' | 'orange';
 }) => {
   const colorClasses = {
     gray: 'text-gray-900 dark:text-white',
     green: 'text-green-600 dark:text-green-400',
     red: 'text-red-600 dark:text-red-400',
     blue: 'text-blue-600 dark:text-blue-400',
+    purple: 'text-purple-600 dark:text-purple-400',
+    orange: 'text-orange-600 dark:text-orange-400',
   };
   
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3">
-      <p className="text-xs text-gray-500 dark:text-gray-400">{title}</p>
-      <p className={`text-2xl font-bold ${colorClasses[valueColor]}`}>{value}</p>
-      {subtitle && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{subtitle}</p>}
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3 transition-all hover:shadow-md">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{title}</p>
+          <p className={`text-2xl font-bold ${colorClasses[valueColor]}`}>{value}</p>
+          {subtitle && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{subtitle}</p>}
+        </div>
+        {icon && (
+          <div className="p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
+            <HugeiconsIcon icon={icon} className={`h-4 w-4 ${colorClasses[valueColor]}`} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// STATS SECTION WITH TAB BUTTONS (Consistent with Payments page)
+// ============================================
+
+const StatsSection = ({ stats, isLoading }: { stats: any; isLoading: boolean }) => {
+  const [activeStatTab, setActiveStatTab] = useState('overview');
+
+  const statTabs = [
+    { id: 'overview', label: 'Overview', icon: PieChartIcon },
+    { id: 'tiers', label: 'By Tier', icon: LayersIcon },
+    { id: 'intervals', label: 'By Interval', icon: ClockIcon },
+    { id: 'plans', label: 'Top Plans', icon: CrownIcon },
+    { id: 'acquisition', label: 'Acquisition', icon: UsersIcon },
+  ];
+
+  const safeStats = {
+    overview: stats?.overview || { totalSubscriptions: 0, activeSubscriptions: 0, statusBreakdown: [] },
+    revenue: stats?.revenue || { mrr: 0, arr: 0, totalRevenue: 0, averageSubscription: 0, subscriptionRange: { min: 0, max: 0 } },
+    tiers: stats?.tiers || [],
+    intervals: stats?.intervals || [],
+    trials: stats?.trials || { active: 0, endingThisWeek: 0, converted: 0, expired: 0, conversionRate: "0" },
+    churn: stats?.churn || { thisPeriod: 0, cancelled: 0, expired: 0, churnRate: "0" },
+    payments: stats?.payments || { total: 0, successful: 0, failed: 0, successRate: "0", totalAmount: 0 },
+    topPlans: stats?.topPlans || [],
+    acquisition: stats?.acquisition || [],
+    growth: stats?.growth || [],
+    upcomingRenewals: stats?.upcomingRenewals || [],
+  };
+
+  if (isLoading) {
+    return (
+      <div className="mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonLine key={i} className="h-24 rounded-lg" />
+          ))}
+        </div>
+        <SkeletonLine className="h-64 rounded-lg" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 mb-6">
+      {/* Main Stats Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <StatCard 
+          title="Monthly Recurring Revenue" 
+          value={formatCurrency(safeStats.revenue.mrr * 100)} 
+          subtitle="MRR"
+          icon={DollarIcon}
+          valueColor="green" 
+        />
+        <StatCard 
+          title="Annual Run Rate" 
+          value={formatCurrency(safeStats.revenue.arr * 100)} 
+          subtitle="ARR"
+          icon={TrendingUpIcon}
+          valueColor="blue" 
+        />
+        <StatCard 
+          title="Total Revenue" 
+          value={formatCurrency(safeStats.revenue.totalRevenue * 100)} 
+          subtitle="All time"
+          icon={CoinsIcon}
+          valueColor="purple" 
+        />
+        <StatCard 
+          title="Active Subscriptions" 
+          value={safeStats.overview.activeSubscriptions} 
+          subtitle={`${safeStats.trials.active} trials active`}
+          icon={UsersIcon}
+          valueColor="green" 
+        />
+        <StatCard 
+          title="Avg Subscription Value" 
+          value={formatCurrency(safeStats.revenue.averageSubscription * 100)} 
+          subtitle={`Range: ${formatCurrency(safeStats.revenue.subscriptionRange.min * 100)} - ${formatCurrency(safeStats.revenue.subscriptionRange.max * 100)}`}
+          icon={AwardIcon}
+          valueColor="blue" 
+        />
+        <StatCard 
+          title="Churn Rate" 
+          value={`${safeStats.churn.churnRate}%`} 
+          subtitle={`${safeStats.churn.thisPeriod} churned this period`}
+          icon={TrendingDownIcon}
+          valueColor="red" 
+        />
+      </div>
+
+      {/* Stats Tab Buttons - Consistent with Payments page */}
+      {safeStats.overview.totalSubscriptions > 0 && (
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-4">
+          <div className="flex flex-wrap gap-2 mb-4">
+            {statTabs.map((tab) => (
+              <StatsTabButton
+                key={tab.id}
+                label={tab.label}
+                icon={tab.icon}
+                isActive={activeStatTab === tab.id}
+                onClick={() => setActiveStatTab(tab.id)}
+              />
+            ))}
+          </div>
+
+          {/* Overview Content */}
+          {activeStatTab === 'overview' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Status Breakdown */}
+                <div className="border border-gray-100 dark:border-gray-800 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                    <HugeiconsIcon icon={PieChartIcon} className="h-4 w-4" />
+                    Status Breakdown
+                  </h4>
+                  <div className="space-y-3">
+                    {safeStats.overview.statusBreakdown.length > 0 ? (
+                      safeStats.overview.statusBreakdown.map((item: any) => (
+                        <div key={item.status}>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="capitalize text-gray-600 dark:text-gray-400">{item.status}</span>
+                            <span className="font-semibold text-gray-900 dark:text-white">{item.count} ({item.percentage}%)</span>
+                          </div>
+                          <CustomProgress value={parseFloat(item.percentage)} />
+                          {item.revenue > 0 && (
+                            <p className="text-[10px] text-gray-500 mt-1">{formatCurrency(item.revenue * 100)} revenue</p>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-500 text-center py-4">No status data available</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Trial & Renewals */}
+                <div className="border border-gray-100 dark:border-gray-800 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                    <HugeiconsIcon icon={TimerIcon} className="h-4 w-4" />
+                    Trial & Renewals
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-600">Active Trials</span>
+                      <span className="font-semibold">{safeStats.trials.active}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-600">Trial Conversion Rate</span>
+                      <span className="font-semibold text-green-600">{safeStats.trials.conversionRate}%</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-600">Trials Converted</span>
+                      <span className="font-semibold">{safeStats.trials.converted}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-600">Trials Expired</span>
+                      <span className="font-semibold text-red-600">{safeStats.trials.expired}</span>
+                    </div>
+                    {safeStats.upcomingRenewals.length > 0 && (
+                      <>
+                        <div className="border-t border-gray-100 dark:border-gray-800 my-2" />
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-600">Upcoming Renewals</span>
+                          <span className="font-semibold">{safeStats.upcomingRenewals[0]?.count || 0}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-600">Expected Revenue</span>
+                          <span className="font-semibold text-blue-600">{formatCurrency((safeStats.upcomingRenewals[0]?.expectedRevenue || 0) * 100)}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Payments Summary */}
+              <div className="border border-gray-100 dark:border-gray-800 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  <HugeiconsIcon icon={CreditCardIcon} className="h-4 w-4" />
+                  Payment Summary
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Total Payments</p>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">{safeStats.payments.total}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Successful</p>
+                    <p className="text-lg font-bold text-green-600">{safeStats.payments.successful}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Failed</p>
+                    <p className="text-lg font-bold text-red-600">{safeStats.payments.failed}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Success Rate</p>
+                    <p className="text-lg font-bold text-blue-600">{safeStats.payments.successRate}%</p>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500">Total Payment Amount</span>
+                    <span className="text-sm font-bold text-green-600">{formatCurrency(safeStats.payments.totalAmount * 100)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tiers Content */}
+          {activeStatTab === 'tiers' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {safeStats.tiers.length > 0 ? (
+                safeStats.tiers.map((tier: any) => (
+                  <div key={tier.name} className="border border-gray-100 dark:border-gray-800 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <HugeiconsIcon icon={TIER_ICONS[tier.name as PlanTier] || StarIcon} className="h-5 w-5 text-blue-500" />
+                      <h4 className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{tier.name}</h4>
+                      <Badge className="ml-auto">{tier.percentage}% of total</Badge>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Total Subscriptions</span>
+                        <span className="font-semibold">{tier.total}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Active</span>
+                        <span className="font-semibold text-green-600">{tier.active}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Revenue</span>
+                        <span className="font-semibold text-blue-600">{formatCurrency(tier.revenue * 100)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Avg Revenue/Sub</span>
+                        <span className="font-semibold">{formatCurrency(tier.averageRevenue * 100)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-2 text-center py-8 text-gray-500">No tier data available</div>
+              )}
+            </div>
+          )}
+
+          {/* Intervals Content */}
+          {activeStatTab === 'intervals' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {safeStats.intervals.length > 0 ? (
+                safeStats.intervals.map((interval: any) => (
+                  <div key={interval.name} className="border border-gray-100 dark:border-gray-800 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 capitalize">{interval.name}</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subscriptions</span>
+                        <span className="font-semibold">{interval.count}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Percentage</span>
+                        <span className="font-semibold">{interval.percentage}%</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Revenue</span>
+                        <span className="font-semibold text-blue-600">{formatCurrency(interval.revenue * 100)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-2 text-center py-8 text-gray-500">No interval data available</div>
+              )}
+            </div>
+          )}
+
+          {/* Top Plans Content */}
+          {activeStatTab === 'plans' && (
+            <div className="space-y-3">
+              {safeStats.topPlans.length > 0 ? (
+                safeStats.topPlans.map((plan: any, idx: number) => (
+                  <div key={idx} className="border border-gray-100 dark:border-gray-800 rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-900 dark:text-white">{plan.name}</h4>
+                        <p className="text-xs text-gray-500 capitalize">{plan.tier} • {plan.interval}</p>
+                      </div>
+                      <Badge variant="secondary">{plan.subscribers} subscribers</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Total Revenue</span>
+                      <span className="text-lg font-bold text-green-600">{formatCurrency(plan.revenue * 100)}</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-xs text-gray-500">Average Price</span>
+                      <span className="text-xs font-semibold">{formatCurrency(plan.avgPrice * 100)}</span>
+                    </div>
+                    {safeStats.revenue.totalRevenue > 0 && (
+                      <div className="mt-2">
+                        <CustomProgress value={(plan.revenue / safeStats.revenue.totalRevenue) * 100} />
+                        <p className="text-[10px] text-gray-500 mt-1">{((plan.revenue / safeStats.revenue.totalRevenue) * 100).toFixed(1)}% of total revenue</p>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">No plan data available</div>
+              )}
+            </div>
+          )}
+
+          {/* Acquisition Content */}
+          {activeStatTab === 'acquisition' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="border border-gray-100 dark:border-gray-800 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  <HugeiconsIcon icon={UsersIcon} className="h-4 w-4" />
+                  New Users by Tier
+                </h4>
+                <div className="space-y-3">
+                  {safeStats.acquisition.length > 0 ? (
+                    safeStats.acquisition.map((item: any) => {
+                      const totalNewUsers = safeStats.acquisition.reduce((sum: number, i: any) => sum + i.newUsers, 0);
+                      return (
+                        <div key={item.tier}>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="capitalize text-gray-600 dark:text-gray-400">{item.tier}</span>
+                            <span className="font-semibold text-gray-900 dark:text-white">{item.newUsers} users</span>
+                          </div>
+                          <div className="flex justify-between text-xs text-gray-500 mb-1">
+                            <span>Revenue</span>
+                            <span>{formatCurrency(item.revenue * 100)}</span>
+                          </div>
+                          <CustomProgress value={totalNewUsers > 0 ? (item.newUsers / totalNewUsers) * 100 : 0} />
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-4">No acquisition data available</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="border border-gray-100 dark:border-gray-800 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  <HugeiconsIcon icon={ChartLineIcon} className="h-4 w-4" />
+                  Growth Timeline
+                </h4>
+                <div className="max-h-64 overflow-y-auto space-y-2">
+                  {safeStats.growth.length > 0 ? (
+                    safeStats.growth.slice().reverse().map((period: any) => (
+                      <div key={period._id} className="border-b border-gray-100 dark:border-gray-800 pb-2 last:border-0">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs font-medium text-gray-600">{format(new Date(period._id), 'dd MMM yyyy')}</span>
+                          <div className="flex gap-3">
+                            <span className="text-xs text-green-600">+{period.newSubscriptions} new</span>
+                            <span className="text-xs text-blue-600">{period.activeCount} active</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <CustomProgress value={Math.min((period.newSubscriptions / 20) * 100, 100)} />
+                          </div>
+                          <div className="flex-1">
+                            <div className="h-2 bg-blue-100 dark:bg-blue-900/20 rounded-full overflow-hidden">
+                              <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${Math.min((period.activeCount / 20) * 100, 100)}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-4">No growth data available</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -415,10 +890,6 @@ const ManualExpiryModal = ({
     }
   };
 
-  const handleBackToPreview = () => {
-    setConfirmationStep('preview');
-  };
-
   return (
     <>
       <ReusableModal
@@ -446,7 +917,6 @@ const ManualExpiryModal = ({
         ]}
       >
         <div className="space-y-4">
-          {/* Warning Banner */}
           <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-4">
             <div className="flex items-start gap-3">
               <HugeiconsIcon icon={AlertTriangleIcon} className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
@@ -459,7 +929,6 @@ const ManualExpiryModal = ({
             </div>
           </div>
 
-          {/* Selection Controls */}
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1">
               <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5 block">
@@ -526,7 +995,6 @@ const ManualExpiryModal = ({
             </div>
           </div>
 
-          {/* Loading State */}
           {loading && (
             <div className="flex items-center justify-center py-8">
               <div className="flex items-center gap-2">
@@ -536,10 +1004,8 @@ const ManualExpiryModal = ({
             </div>
           )}
 
-          {/* Preview Results */}
           {preview && preview.affectedCount > 0 && !loading && (
             <div className="space-y-3">
-              {/* Statistics Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white dark:bg-gray-800 rounded-lg p-3 text-center border border-gray-100 dark:border-gray-700">
                   <div className="flex items-center justify-center gap-1 mb-1">
@@ -571,7 +1037,6 @@ const ManualExpiryModal = ({
                 </div>
               </div>
 
-              {/* Subscriptions List */}
               {preview.sampleSubscriptions && preview.sampleSubscriptions.length > 0 && (
                 <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
                   <div className="flex items-center justify-between p-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
@@ -643,7 +1108,6 @@ const ManualExpiryModal = ({
                 </div>
               )}
 
-              {/* Plan Breakdown */}
               {preview.byPlan && Object.keys(preview.byPlan).length > 0 && (
                 <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-100 dark:border-gray-700">
                   <p className="font-medium text-sm mb-2 flex items-center gap-2">
@@ -662,7 +1126,6 @@ const ManualExpiryModal = ({
             </div>
           )}
 
-          {/* No Results */}
           {preview && preview.affectedCount === 0 && !loading && (
             <div className="p-8 text-center bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
               <HugeiconsIcon icon={CheckCircleIcon} className="h-8 w-8 text-green-500 mx-auto mb-2" />
@@ -673,7 +1136,6 @@ const ManualExpiryModal = ({
         </div>
       </ReusableModal>
 
-      {/* Confirmation Modal */}
       <ConfirmModal
         isOpen={isOpen && confirmationStep === 'confirm'}
         onClose={() => {
@@ -724,11 +1186,27 @@ const ManualExpiryModal = ({
 
 const SubscriptionDetailsContent = ({ subscriptionId }: { subscriptionId: string }) => {
   const { data: detail, isLoading } = useGetSubscription(subscriptionId);
-  if (isLoading || !detail) return <div className="py-8 text-center text-sm text-gray-500">Loading...</div>;
+  
+  if (isLoading) {
+    return <SubscriptionDetailsSkeleton />;
+  }
+  
+  if (!detail) {
+    return (
+      <div className="py-8 text-center">
+        <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center mx-auto mb-4">
+          <HugeiconsIcon icon={AlertCircleIcon} className="h-6 w-6 text-red-500" />
+        </div>
+        <p className="text-sm text-gray-600 dark:text-gray-400">Failed to load subscription details</p>
+      </div>
+    );
+  }
+  
   const sub = detail.subscription;
   const userName = typeof sub.userId === 'object' ? sub.userId.name : 'Unknown';
   const userEmail = typeof sub.userId === 'object' ? sub.userId.email : 'Unknown';
   const userAvatar = typeof sub.userId === 'object' ? sub.userId.avatar : undefined;
+  
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-4 pb-4 border-b border-gray-100 dark:border-gray-800">
@@ -740,31 +1218,85 @@ const SubscriptionDetailsContent = ({ subscriptionId }: { subscriptionId: string
           <h3 className="text-xl font-bold text-gray-900 dark:text-white">{userName}</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">{userEmail}</p>
           <div className="flex gap-2 mt-2">
-            <Badge className={cn("gap-1 border", STATUS_COLORS[sub.status])}><HugeiconsIcon icon={STATUS_ICONS[sub.status]} className="h-3 w-3" />{getStatusLabel(sub.status)}</Badge>
-            <Badge className={cn("gap-1", TIER_COLORS[sub.planTier])}><HugeiconsIcon icon={TIER_ICONS[sub.planTier]} className="h-3 w-3" />{sub.planName}</Badge>
+            <Badge className={cn("gap-1 border", STATUS_COLORS[sub.status])}>
+              <HugeiconsIcon icon={STATUS_ICONS[sub.status]} className="h-3 w-3" />
+              {getStatusLabel(sub.status)}
+            </Badge>
+            <Badge className={cn("gap-1", TIER_COLORS[sub.planTier])}>
+              <HugeiconsIcon icon={TIER_ICONS[sub.planTier]} className="h-3 w-3" />
+              {sub.planName}
+            </Badge>
           </div>
         </div>
       </div>
+      
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3"><p className="text-xs text-gray-500 dark:text-gray-400">Plan</p><p className="text-sm font-semibold text-gray-900 dark:text-white">{sub.planName} ({sub.planTier})</p></div>
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3"><p className="text-xs text-gray-500 dark:text-gray-400">Interval</p><p className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{sub.interval}</p></div>
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3"><p className="text-xs text-gray-500 dark:text-gray-400">Price</p><p className="text-sm font-semibold text-gray-900 dark:text-white">{formatCurrency(sub.finalPriceKobo)}</p></div>
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3"><p className="text-xs text-gray-500 dark:text-gray-400">Period End</p><p className="text-sm font-semibold text-gray-900 dark:text-white">{formatDate(sub.currentPeriodEnd)}</p></div>
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Plan</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">{sub.planName} ({sub.planTier})</p>
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Interval</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{sub.interval}</p>
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Price</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">{formatCurrency(sub.finalPriceKobo)}</p>
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Period End</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">{formatDate(sub.currentPeriodEnd)}</p>
+        </div>
       </div>
+      
       {sub.discountKobo > 0 && (
-        <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-3"><p className="text-xs text-gray-500 dark:text-gray-400">Discount</p><p className="text-sm font-semibold text-green-600 dark:text-green-400">-{formatCurrency(sub.discountKobo)} {sub.couponCode && `(${sub.couponCode})`}</p></div>
+        <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Discount</p>
+          <p className="text-sm font-semibold text-green-600 dark:text-green-400">
+            -{formatCurrency(sub.discountKobo)} {sub.couponCode && `(${sub.couponCode})`}
+          </p>
+        </div>
       )}
-      {sub.trialEnd && <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3"><p className="text-xs text-gray-500 dark:text-gray-400">Trial Ends</p><p className="text-sm font-semibold text-blue-600 dark:text-blue-400">{formatDate(sub.trialEnd)}</p></div>}
+      
+      {sub.trialEnd && (
+        <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Trial Ends</p>
+          <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">{formatDate(sub.trialEnd)}</p>
+        </div>
+      )}
+      
       <div className="grid grid-cols-2 gap-4">
-        <div><p className="text-xs text-gray-500 dark:text-gray-400">Created</p><p className="text-sm font-medium text-gray-900 dark:text-white">{formatDateTime(sub.createdAt)}</p></div>
-        <div><p className="text-xs text-gray-500 dark:text-gray-400">Updated</p><p className="text-sm font-medium text-gray-900 dark:text-white">{formatDateTime(sub.updatedAt)}</p></div>
+        <div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Created</p>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">{formatDateTime(sub.createdAt)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Updated</p>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">{formatDateTime(sub.updatedAt)}</p>
+        </div>
       </div>
+      
       {detail.analytics && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3"><p className="text-xs text-gray-500">Payments</p><p className="text-lg font-bold text-gray-900 dark:text-white">{detail.analytics.totalPayments}</p></div>
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3"><p className="text-xs text-gray-500">Revenue</p><p className="text-lg font-bold text-green-600 dark:text-green-400">{formatCurrency(detail.analytics.totalRevenue * 100)}</p></div>
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3"><p className="text-xs text-gray-500">Avg Payment</p><p className="text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(detail.analytics.averagePaymentAmount * 100)}</p></div>
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3"><p className="text-xs text-gray-500">LTV</p><p className="text-lg font-bold text-purple-600 dark:text-purple-400">{formatCurrency(detail.analytics.lifetimeValue * 100)}</p></div>
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Payment Analytics</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+              <p className="text-xs text-gray-500">Payments</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-white">{detail.analytics.totalPayments}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+              <p className="text-xs text-gray-500">Revenue</p>
+              <p className="text-lg font-bold text-green-600 dark:text-green-400">{formatCurrency(detail.analytics.totalRevenue * 100)}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+              <p className="text-xs text-gray-500">Avg Payment</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(detail.analytics.averagePaymentAmount * 100)}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+              <p className="text-xs text-gray-500">LTV</p>
+              <p className="text-lg font-bold text-purple-600 dark:text-purple-400">{formatCurrency(detail.analytics.lifetimeValue * 100)}</p>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -791,7 +1323,6 @@ const SubscriptionsPage = () => {
   const [expandedMobile, setExpandedMobile] = useState<string | null>(null);
   const [manualExpiryOpen, setManualExpiryOpen] = useState(false);
 
-  // Modal states
   const [viewId, setViewId] = useState<string | null>(null);
   const [cancelSub, setCancelSub] = useState<ISubscription | null>(null);
   const [pauseSub, setPauseSub] = useState<ISubscription | null>(null);
@@ -818,7 +1349,7 @@ const SubscriptionsPage = () => {
   if (endDate) params.endDate = endDate;
 
   const { data, isLoading, isFetching, refetch } = useGetSubscriptions(params);
-  const { data: stats } = useGetSubscriptionStats(statsPeriod);
+  const { data: stats, isLoading: statsLoading } = useGetSubscriptionStats(statsPeriod);
   const { cancelSubscription, pauseSubscription, resumeSubscription, extendSubscription, markSubscriptionActive, markSubscriptionPastDue, bulkAction, exportSubscriptions } = useSubscriptionManagement();
 
   const subscriptions = data?.subscriptions || [];
@@ -900,13 +1431,11 @@ const SubscriptionsPage = () => {
     return stats.overview.statusBreakdown.find(s => s.status === k)?.count || 0;
   };
 
-  // Get dropdown items for an admin (with super admin restrictions)
   const getSubscriptionDropdownItems = (sub: ISubscription): (DropdownItem | { divider: true; section?: string })[] => {
     const items: (DropdownItem | { divider: true; section?: string })[] = [
       { label: 'View Details', icon: ViewIcon, onClick: () => setViewId(sub._id) }
     ];
     
-    // Only super admins can perform actions
     if (isSuperAdmin) {
       items.push({ divider: true, section: 'Actions' });
       
@@ -949,7 +1478,6 @@ const SubscriptionsPage = () => {
         });
       }
     } else {
-      // For non-super admins, add a disabled action item
       items.push({ 
         divider: true, 
         section: 'Actions' 
@@ -974,45 +1502,18 @@ const SubscriptionsPage = () => {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Subscription Management</h1>
-              {stats && <span className="px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full">{stats.overview.activeSubscriptions} active</span>}
+              {stats && stats.overview?.activeSubscriptions > 0 && (
+                <span className="px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full">
+                  {stats.overview.activeSubscriptions} active
+                </span>
+              )}
             </div>
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Monitor and manage all subscriptions. View details, handle cancellations, pauses, extensions, and track revenue metrics.</p>
-          
-          {stats && (
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-              <StatCard 
-                title="Monthly Revenue" 
-                value={formatCurrency(stats.revenue.mrr * 100)} 
-                subtitle="MRR" 
-                valueColor="green" 
-              />
-              <StatCard 
-                title="Active Subscriptions" 
-                value={stats.overview.activeSubscriptions} 
-                subtitle={`${stats.trials.active} trials`} 
-                valueColor="green" 
-              />
-              <StatCard 
-                title="Churn Rate" 
-                value={`${stats.churn.churnRate}%`} 
-                subtitle={`${stats.churn.thisPeriod} churned`} 
-                valueColor="red" 
-              />
-              <StatCard 
-                title="Trial Conversion" 
-                value={`${stats.trials.conversionRate}%`} 
-                subtitle={`${stats.trials.converted} converted`} 
-                valueColor="blue" 
-              />
-              <StatCard 
-                title="Total Subscriptions" 
-                value={stats.overview.totalSubscriptions} 
-                subtitle="All time" 
-              />
-            </div>
-          )}
         </div>
+
+        {/* Stats Section with Tab Buttons */}
+        <StatsSection stats={stats} isLoading={statsLoading} />
 
         {/* Toolbar */}
         <div className="flex justify-end mb-4 gap-2">
@@ -1047,7 +1548,6 @@ const SubscriptionsPage = () => {
             {isFetching && !isLoading && <HugeiconsIcon icon={RefreshIcon} className="h-4 w-4 animate-spin text-blue-500" />}
           </div>
           
-          {/* Manual Expiry Trigger - Only visible on large screens and for super admins */}
           {isSuperAdmin && (
             <div className="hidden lg:block">
               <Button 
@@ -1093,7 +1593,7 @@ const SubscriptionsPage = () => {
           <DateRangePicker startDate={startDate} endDate={endDate} onStartDateChange={setStartDate} onEndDateChange={setEndDate} onClear={() => { setStartDate(""); setEndDate(""); }} />
         </div>
 
-        {/* Bulk bar - Only show for super admins */}
+        {/* Bulk bar */}
         {selected.size > 0 && !showSkeleton && isSuperAdmin && (
           <div className="mb-5 flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900 rounded-xl">
             <div className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-blue-600 dark:bg-blue-500 text-white text-[11px] font-bold flex items-center justify-center">{selected.size}</span><span className="text-sm font-medium text-blue-900 dark:text-blue-200">selected</span></div>
@@ -1217,7 +1717,15 @@ const SubscriptionsPage = () => {
       </div>
 
       {/* Modals */}
-      <ReusableModal isOpen={!!viewId} onClose={() => setViewId(null)} title="Subscription Details" description="Complete subscription information" size="full" className="!max-w-4xl" actions={[{ label: 'Close', onClick: () => setViewId(null), variant: 'outline' }]}>
+      <ReusableModal 
+        isOpen={!!viewId} 
+        onClose={() => setViewId(null)} 
+        title="Subscription Details" 
+        description="Complete subscription information" 
+        size="full" 
+        className="!max-w-4xl" 
+        actions={[{ label: 'Close', onClick: () => setViewId(null), variant: 'outline' }]}
+      >
         {viewId && <SubscriptionDetailsContent subscriptionId={viewId} />}
       </ReusableModal>
 

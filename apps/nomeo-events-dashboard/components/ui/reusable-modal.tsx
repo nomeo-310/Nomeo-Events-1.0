@@ -22,7 +22,7 @@ interface ReusableModalProps {
   description?: string;
   children: React.ReactNode;
   actions?: ModalAction[];
-  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'xxl' | 'full';
   closable?: boolean;
   showCloseButton?: boolean;
   closeOnOutsideClick?: boolean;
@@ -37,6 +37,7 @@ const sizeClasses = {
   md: 'max-w-lg',
   lg: 'max-w-2xl',
   xl: 'max-w-4xl',
+  xxl: 'max-w-6xl',
   full: 'max-w-[90vw]',
 };
 

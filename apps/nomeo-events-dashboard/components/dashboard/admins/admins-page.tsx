@@ -289,14 +289,16 @@ const AdminsSkeleton = () => (
 // ============================================
 
 interface AdminsPageProps {
-  id: string;
-  name: string;
-  email: string;
-  role: "super_admin" | "admin" | "moderator" | "support";
-  status: "active" | "suspended" | "inactive";
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: "super_admin" | "admin" | "moderator" | "support";
+    status: "active" | "suspended" | "inactive";
+  };
 }
 
-export default function AdminsPage({user}: {user: AdminsPageProps}) {
+export default function AdminsPage({ user }: AdminsPageProps) {
 
   const permissions = useAdminPermissions(user.role);
   const isSuperAdmin = user.role === 'super_admin';
@@ -412,11 +414,20 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
       return;
     }
     
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(createForm.email)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+    
     setActionLoading(true);
     try {
       await createAdmin(createForm);
       toast.success(`Admin ${createForm.displayName} created successfully`);
+      // Only close modal after successful creation
       setIsCreateModalOpen(false);
+      // Reset form
       setCreateForm({
         email: '',
         name: '',
@@ -425,8 +436,11 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
         sendEmail: true
       });
       refetch();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Create admin failed:", error);
+      const errorMessage = error?.response?.data?.error || error?.message || "Failed to create admin";
+      toast.error(errorMessage);
+      // DO NOT close modal on error - keep it open so user can try again
     } finally {
       setActionLoading(false);
     }
@@ -451,8 +465,9 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ newPassword: "", confirmPassword: "" });
       refetch();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Password reset failed:", error);
+      toast.error(error?.response?.data?.error || "Failed to reset password");
     } finally {
       setActionLoading(false);
     }
@@ -472,8 +487,9 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
       setIsPromoteModalOpen(false);
       setActionReason("");
       refetch();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Promotion failed:", error);
+      toast.error(error?.response?.data?.error || "Failed to promote admin");
     } finally {
       setActionLoading(false);
     }
@@ -493,8 +509,9 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
       setIsDemoteModalOpen(false);
       setActionReason("");
       refetch();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Demotion failed:", error);
+      toast.error(error?.response?.data?.error || "Failed to demote admin");
     } finally {
       setActionLoading(false);
     }
@@ -514,8 +531,9 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
       setIsSuspendModalOpen(false);
       setActionReason("");
       refetch();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Suspension failed:", error);
+      toast.error(error?.response?.data?.error || "Failed to suspend admin");
     } finally {
       setActionLoading(false);
     }
@@ -535,8 +553,9 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
       setIsActivateModalOpen(false);
       setActionReason("");
       refetch();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Activation failed:", error);
+      toast.error(error?.response?.data?.error || "Failed to activate admin");
     } finally {
       setActionLoading(false);
     }
@@ -557,8 +576,9 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
       setActionReason("");
       setHardDelete(false);
       refetch();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Deletion failed:", error);
+      toast.error(error?.response?.data?.error || "Failed to delete admin");
     } finally {
       setActionLoading(false);
     }
@@ -1183,7 +1203,7 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
         )}
       </ReusableModal>
 
-      {/* Create Admin Modal - Only Super Admin */}
+      {/* Create Admin Modal - Only Super Admin - WITH closeOnAction={false} */}
       {isSuperAdmin && (
         <ActionModal
           isOpen={isCreateModalOpen}
@@ -1205,6 +1225,7 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
           actionVariant="danger"
           isLoading={actionLoading || isCreating}
           size="md"
+          closeOnAction={false}
         >
           <div className="space-y-4">
             <div>
@@ -1266,7 +1287,7 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
         </ActionModal>
       )}
 
-      {/* Action Modals - Only Super Admin */}
+      {/* Action Modals - Only Super Admin - WITH closeOnAction={false} */}
       {isSuperAdmin && (
         <>
           {/* Reset Password Modal */}
@@ -1284,6 +1305,7 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
             actionVariant="primary"
             isLoading={actionLoading || isResettingPassword}
             size="md"
+            closeOnAction={false}
           >
             <div className="space-y-4">
               <div className="flex gap-3 p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/50 rounded-lg">
@@ -1335,6 +1357,7 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
             actionVariant="danger"
             isLoading={actionLoading || isUpdating}
             size="md"
+            closeOnAction={false}
           >
             <div className="space-y-4">
               <div className="flex gap-3 p-4 bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/50 rounded-lg">
@@ -1376,6 +1399,7 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
             actionVariant="secondary"
             isLoading={actionLoading || isUpdating}
             size="md"
+            closeOnAction={false}
           >
             <div className="space-y-4">
               <div className="flex gap-3 p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/50 rounded-lg">
@@ -1417,6 +1441,7 @@ export default function AdminsPage({user}: {user: AdminsPageProps}) {
             actionVariant="secondary"
             isLoading={actionLoading || isUpdating}
             size="md"
+            closeOnAction={false}
           >
             <div className="space-y-4">
               <div className="flex gap-3 p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/50 rounded-lg">

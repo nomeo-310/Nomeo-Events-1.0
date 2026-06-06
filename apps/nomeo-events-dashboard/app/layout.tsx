@@ -43,6 +43,8 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const loggedInUser = await getCurrentUser();
 
+  console.log("Logged in user data in RootLayout:", loggedInUser);
+
   const onboardingProps = {
     needsOnboarding: loggedInUser ? !loggedInUser.isOnboarded : false,
     userData: loggedInUser ? {

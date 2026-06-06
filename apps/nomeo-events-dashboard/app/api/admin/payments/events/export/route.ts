@@ -3,6 +3,8 @@ import { requireSuperAdmin } from '@/lib/admin/authorization';
 import { connectDB } from '@/lib/mongoose';
 import { Payment, PaymentPurpose } from '@/models/payment';
 import { csv, toCSV, err } from '@/lib/api-response';
+import { Registration } from '@/models/registration';
+import { Event } from '@/models/event';
 
 /**
  * GET /api/admin/payments/events/export
@@ -35,8 +37,8 @@ export async function GET(req: NextRequest) {
     const payments = await Payment.find(filter)
       .sort({ createdAt: -1 })
       .limit(10_000)
-      .populate('eventId',        'title slug')
-      .populate('registrationId', 'registrationNumber attendeeName attendeeEmail planType')
+      .populate({path: 'eventId', model: Event, select: 'title slug'})
+      .populate({path: 'registrationId', model: Registration, select: 'registrationNumber attendeeName attendeeEmail planType'})
       .lean();
 
     const rows = payments.map((p: any) => ({

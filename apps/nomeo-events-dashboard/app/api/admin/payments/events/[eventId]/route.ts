@@ -4,6 +4,7 @@ import { connectDB } from '@/lib/mongoose';
 import { Payment, PaymentGatewayStatus, PaymentPurpose } from '@/models/payment';
 import { err, paginate } from '@/lib/api-response';
 import mongoose from 'mongoose';
+import { Registration } from '@/models/registration';
 
 /**
  * GET /api/admin/payments/events/:eventId
@@ -43,7 +44,7 @@ export async function GET( req: NextRequest, { params }: { params: Promise<{ eve
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('registrationId', 'registrationNumber attendeeName attendeeEmail planType planName')
+        .populate({ path: 'registrationId', model: Registration, select: 'registrationNumber attendeeName attendeeEmail planType planName' })
         .lean(),
       Payment.countDocuments(filter),
     ]);

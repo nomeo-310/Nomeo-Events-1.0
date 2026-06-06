@@ -18,17 +18,19 @@ import mongoose from 'mongoose';
  */
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { eventId: string } }
+  { params }: { params: Promise<{ eventId: string }> }
 ) {
+  const { eventId } = await params;
+
   try {
     await requireSuperAdmin();
     await connectDB();
 
-    if (!mongoose.isValidObjectId(params.eventId)) {
+    if (!mongoose.isValidObjectId(eventId)) {
       return err('Invalid eventId', 400);
     }
 
-    const eventOid = new mongoose.Types.ObjectId(params.eventId);
+    const eventOid = new mongoose.Types.ObjectId(eventId);
 
     const baseMatch = {
       purpose: PaymentPurpose.EVENT_REGISTRATION,
@@ -36,34 +38,31 @@ export async function GET(
     };
 
     const [byStatus, byChannel, couponSummary, planTypeSummary] = await Promise.all([
-      // Totals by gateway status
       Payment.aggregate([
         { $match: baseMatch },
         {
           $group: {
-            _id:           '$gatewayStatus',
-            count:         { $sum: 1 },
-            totalAmount:   { $sum: '$amount' },
-            totalPaid:     { $sum: '$amountPaid' },
+            _id: '$gatewayStatus',
+            count: { $sum: 1 },
+            totalAmount: { $sum: '$amount' },
+            totalPaid: { $sum: '$amountPaid' },
             totalDiscount: { $sum: '$discountAmount' },
           },
         },
       ]),
 
-      // Breakdown by channel (successful only)
       Payment.aggregate([
         { $match: { ...baseMatch, gatewayStatus: PaymentGatewayStatus.SUCCESS } },
         {
           $group: {
-            _id:       { $ifNull: ['$channel', 'unknown'] },
-            count:     { $sum: 1 },
+            _id: { $ifNull: ['$channel', 'unknown'] },
+            count: { $sum: 1 },
             totalPaid: { $sum: '$amountPaid' },
           },
         },
         { $sort: { totalPaid: -1 } },
       ]),
 
-      // Coupon usage (successful only)
       Payment.aggregate([
         {
           $match: {
@@ -74,31 +73,35 @@ export async function GET(
         },
         {
           $group: {
-            _id:           '$couponCode',
-            redemptions:   { $sum: 1 },
+            _id: '$couponCode',
+            redemptions: { $sum: 1 },
             totalDiscount: { $sum: '$discountAmount' },
-            totalPaid:     { $sum: '$amountPaid' },
+            totalPaid: { $sum: '$amountPaid' },
           },
         },
         { $sort: { redemptions: -1 } },
       ]),
 
-      // Breakdown by plan type via registrationId join
       Payment.aggregate([
         { $match: { ...baseMatch, gatewayStatus: PaymentGatewayStatus.SUCCESS } },
         {
           $lookup: {
-            from:         'registrations',
-            localField:   'registrationId',
+            from: 'registrations',
+            localField: 'registrationId',
             foreignField: '_id',
-            as:           'registration',
+            as: 'registration',
           },
         },
-        { $unwind: { path: '$registration', preserveNullAndEmpty: true } },
+        {
+          $unwind: {
+            path: '$registration',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
         {
           $group: {
-            _id:       { $ifNull: ['$registration.planType', 'unknown'] },
-            count:     { $sum: 1 },
+            _id: { $ifNull: ['$registration.planType', 'unknown'] },
+            count: { $sum: 1 },
             totalPaid: { $sum: '$amountPaid' },
           },
         },
@@ -106,13 +109,15 @@ export async function GET(
       ]),
     ]);
 
-    const successRow = byStatus.find((r: any) => r._id === PaymentGatewayStatus.SUCCESS);
+    const successRow = byStatus.find(
+      (r: any) => r._id === PaymentGatewayStatus.SUCCESS
+    );
 
     return ok({
       summary: {
-        totalRevenue:    successRow?.totalPaid   ?? 0,
-        totalTransactions: successRow?.count     ?? 0,
-        totalDiscount:   successRow?.totalDiscount ?? 0,
+        totalRevenue: successRow?.totalPaid ?? 0,
+        totalTransactions: successRow?.count ?? 0,
+        totalDiscount: successRow?.totalDiscount ?? 0,
       },
       byStatus,
       byChannel,
@@ -120,8 +125,12 @@ export async function GET(
       couponUsage: couponSummary,
     });
   } catch (e: any) {
-    const status = e.message?.startsWith('Forbidden') ? 403
-                 : e.message?.startsWith('Unauthorized') ? 401 : 500;
+    const status = e.message?.startsWith('Forbidden')
+      ? 403
+      : e.message?.startsWith('Unauthorized')
+        ? 401
+        : 500;
+
     return err(e.message ?? 'Server error', status);
   }
 }

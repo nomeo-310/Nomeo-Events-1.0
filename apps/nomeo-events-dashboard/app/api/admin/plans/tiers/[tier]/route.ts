@@ -1,33 +1,40 @@
 // app/api/admin/plans/tiers/[tier]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongoose';
-import { Plan, PlanTier } from '@/models/plan';
+import { Plan } from '@/models/plan';
+import { PlanTier } from '@/models/plan-tier';
 import { requireSuperAdmin, requireAdmin } from '@/lib/admin/authorization';
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { tier: string } }
-) {
+export async function GET( req: NextRequest, { params }: { params: Promise<{ tier: string }> }) {
   try {
     await connectDB();
     const user = await requireAdmin();
-    const { tier } = params;
+    const { tier } = await params;
 
-    if (!Object.values(PlanTier).includes(tier as PlanTier)) {
+    // Check if tier exists in PlanTier collection
+    const tierDoc = await PlanTier.findOne({ slug: tier.toLowerCase() });
+    if (!tierDoc) {
       return NextResponse.json(
-        { success: false, error: `Invalid tier. Must be one of: ${Object.values(PlanTier).join(', ')}` },
-        { status: 400 }
+        { 
+          success: false, 
+          error: `Tier '${tier}' does not exist` 
+        },
+        { status: 404 }
       );
     }
 
-    const typedTier = tier as PlanTier;
-    const plans = await Plan.find({ tier: typedTier }).sort({ sortOrder: 1, interval: 1 });
+    const plans = await Plan.find({ tier: tierDoc.slug })
+      .populate('tierId')
+      .populate('intervalId')
+      .sort({ sortOrder: 1, interval: 1 });
 
     return NextResponse.json({
       success: true,
-      data: plans,
-      count: plans.length,
-      tier,
+      data: {
+        tier: tierDoc,
+        plans,
+        count: plans.length
+      },
       user: { role: user.role, email: user.email },
     });
 
@@ -41,25 +48,26 @@ export async function GET(
   }
 }
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { tier: string } }
-) {
+export async function DELETE( req: NextRequest, { params }: { params: Promise<{ tier: string }> }) {
   try {
     await connectDB();
     const user = await requireSuperAdmin();
-    const { tier } = params;
+    const { tier } = await params;
 
-    if (!Object.values(PlanTier).includes(tier as PlanTier)) {
+    // Check if tier exists
+    const tierDoc = await PlanTier.findOne({ slug: tier.toLowerCase() });
+    if (!tierDoc) {
       return NextResponse.json(
-        { success: false, error: `Invalid tier. Must be one of: ${Object.values(PlanTier).join(', ')}` },
-        { status: 400 }
+        { 
+          success: false, 
+          error: `Tier '${tier}' does not exist` 
+        },
+        { status: 404 }
       );
     }
 
-    const typedTier = tier as PlanTier;
-
-    const count = await Plan.countDocuments({ tier: typedTier });
+    // Check if any plans use this tier
+    const count = await Plan.countDocuments({ tier: tierDoc.slug });
     if (count === 0) {
       return NextResponse.json(
         { success: false, error: `No plans found for tier: ${tier}` },
@@ -67,12 +75,20 @@ export async function DELETE(
       );
     }
 
-    const result = await Plan.deleteMany({ tier: typedTier });
+    // Get plans being deleted (for response)
+    const plansToDelete = await Plan.find({ tier: tierDoc.slug }).select('name slug interval');
+    
+    // Delete all plans with this tier
+    const result = await Plan.deleteMany({ tier: tierDoc.slug });
 
     return NextResponse.json({
       success: true,
       message: `Deleted entire '${tier}' tier (${result.deletedCount} plans) by ${user.email}`,
-      data: { tier, deletedCount: result.deletedCount },
+      data: { 
+        tier: tierDoc,
+        deletedCount: result.deletedCount,
+        deletedPlans: plansToDelete
+      },
     });
 
   } catch (error: any) {
@@ -85,14 +101,11 @@ export async function DELETE(
   }
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { tier: string } }
-) {
+export async function PATCH( req: NextRequest,{ params }: { params: Promise<{ tier: string }> }) {
   try {
     await connectDB();
     const user = await requireAdmin();
-    const { tier } = params;
+    const { tier } = await params;
     const { action } = await req.json();
 
     if (!action || !['activate', 'deactivate'].includes(action)) {
@@ -102,21 +115,39 @@ export async function PATCH(
       );
     }
 
-    if (!Object.values(PlanTier).includes(tier as PlanTier)) {
+    // Check if tier exists
+    const tierDoc = await PlanTier.findOne({ slug: tier.toLowerCase() });
+    if (!tierDoc) {
       return NextResponse.json(
-        { success: false, error: `Invalid tier. Must be one of: ${Object.values(PlanTier).join(', ')}` },
-        { status: 400 }
+        { 
+          success: false, 
+          error: `Tier '${tier}' does not exist` 
+        },
+        { status: 404 }
       );
     }
 
-    const typedTier = tier as PlanTier;
     const isActive = action === 'activate';
-    const result = await Plan.updateMany({ tier: typedTier }, { $set: { isActive } });
+    
+    // Update the tier's own status
+    tierDoc.isActive = isActive;
+    await tierDoc.save();
+    
+    // Update all plans using this tier
+    const result = await Plan.updateMany(
+      { tier: tierDoc.slug }, 
+      { $set: { isActive } }
+    );
 
     return NextResponse.json({
       success: true,
-      message: `${action}d ${result.modifiedCount} plan(s) in '${tier}' tier by ${user.email}`,
-      data: { tier, modifiedCount: result.modifiedCount, isActive },
+      message: `${action}d ${result.modifiedCount} plan(s) in '${tier}' tier and updated tier status by ${user.email}`,
+      data: { 
+        tier: tierDoc,
+        modifiedCount: result.modifiedCount, 
+        isActive,
+        tierStatusUpdated: true
+      },
     });
 
   } catch (error: any) {

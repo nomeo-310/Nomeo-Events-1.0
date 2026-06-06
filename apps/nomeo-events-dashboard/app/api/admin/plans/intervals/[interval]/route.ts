@@ -1,33 +1,40 @@
 // app/api/admin/plans/intervals/[interval]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongoose';
-import { Plan, PlanInterval } from '@/models/plan';
+import { Plan } from '@/models/plan';
+import { PlanInterval } from '@/models/plan-interval';
 import { requireSuperAdmin, requireAdmin } from '@/lib/admin/authorization';
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { interval: string } }
-) {
+export async function GET( req: NextRequest, { params }: { params: Promise<{ interval: string }> }) {
   try {
     await connectDB();
     const user = await requireAdmin();
-    const { interval } = params;
+    const { interval } = await params;
 
-    if (!Object.values(PlanInterval).includes(interval as PlanInterval)) {
+    // Check if interval exists in PlanInterval collection
+    const intervalDoc = await PlanInterval.findOne({ slug: interval.toLowerCase() });
+    if (!intervalDoc) {
       return NextResponse.json(
-        { success: false, error: `Invalid interval. Must be one of: ${Object.values(PlanInterval).join(', ')}` },
-        { status: 400 }
+        { 
+          success: false, 
+          error: `Interval '${interval}' does not exist` 
+        },
+        { status: 404 }
       );
     }
 
-    const typedInterval = interval as PlanInterval;
-    const plans = await Plan.find({ interval: typedInterval }).sort({ sortOrder: 1, tier: 1 });
+    const plans = await Plan.find({ interval: intervalDoc.slug })
+      .populate('tierId')
+      .populate('intervalId')
+      .sort({ sortOrder: 1, tier: 1 });
 
     return NextResponse.json({
       success: true,
-      data: plans,
-      count: plans.length,
-      interval,
+      data: {
+        interval: intervalDoc,
+        plans,
+        count: plans.length
+      },
       user: { role: user.role, email: user.email },
     });
 
@@ -41,25 +48,26 @@ export async function GET(
   }
 }
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { interval: string } }
-) {
+export async function DELETE( req: NextRequest, { params }: { params: Promise<{ interval: string }> }) {
   try {
     await connectDB();
     const user = await requireSuperAdmin();
-    const { interval } = params;
+    const { interval } = await params;
 
-    if (!Object.values(PlanInterval).includes(interval as PlanInterval)) {
+    // Check if interval exists
+    const intervalDoc = await PlanInterval.findOne({ slug: interval.toLowerCase() });
+    if (!intervalDoc) {
       return NextResponse.json(
-        { success: false, error: `Invalid interval. Must be one of: ${Object.values(PlanInterval).join(', ')}` },
-        { status: 400 }
+        { 
+          success: false, 
+          error: `Interval '${interval}' does not exist` 
+        },
+        { status: 404 }
       );
     }
 
-    const typedInterval = interval as PlanInterval;
-
-    const count = await Plan.countDocuments({ interval: typedInterval });
+    // Check if any plans use this interval
+    const count = await Plan.countDocuments({ interval: intervalDoc.slug });
     if (count === 0) {
       return NextResponse.json(
         { success: false, error: `No plans found with interval: ${interval}` },
@@ -67,12 +75,20 @@ export async function DELETE(
       );
     }
 
-    const result = await Plan.deleteMany({ interval: typedInterval });
+    // Get plans being deleted (for response)
+    const plansToDelete = await Plan.find({ interval: intervalDoc.slug }).select('name slug tier');
+    
+    // Delete all plans with this interval
+    const result = await Plan.deleteMany({ interval: intervalDoc.slug });
 
     return NextResponse.json({
       success: true,
       message: `Deleted all '${interval}' plans (${result.deletedCount} plans) by ${user.email}`,
-      data: { interval, deletedCount: result.deletedCount },
+      data: { 
+        interval: intervalDoc,
+        deletedCount: result.deletedCount,
+        deletedPlans: plansToDelete
+      },
     });
 
   } catch (error: any) {
@@ -85,14 +101,11 @@ export async function DELETE(
   }
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { interval: string } }
-) {
+export async function PATCH( req: NextRequest, { params }: { params: Promise<{ interval: string }> }) {
   try {
     await connectDB();
     const user = await requireAdmin();
-    const { interval } = params;
+    const { interval } = await params;
     const { action } = await req.json();
 
     if (!action || !['activate', 'deactivate'].includes(action)) {
@@ -102,21 +115,39 @@ export async function PATCH(
       );
     }
 
-    if (!Object.values(PlanInterval).includes(interval as PlanInterval)) {
+    // Check if interval exists
+    const intervalDoc = await PlanInterval.findOne({ slug: interval.toLowerCase() });
+    if (!intervalDoc) {
       return NextResponse.json(
-        { success: false, error: `Invalid interval. Must be one of: ${Object.values(PlanInterval).join(', ')}` },
-        { status: 400 }
+        { 
+          success: false, 
+          error: `Interval '${interval}' does not exist` 
+        },
+        { status: 404 }
       );
     }
 
-    const typedInterval = interval as PlanInterval;
     const isActive = action === 'activate';
-    const result = await Plan.updateMany({ interval: typedInterval }, { $set: { isActive } });
+    
+    // Update the interval's own status
+    intervalDoc.isActive = isActive;
+    await intervalDoc.save();
+    
+    // Update all plans using this interval
+    const result = await Plan.updateMany(
+      { interval: intervalDoc.slug }, 
+      { $set: { isActive } }
+    );
 
     return NextResponse.json({
       success: true,
-      message: `${action}d ${result.modifiedCount} '${interval}' plan(s) by ${user.email}`,
-      data: { interval, modifiedCount: result.modifiedCount, isActive },
+      message: `${action}d ${result.modifiedCount} '${interval}' plan(s) and updated interval status by ${user.email}`,
+      data: { 
+        interval: intervalDoc,
+        modifiedCount: result.modifiedCount, 
+        isActive,
+        intervalStatusUpdated: true
+      },
     });
 
   } catch (error: any) {

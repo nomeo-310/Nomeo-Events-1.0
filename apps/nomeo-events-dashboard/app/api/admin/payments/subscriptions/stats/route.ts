@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
             as:           'plan',
           },
         },
-        { $unwind: { path: '$plan', preserveNullAndEmpty: true } },
+        { $unwind: { path: '$plan', preserveNullAndEmptyArrays: true } },
         {
           $group: {
             _id: {

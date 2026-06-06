@@ -3,6 +3,11 @@ import { requireSupport } from '@/lib/admin/authorization';
 import { connectDB } from '@/lib/mongoose';
 import { Payment } from '@/models/payment';
 import { ok, err } from '@/lib/api-response';
+import { Registration } from '@/models/registration';
+import { Subscription } from '@/models/subscription';
+import { Event } from '@/models/event';
+import { Plan } from '@/models/plan';
+import { User } from '@/models/user';
 
 /**
  * GET /api/admin/payments/:id
@@ -19,10 +24,12 @@ export async function GET( _req: NextRequest, { params }: { params: Promise<{ id
     await connectDB();
 
     const payment = await Payment.findById(id)
-      .populate('registrationId', 'registrationNumber attendeeName attendeeEmail attendeePhone planType planName')
-      .populate('subscriptionId', 'status')
-      .populate('eventId',        'title slug startDate endDate location')
-      .populate('planId',         'name tier interval priceKobo')
+      .populate({path: 'registrationId', model: Registration, select: 'registrationNumber attendeeName attendeeEmail attendeePhone planType planName'})
+      .populate({path: 'subscriptionId', model: Subscription, select: 'status userId',
+        populate: { path: 'userId', model: User, select: 'name email avatar image' } 
+      })
+      .populate({path: 'eventId', model: Event, select: 'title slug startDate endDate location'})
+      .populate({path: 'planId', model: Plan, select: 'name tier interval priceKobo'})
       .lean();
 
     if (!payment) return err('Payment not found', 404);

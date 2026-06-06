@@ -1,7 +1,9 @@
 // app/api/admin/plans/deactivate/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongoose';
-import { Plan, PlanTier, PlanInterval } from '@/models/plan';
+import { Plan } from '@/models/plan';
+import { PlanTier } from '@/models/plan-tier';
+import { PlanInterval } from '@/models/plan-interval';
 import { requireAdmin } from '@/lib/admin/authorization';
 
 export async function POST(req: NextRequest) {
@@ -14,57 +16,84 @@ export async function POST(req: NextRequest) {
     let query: any = {};
     let description = '';
 
+    // Handle deletion by specific plan slugs
     if (slugs && slugs.length > 0) {
       query.slug = { $in: slugs };
       description = `specific plans: ${slugs.join(', ')}`;
-    } else if (tier) {
-      if (!Object.values(PlanTier).includes(tier as PlanTier)) {
+    } 
+    // Handle deletion by tier
+    else if (tier) {
+      // Check if tier exists in PlanTier collection
+      const tierDoc = await PlanTier.findOne({ slug: tier.toLowerCase() });
+      if (!tierDoc) {
         return NextResponse.json(
-          { success: false, error: `Invalid tier. Must be one of: ${Object.values(PlanTier).join(', ')}` },
+          { 
+            success: false, 
+            error: `Tier '${tier}' does not exist. Available tiers: ${(await PlanTier.find({}).select('slug')).map(t => t.slug).join(', ')}` 
+          },
           { status: 400 }
         );
       }
 
-      query.tier = tier;
+      query.tier = tierDoc.slug;
       description = `tier '${tier}'`;
 
-      // includeIntervals and excludeIntervals are mutually exclusive —
-      // if both arrive, includeIntervals wins. Apply them to separate keys
-      // so they don't clobber each other.
+      // includeIntervals and excludeIntervals are mutually exclusive
       if (includeIntervals?.length) {
-        const valid = (includeIntervals as string[]).filter((i) =>
-          Object.values(PlanInterval).includes(i as PlanInterval)
-        );
-        if (valid.length) {
-          query.interval = { $in: valid };
-          description += ` with intervals: ${valid.join(', ')}`;
+        // Validate intervals exist
+        const validIntervals = [];
+        for (const intervalName of includeIntervals) {
+          const intervalDoc = await PlanInterval.findOne({ slug: intervalName.toLowerCase() });
+          if (intervalDoc) {
+            validIntervals.push(intervalDoc.slug);
+          }
+        }
+        if (validIntervals.length) {
+          query.interval = { $in: validIntervals };
+          description += ` with intervals: ${validIntervals.join(', ')}`;
         }
       } else if (excludeIntervals?.length) {
-        // Only applied when includeIntervals is not provided
-        const valid = (excludeIntervals as string[]).filter((i) =>
-          Object.values(PlanInterval).includes(i as PlanInterval)
-        );
-        if (valid.length) {
-          query.interval = { $nin: valid };
-          description += ` excluding intervals: ${valid.join(', ')}`;
+        // Validate intervals exist
+        const validIntervals = [];
+        for (const intervalName of excludeIntervals) {
+          const intervalDoc = await PlanInterval.findOne({ slug: intervalName.toLowerCase() });
+          if (intervalDoc) {
+            validIntervals.push(intervalDoc.slug);
+          }
+        }
+        if (validIntervals.length) {
+          query.interval = { $nin: validIntervals };
+          description += ` excluding intervals: ${validIntervals.join(', ')}`;
         }
       }
-    } else if (interval) {
-      if (!Object.values(PlanInterval).includes(interval as PlanInterval)) {
+    } 
+    // Handle deletion by interval
+    else if (interval) {
+      // Check if interval exists in PlanInterval collection
+      const intervalDoc = await PlanInterval.findOne({ slug: interval.toLowerCase() });
+      if (!intervalDoc) {
         return NextResponse.json(
-          { success: false, error: `Invalid interval. Must be one of: ${Object.values(PlanInterval).join(', ')}` },
+          { 
+            success: false, 
+            error: `Interval '${interval}' does not exist. Available intervals: ${(await PlanInterval.find({}).select('slug')).map(i => i.slug).join(', ')}` 
+          },
           { status: 400 }
         );
       }
-      query.interval = interval;
+      query.interval = intervalDoc.slug;
       description = `all '${interval}' plans across all tiers`;
-    } else {
+    } 
+    else {
       return NextResponse.json(
         { success: false, error: 'Please provide slugs, tier, or interval parameter' },
         { status: 400 }
       );
     }
 
+    // Get the plans that will be deactivated (for response)
+    const plansToDeactivate = await Plan.find(query).select('name slug tier interval isActive');
+    
+    // Deactivate the plans
     const result = await Plan.updateMany(query, { $set: { isActive: false } });
 
     return NextResponse.json({
@@ -73,6 +102,13 @@ export async function POST(req: NextRequest) {
       data: {
         modifiedCount: result.modifiedCount,
         matchedCount: result.matchedCount,
+        deactivatedPlans: plansToDeactivate.map(p => ({
+          name: p.name,
+          slug: p.slug,
+          tier: p.tier,
+          interval: p.interval,
+          wasActive: p.isActive
+        })),
         filters: { tier, interval, includeIntervals, excludeIntervals, slugs },
         action: 'deactivate',
       },

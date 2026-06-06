@@ -1,23 +1,6 @@
 // models/plan.ts
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-export enum PlanInterval {
-  MONTHLY = 'monthly',
-  QUARTERLY = 'quarterly',
-  BIANNUAL = 'biannual',
-  ANNUAL = 'annual',
-  LIFETIME = 'lifetime'
-}
-
-export enum PlanTier {
-  FREE = 'free',
-  STARTER = 'starter',
-  BASIC = 'basic',
-  PRO = 'pro',
-  BUSINESS = 'business',
-  ENTERPRISE = 'enterprise'
-}
-
 export enum DiscountType {
   PERCENTAGE = 'percentage',
   FIXED = 'fixed'
@@ -38,9 +21,9 @@ export interface ICoupon {
   maxRedemptions?: number;
   redemptionCount: number;
   minAmountKobo?: number;
-  applicableIntervals?: PlanInterval[];
+  applicableIntervals?: string[];  // Now string array (no enum)
   status: CouponStatus;
-  expiresAt?: Date;       // undefined, not null — matches Mongoose optional Date
+  expiresAt?: Date;
   createdAt: Date;
 }
 
@@ -49,7 +32,7 @@ export interface IDiscount {
   description?: string;
   discountType: DiscountType;
   discountValue: number;
-  interval?: PlanInterval;
+  interval?: string;  // Now string (no enum)
   startsAt?: Date;
   endsAt?: Date;
   isActive: boolean;
@@ -66,16 +49,21 @@ export interface IPlanFeature {
 export interface IPlan {
   name: string;
   slug: string;
-  tier: PlanTier;
+  tier: string;                    // Now string (no enum)
   description?: string;
   isActive: boolean;
   isPublic: boolean;
   priceKobo: number;
   currency: string;
-  interval: PlanInterval;
+  interval: string;                // Now string (no enum)
   paystackPlanCode?: string;
   isFree: boolean;
   trialDays: number;
+  
+  // NEW: Reference fields for dynamic tiers/intervals
+  tierId?: mongoose.Types.ObjectId;
+  intervalId?: mongoose.Types.ObjectId;
+  
   maxEvents?: number;
   maxAttendeesPerEvent?: number;
   maxTeamMembers?: number;
@@ -90,14 +78,14 @@ export interface IPlan {
 }
 
 export interface IPlanDocument extends IPlan, Document {
-  calculatePrice(interval: PlanInterval, couponCode?: string): {
+  calculatePrice(interval: string, couponCode?: string): {  // Now takes string
     originalKobo: number;
     discountKobo: number;
     finalKobo: number;
     couponApplied?: ICoupon;
     discountApplied?: IDiscount;
   };
-  redeemCoupon(code: string): Promise<ICoupon | null>; // fixed: was blueeemCoupon
+  redeemCoupon(code: string): Promise<ICoupon | null>;
 }
 
 interface IPlanModel extends Model<IPlanDocument> {
@@ -107,14 +95,14 @@ interface IPlanModel extends Model<IPlanDocument> {
 
 const CouponSchema = new Schema<ICoupon>(
   {
-    code: { type: String, required: true, uppercase: true, trim: true }, // fixed: was requiblue
+    code: { type: String, required: true, uppercase: true, trim: true },
     description: String,
     discountType: { type: String, enum: Object.values(DiscountType), required: true },
     discountValue: { type: Number, required: true, min: 0 },
     maxRedemptions: Number,
     redemptionCount: { type: Number, default: 0 },
     minAmountKobo: Number,
-    applicableIntervals: [{ type: String, enum: Object.values(PlanInterval) }],
+    applicableIntervals: [{ type: String }],  // Now just string array (no enum)
     status: { type: String, enum: Object.values(CouponStatus), default: CouponStatus.ACTIVE },
     expiresAt: Date
   },
@@ -127,7 +115,7 @@ const DiscountSchema = new Schema<IDiscount>(
     description: String,
     discountType: { type: String, enum: Object.values(DiscountType), required: true },
     discountValue: { type: Number, required: true, min: 0 },
-    interval: { type: String, enum: Object.values(PlanInterval) },
+    interval: { type: String },  // Now just string (no enum)
     startsAt: Date,
     endsAt: Date,
     isActive: { type: Boolean, default: true }
@@ -150,16 +138,21 @@ const PlanSchema = new Schema<IPlanDocument>(
   {
     name: { type: String, required: true, trim: true },
     slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    tier: { type: String, enum: Object.values(PlanTier), required: true },
+    tier: { type: String, required: true },  // No enum, just string
     description: String,
     isActive: { type: Boolean, default: true },
     isPublic: { type: Boolean, default: true },
     priceKobo: { type: Number, required: true, min: 0, default: 0 },
     currency: { type: String, default: 'NGN' },
-    interval: { type: String, enum: Object.values(PlanInterval), required: true },
+    interval: { type: String, required: true },  // No enum, just string
     paystackPlanCode: String,
     isFree: { type: Boolean, default: false },
     trialDays: { type: Number, default: 0, min: 0 },
+    
+    // NEW: Reference fields for dynamic tiers/intervals
+    tierId: { type: Schema.Types.ObjectId, ref: 'PlanTier' },
+    intervalId: { type: Schema.Types.ObjectId, ref: 'PlanInterval' },
+    
     maxEvents: Number,
     maxAttendeesPerEvent: Number,
     maxTeamMembers: Number,
@@ -174,13 +167,11 @@ const PlanSchema = new Schema<IPlanDocument>(
 );
 
 PlanSchema.pre('save', function () {
-  // isFree is derived purely from price — trialDays is intentionally left alone
-  // because the Free tier uses trialDays for its full-access grace period.
   this.isFree = this.priceKobo === 0;
 });
 
 PlanSchema.methods.calculatePrice = function (
-  interval: PlanInterval,
+  interval: string,  // Now takes string
   couponCode?: string
 ): {
   originalKobo: number;
@@ -271,15 +262,15 @@ PlanSchema.methods.redeemCoupon = async function (code: string): Promise<ICoupon
 };
 
 PlanSchema.statics.findActive = function (): Promise<IPlanDocument[]> {
-  return this.find({ isActive: true }).sort({ sortOrder: 1 });
+  return this.find({ isActive: true }).populate('tierId').populate('intervalId').sort({ sortOrder: 1 });
 };
 
 PlanSchema.statics.findPublic = function (): Promise<IPlanDocument[]> {
-  return this.find({ isActive: true, isPublic: true }).sort({ sortOrder: 1 });
+  return this.find({ isActive: true, isPublic: true }).populate('tierId').populate('intervalId').sort({ sortOrder: 1 });
 };
 
-PlanSchema.index({ slug: 1 }, { unique: true });
 PlanSchema.index({ tier: 1, interval: 1 });
+PlanSchema.index({ tierId: 1, intervalId: 1 });
 PlanSchema.index({ isActive: 1, isPublic: 1 });
 PlanSchema.index({ 'coupons.code': 1 });
 

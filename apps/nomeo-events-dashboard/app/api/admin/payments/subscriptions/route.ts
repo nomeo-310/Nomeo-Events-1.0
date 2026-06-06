@@ -3,6 +3,9 @@ import { requireSuperAdmin } from '@/lib/admin/authorization';
 import { connectDB } from '@/lib/mongoose';
 import { Payment, PaymentGatewayStatus, PaymentPurpose } from '@/models/payment';
 import { err, paginate } from '@/lib/api-response';
+import { Subscription } from '@/models/subscription';
+import { Plan } from '@/models/plan';
+import { User } from '@/models/user';
 
 /**
  * GET /api/admin/payments/subscriptions
@@ -61,8 +64,12 @@ export async function GET(req: NextRequest) {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('subscriptionId', 'status')
-        .populate('planId',         'name tier interval priceKobo')
+        .populate(
+          { path: 'subscriptionId', model: Subscription, select: 'status userId',
+            populate: { path: 'userId', model: User, select: 'name email avatar image' } 
+          },
+        )
+        .populate({ path: 'planId', model: Plan, select: 'name tier interval priceKobo' })
         .lean(),
       Payment.countDocuments(filter),
     ]);

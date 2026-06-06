@@ -1,14 +1,14 @@
-// app/api/admin/plans/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongoose';
-import { Plan, PlanTier, PlanInterval, DiscountType, CouponStatus } from '@/models/plan';
-import { requireAdmin } from '@/lib/admin/authorization';
+import { Plan, DiscountType, CouponStatus } from '@/models/plan';
+import { PlanTier } from '@/models/plan-tier';
+import { PlanInterval } from '@/models/plan-interval';
+import { requireAdmin, requireSuperAdmin } from '@/lib/admin/authorization';
 
 // GET /api/admin/plans - Get all plans with filters
 export async function GET(req: NextRequest) {
   try {
     await connectDB();
-    
     const user = await requireAdmin();
     
     const { searchParams } = new URL(req.url);
@@ -30,11 +30,20 @@ export async function GET(req: NextRequest) {
     }
     
     const plans = await Plan.find(query)
+      .populate('tierId')
+      .populate('intervalId')
       .sort({ sortOrder: 1, tier: 1, interval: 1 });
+    
+    const allTiers = await PlanTier.find({}).sort({ sortOrder: 1 });
+    const allIntervals = await PlanInterval.find({}).sort({ sortOrder: 1 });
     
     return NextResponse.json({
       success: true,
-      data: plans,
+      data: {
+        plans,
+        tiers: allTiers,
+        intervals: allIntervals
+      },
       count: plans.length,
       user: { role: user.role, isSuperAdmin: user.isSuperAdmin, email: user.email }
     });
@@ -52,15 +61,15 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/admin/plans - Create a new plan with full features
+// POST /api/admin/plans - Create a new plan (requires existing tier and interval)
 export async function POST(req: NextRequest) {
   try {
     await connectDB();
-    const user = await requireAdmin();
+    const user = await requireSuperAdmin();
     const body = await req.json();
     
-    // ─── Validate Required Fields ────────────────────────────────────────────
-    const requiredFields = ['name', 'slug', 'tier', 'interval', 'priceKobo'];
+    // Validate Required Fields
+    const requiredFields = ['name', 'slug', 'tierId', 'intervalId', 'priceKobo'];
     for (const field of requiredFields) {
       if (!body[field] && body[field] !== 0) {
         return NextResponse.json(
@@ -70,22 +79,37 @@ export async function POST(req: NextRequest) {
       }
     }
     
-    // ─── Validate Enums ──────────────────────────────────────────────────────
-    if (!Object.values(PlanTier).includes(body.tier)) {
+    // Validate tier exists and is active
+    const tier = await PlanTier.findById(body.tierId);
+    if (!tier) {
       return NextResponse.json(
-        { success: false, error: `Invalid tier. Must be one of: ${Object.values(PlanTier).join(', ')}` },
+        { success: false, error: 'Tier not found' },
+        { status: 400 }
+      );
+    }
+    if (!tier.isActive) {
+      return NextResponse.json(
+        { success: false, error: `Cannot create plan. Tier '${tier.name}' is deactivated.` },
         { status: 400 }
       );
     }
     
-    if (!Object.values(PlanInterval).includes(body.interval)) {
+    // Validate interval exists and is active
+    const interval = await PlanInterval.findById(body.intervalId);
+    if (!interval) {
       return NextResponse.json(
-        { success: false, error: `Invalid interval. Must be one of: ${Object.values(PlanInterval).join(', ')}` },
+        { success: false, error: 'Interval not found' },
+        { status: 400 }
+      );
+    }
+    if (!interval.isActive) {
+      return NextResponse.json(
+        { success: false, error: `Cannot create plan. Interval '${interval.name}' is deactivated.` },
         { status: 400 }
       );
     }
     
-    // ─── Check for existing plan ────────────────────────────────────────────
+    // Check for existing plan
     const existingPlan = await Plan.findOne({ slug: body.slug });
     if (existingPlan) {
       return NextResponse.json(
@@ -94,21 +118,22 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    // ─── Prepare Plan Data ───────────────────────────────────────────────────
+    // Prepare Plan Data
     const planData: any = {
       name: body.name,
       slug: body.slug.toLowerCase(),
-      tier: body.tier,
+      tier: tier.slug,
+      interval: interval.slug,
+      tierId: tier._id,
+      intervalId: interval._id,
       description: body.description || '',
       isActive: body.isActive !== undefined ? body.isActive : true,
       isPublic: body.isPublic !== undefined ? body.isPublic : true,
       priceKobo: body.priceKobo,
       currency: body.currency || 'NGN',
-      interval: body.interval,
       paystackPlanCode: body.paystackPlanCode || null,
       trialDays: body.trialDays !== undefined ? body.trialDays : (body.priceKobo === 0 ? 14 : 0),
       
-      // Limits
       maxEvents: body.maxEvents,
       maxAttendeesPerEvent: body.maxAttendeesPerEvent,
       maxTeamMembers: body.maxTeamMembers,
@@ -117,10 +142,9 @@ export async function POST(req: NextRequest) {
       sortOrder: body.sortOrder !== undefined ? body.sortOrder : 0,
     };
     
-    // Auto-set isFree based on price
     planData.isFree = planData.priceKobo === 0;
     
-    // ─── Handle Features Array ───────────────────────────────────────────────
+    // Handle Features Array
     if (body.features && Array.isArray(body.features)) {
       planData.features = body.features.map((feature: any) => ({
         name: feature.name,
@@ -133,7 +157,7 @@ export async function POST(req: NextRequest) {
       planData.features = [];
     }
     
-    // ─── Handle Discounts Array ──────────────────────────────────────────────
+    // Handle Discounts Array
     if (body.discounts && Array.isArray(body.discounts)) {
       planData.discounts = body.discounts.map((discount: any) => {
         if (!discount.name || !discount.discountType || discount.discountValue === undefined) {
@@ -159,7 +183,7 @@ export async function POST(req: NextRequest) {
       planData.discounts = [];
     }
     
-    // ─── Handle Coupons Array ────────────────────────────────────────────────
+    // Handle Coupons Array
     if (body.coupons && Array.isArray(body.coupons)) {
       planData.coupons = body.coupons.map((coupon: any) => {
         if (!coupon.code || !coupon.discountType || coupon.discountValue === undefined) {
@@ -192,7 +216,7 @@ export async function POST(req: NextRequest) {
       planData.coupons = [];
     }
     
-    // ─── Handle Metadata Map ─────────────────────────────────────────────────
+    // Handle Metadata Map
     if (body.metadata) {
       if (body.metadata instanceof Map) {
         planData.metadata = body.metadata;
@@ -207,14 +231,17 @@ export async function POST(req: NextRequest) {
       planData.metadata = new Map();
     }
     
-    // ─── Create the Plan ─────────────────────────────────────────────────────
+    // Create the Plan
     const plan = new Plan(planData);
     await plan.save();
+    
+    // Populate references for response
+    await plan.populate('tierId intervalId');
     
     return NextResponse.json({
       success: true,
       data: plan,
-      message: `Plan '${plan.name}' created successfully by ${user.email}`
+      message: `Plan '${plan.name}' created successfully with ${tier.name} / ${interval.name}`
     }, { status: 201 });
     
   } catch (error: any) {
@@ -241,6 +268,124 @@ export async function POST(req: NextRequest) {
       );
     }
     
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT /api/admin/plans - Update an existing plan
+export async function PUT(req: NextRequest) {
+  try {
+    await connectDB();
+    const user = await requireSuperAdmin();
+    const body = await req.json();
+    
+    const { id, ...updates } = body;
+    
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'Plan ID is required' },
+        { status: 400 }
+      );
+    }
+    
+    const plan = await Plan.findById(id);
+    if (!plan) {
+      return NextResponse.json(
+        { success: false, error: 'Plan not found' },
+        { status: 404 }
+      );
+    }
+    
+    // Update fields
+    if (updates.name) plan.name = updates.name;
+    if (updates.description !== undefined) plan.description = updates.description;
+    if (updates.isActive !== undefined) plan.isActive = updates.isActive;
+    if (updates.isPublic !== undefined) plan.isPublic = updates.isPublic;
+    if (updates.priceKobo !== undefined) plan.priceKobo = updates.priceKobo;
+    if (updates.trialDays !== undefined) plan.trialDays = updates.trialDays;
+    if (updates.maxEvents !== undefined) plan.maxEvents = updates.maxEvents;
+    if (updates.maxAttendeesPerEvent !== undefined) plan.maxAttendeesPerEvent = updates.maxAttendeesPerEvent;
+    if (updates.maxTeamMembers !== undefined) plan.maxTeamMembers = updates.maxTeamMembers;
+    if (updates.storageGb !== undefined) plan.storageGb = updates.storageGb;
+    if (updates.sortOrder !== undefined) plan.sortOrder = updates.sortOrder;
+    if (updates.features !== undefined) plan.features = updates.features;
+    if (updates.discounts !== undefined) plan.discounts = updates.discounts;
+    if (updates.coupons !== undefined) plan.coupons = updates.coupons;
+    
+    plan.isFree = plan.priceKobo === 0;
+    
+    // If updating tier or interval, validate they exist
+    if (updates.tierId) {
+      const newTier = await PlanTier.findById(updates.tierId);
+      if (!newTier) {
+        return NextResponse.json({ success: false, error: 'New tier not found' }, { status: 400 });
+      }
+      plan.tierId = newTier._id;
+      plan.tier = newTier.slug;
+    }
+    
+    if (updates.intervalId) {
+      const newInterval = await PlanInterval.findById(updates.intervalId);
+      if (!newInterval) {
+        return NextResponse.json({ success: false, error: 'New interval not found' }, { status: 400 });
+      }
+      plan.intervalId = newInterval._id;
+      plan.interval = newInterval.slug;
+    }
+    
+    await plan.save();
+    await plan.populate('tierId intervalId');
+    
+    return NextResponse.json({
+      success: true,
+      data: plan,
+      message: `Plan '${plan.name}' updated successfully`
+    });
+    
+  } catch (error: any) {
+    console.error('Error updating plan:', error);
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/admin/plans - Delete a plan
+export async function DELETE(req: NextRequest) {
+  try {
+    await connectDB();
+    const user = await requireSuperAdmin();
+    
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'Plan ID is required' },
+        { status: 400 }
+      );
+    }
+    
+    const plan = await Plan.findByIdAndDelete(id);
+    
+    if (!plan) {
+      return NextResponse.json(
+        { success: false, error: 'Plan not found' },
+        { status: 404 }
+      );
+    }
+    
+    return NextResponse.json({
+      success: true,
+      message: `Plan '${plan.name}' deleted successfully`
+    });
+    
+  } catch (error: any) {
+    console.error('Error deleting plan:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

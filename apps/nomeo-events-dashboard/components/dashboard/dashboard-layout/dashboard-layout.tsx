@@ -38,7 +38,7 @@ const menuItems = [
   { id: 'analytics', group: 'analytics', label: 'Analytics', path: '/analytics', icon: BarChartIcon },
 
   // Settings
-  { id: 'settings', group: 'settings', label: 'Settings', path: '/settings', icon: Settings01Icon },
+  // { id: 'settings', group: 'settings', label: 'Settings', path: '/settings', icon: Settings01Icon },
 ];
 
 // ── Access control ────────────────────────────────────────────────────────────

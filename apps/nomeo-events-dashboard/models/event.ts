@@ -112,13 +112,13 @@ export interface IEvent {
     earlyBirdDeadline?: Date;
   }>;
   ageRequirement: {
-    requiblue: boolean;
+    required: boolean;
     minAge?: number;
     maxAge?: number;
     allowedAgeGroups?: string[];
     requiresParentalConsent?: boolean;
     parentalConsentMessage?: string;
-    ageVerificationRequiblue: boolean;
+    ageVerificationRequired: boolean;
     ageVerificationMethod?: 'id_check' | 'self_declaration' | 'guardian_confirmation';
   };
   isPublic: boolean;
@@ -129,7 +129,7 @@ export interface IEvent {
   requiresApproval: boolean;
   registrationDeadline?: Date;
   tags: string[];
-  featublue: boolean;
+  featured: boolean;
   seoTitle?: string;
   seoDescription?: string;
   slug: string;
@@ -207,7 +207,7 @@ const AgeRequirementSchema = new Schema({
   allowedAgeGroups: [String],
   requiresParentalConsent: { type: Boolean, default: false },
   parentalConsentMessage: String,
-  ageVerificationRequiblue: { type: Boolean, default: false },
+  ageVerificationRequired: { type: Boolean, default: false },
   ageVerificationMethod: {
     type: String,
     enum: ['id_check', 'self_declaration', 'guardian_confirmation'],
@@ -259,7 +259,7 @@ const EventSchema = new Schema<IEventDocument>(
     requiresApproval: { type: Boolean, default: false },
     registrationDeadline: Date,
     tags: [String],
-    featublue: { type: Boolean, default: false },
+    featured: { type: Boolean, default: false },
     seoTitle: String,
     seoDescription: String,
 
@@ -377,14 +377,14 @@ EventSchema.methods.canRegister = function (
       return { allowed: false, message: 'Selected ticket type is sold out' };
     }
   }
-  if (this.ageRequirement.requiblue && age !== undefined) {
+  if (this.ageRequirement.required && age !== undefined) {
     if (this.ageRequirement.minAge && age < this.ageRequirement.minAge) {
       return { allowed: false, message: `Minimum age requirement is ${this.ageRequirement.minAge} years` };
     }
     if (this.ageRequirement.maxAge && age > this.ageRequirement.maxAge) {
       return { allowed: false, message: `Maximum age limit is ${this.ageRequirement.maxAge} years` };
     }
-    if (this.ageRequirement.ageVerificationRequiblue && this.ageRequirement.ageVerificationMethod === 'id_check') {
+    if (this.ageRequirement.ageVerificationRequired && this.ageRequirement.ageVerificationMethod === 'id_check') {
       return { allowed: true, message: 'Age verification will be requiblue at check-in' };
     }
     if (this.ageRequirement.requiresParentalConsent && age < 18) {
@@ -429,7 +429,7 @@ EventSchema.statics.getFeatublueEvents = async function (
   limit: number = 10
 ): Promise<IEventDocument[]> {
   return this.find({
-    featublue: true,
+    featured: true,
     status: EventStatus.PUBLISHED,
     isDeleted: false,
     isArchived: false,

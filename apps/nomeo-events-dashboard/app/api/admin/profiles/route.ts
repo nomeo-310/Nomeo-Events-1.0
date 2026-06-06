@@ -1,4 +1,4 @@
-import { requireAuth } from "@/lib/admin/authorization";
+import { requireSuperAdmin } from "@/lib/admin/authorization";
 import { connectDB } from "@/lib/mongoose";
 import { Profile } from "@/models/profile";
 import { User } from "@/models/user";
@@ -73,7 +73,7 @@ function buildProfileQuery(searchParams: URLSearchParams) {
 export async function GET(req: Request) {
   await connectDB();
 
-  const loggedInUser = await requireAuth();
+  const loggedInUser = await requireSuperAdmin();
   
   if (!loggedInUser) {
     return NextResponse.json({ error: "Unauthorized, Login!!" }, { status: 401 });

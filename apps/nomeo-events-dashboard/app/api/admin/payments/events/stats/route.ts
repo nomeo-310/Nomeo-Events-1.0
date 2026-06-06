@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = req.nextUrl;
     const dateFrom = searchParams.get('dateFrom');
-    const dateTo   = searchParams.get('dateTo');
+    const dateTo = searchParams.get('dateTo');
 
     const baseMatch: Record<string, unknown> = {
       purpose: PaymentPurpose.EVENT_REGISTRATION,
@@ -30,23 +30,26 @@ export async function GET(req: NextRequest) {
         ? {
             createdAt: {
               ...(dateFrom && { $gte: new Date(dateFrom) }),
-              ...(dateTo   && { $lte: new Date(dateTo)   }),
+              ...(dateTo && { $lte: new Date(dateTo) }),
             },
           }
         : {}),
     };
 
-    const successMatch = { ...baseMatch, gatewayStatus: PaymentGatewayStatus.SUCCESS };
+    const successMatch = {
+      ...baseMatch,
+      gatewayStatus: PaymentGatewayStatus.SUCCESS,
+    };
 
     const [summary, topEvents, byChannel, dailyTrend] = await Promise.all([
       Payment.aggregate([
         { $match: successMatch },
         {
           $group: {
-            _id:           null,
-            totalRevenue:  { $sum: '$amountPaid' },
+            _id: null,
+            totalRevenue: { $sum: '$amountPaid' },
             totalDiscount: { $sum: '$discountAmount' },
-            count:         { $sum: 1 },
+            count: { $sum: 1 },
           },
         },
       ]),
@@ -55,29 +58,34 @@ export async function GET(req: NextRequest) {
         { $match: successMatch },
         {
           $group: {
-            _id:       '$eventId',
+            _id: '$eventId',
             totalPaid: { $sum: '$amountPaid' },
-            count:     { $sum: 1 },
+            count: { $sum: 1 },
           },
         },
         { $sort: { totalPaid: -1 } },
         { $limit: 10 },
         {
           $lookup: {
-            from:         'events',
-            localField:   '_id',
+            from: 'events',
+            localField: '_id',
             foreignField: '_id',
-            as:           'event',
+            as: 'event',
           },
         },
-        { $unwind: { path: '$event', preserveNullAndEmpty: true } },
+        {
+          $unwind: {
+            path: '$event',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
         {
           $project: {
-            eventId:   '$_id',
-            title:     '$event.title',
-            slug:      '$event.slug',
+            eventId: '$_id',
+            title: '$event.title',
+            slug: '$event.slug',
             totalPaid: 1,
-            count:     1,
+            count: 1,
           },
         },
       ]),
@@ -86,8 +94,8 @@ export async function GET(req: NextRequest) {
         { $match: successMatch },
         {
           $group: {
-            _id:       { $ifNull: ['$channel', 'unknown'] },
-            count:     { $sum: 1 },
+            _id: { $ifNull: ['$channel', 'unknown'] },
+            count: { $sum: 1 },
             totalPaid: { $sum: '$amountPaid' },
           },
         },
@@ -99,18 +107,22 @@ export async function GET(req: NextRequest) {
           $match: {
             ...successMatch,
             ...(!dateFrom && !dateTo
-              ? { createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } }
+              ? {
+                  createdAt: {
+                    $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+                  },
+                }
               : {}),
           },
         },
         {
           $group: {
             _id: {
-              year:  { $year:  '$paidAt' },
+              year: { $year: '$paidAt' },
               month: { $month: '$paidAt' },
-              day:   { $dayOfMonth: '$paidAt' },
+              day: { $dayOfMonth: '$paidAt' },
             },
-            count:     { $sum: 1 },
+            count: { $sum: 1 },
             totalPaid: { $sum: '$amountPaid' },
           },
         },
@@ -120,21 +132,27 @@ export async function GET(req: NextRequest) {
 
     return ok({
       summary: {
-        totalRevenue:  summary[0]?.totalRevenue  ?? 0,
+        totalRevenue: summary[0]?.totalRevenue ?? 0,
         totalDiscount: summary[0]?.totalDiscount ?? 0,
-        count:         summary[0]?.count         ?? 0,
+        count: summary[0]?.count ?? 0,
       },
       topEvents,
       byChannel,
       dailyTrend: dailyTrend.map((d: any) => ({
-        date:      `${d._id.year}-${String(d._id.month).padStart(2,'0')}-${String(d._id.day).padStart(2,'0')}`,
-        count:     d.count,
+        date: `${d._id.year}-${String(d._id.month).padStart(2, '0')}-${String(
+          d._id.day
+        ).padStart(2, '0')}`,
+        count: d.count,
         totalPaid: d.totalPaid,
       })),
     });
   } catch (e: any) {
-    const status = e.message?.startsWith('Forbidden') ? 403
-                 : e.message?.startsWith('Unauthorized') ? 401 : 500;
+    const status = e.message?.startsWith('Forbidden')
+      ? 403
+      : e.message?.startsWith('Unauthorized')
+        ? 401
+        : 500;
+
     return err(e.message ?? 'Server error', status);
   }
 }
