@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "preinstall": "npx pnpm store prune",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "seed:superadmin": "node scripts/seed-superadmin.js",
-    "seed:superadmin:force": "node scripts/seed-superadmin.js --force"
+    "seed:superadmin:force": "node scripts/seed-superadmin.js --force",
+    "vercel-build": "pnpm store prune && pnpm install && next build"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
