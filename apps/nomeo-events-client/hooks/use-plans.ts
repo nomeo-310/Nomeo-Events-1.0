@@ -368,7 +368,7 @@ export function usePlansByTier(tier: string): UsePlansByTierReturn {  // ✅ Cha
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: queryKeys.plansByTier(tier),
     queryFn: async () => {
-      const response = await axios.get(`/api/plans/tier/${tier}`);
+      const response = await axios.get(`/api/plans/tiers/${tier}`);
       if (!response.data.success) {
         throw new Error(response.data.error || 'Failed to fetch plans for tier');
       }
