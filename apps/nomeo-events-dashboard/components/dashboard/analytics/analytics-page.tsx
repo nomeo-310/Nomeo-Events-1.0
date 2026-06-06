@@ -1,202 +1,16 @@
+// analytics-dashboard.tsx
 "use client";
-// components/admin/AdminAnalyticsDashboard.tsx
 
 import { useEffect, useState } from "react";
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface MonthPoint   { label: string; count: number }
-interface MonthRevenue { label: string; total: number }
-
-interface AnalyticsData {
-  generatedAt: string;
-  overview: {
-    totalUsers: number; verifiedUsers: number;
-    totalAdmins: number; activeAdmins: number;
-    totalEvents: number; publishedEvents: number;
-    totalRegistrations: number; confirmedRegs: number;
-    activeSubscriptions: number;
-    totalRevenue: number; mrr: number;
-    newsletterSubs: number;
-    paymentSuccessRate: number; occupancyRate: number;
-  };
-  users: {
-    total: number; verified: number;
-    newToday: number; newLast7Days: number; newLast30Days: number;
-    byRole: { _id: string; count: number }[];
-    monthly: MonthPoint[];
-  };
-  admins: {
-    total: number; active: number; recentLogins: number;
-    byRole: { _id: string; count: number }[];
-  };
-  events: {
-    total: number; published: number; draft: number; cancelled: number;
-    archived: number; deleted: number; featured: number;
-    upcoming: number; ongoing: number; completed: number;
-    occupancyRate: number; avgTotalSeats: number;
-    avgEventsPerOrganizer: number; maxEventsByOrganizer: number;
-    byCategory: { _id: string; count: number }[];
-    byMode: { _id: string; count: number }[];
-    monthly: MonthPoint[];
-  };
-  registrations: {
-    total: number; confirmed: number; pending: number; cancelled: number;
-    attended: number; waitlisted: number; refunded: number; paidCompleted: number;
-    groupRegs: number; corpRegs: number;
-    withFeedback: number; avgRating: number;
-    avgPerEvent: number; maxPerEvent: number;
-    monthly: MonthPoint[];
-  };
-  subscriptions: {
-    total: number; active: number; trialing: number; pastDue: number;
-    cancelled: number; expired: number; paused: number; cancelAtEnd: number;
-    mrr: number;
-    byTier: { _id: string; count: number }[];
-    byInterval: { _id: string; count: number }[];
-    monthly: MonthPoint[];
-  };
-  payments: {
-    total: number; successful: number; failed: number; pending: number; reversed: number;
-    successRate: number; totalRevenue: number; totalDiscounts: number;
-    refundCount: number; refundTotal: number;
-    byPurpose: { _id: string; total: number; count: number }[];
-    byChannel:  { _id: string; total: number; count: number }[];
-    monthlyRevenue: MonthRevenue[];
-  };
-  newsletter: {
-    total: number; active: number; unsubscribed: number; unsubscribeRate: number;
-    withUserId: number; newLast7Days: number; newLast30Days: number;
-    monthly: MonthPoint[];
-  };
-  campaigns: {
-    total: number; completed: number; sending: number; draft: number; failed: number;
-    byType: { _id: string; count: number }[];
-    emailMetrics: {
-      totalSent: number; totalSuccessful: number; totalFailed: number;
-      totalOpened: number; totalClicked: number;
-      openRate: number; clickRate: number;
-    };
-  };
-}
-
-// ─── Formatters ───────────────────────────────────────────────────────────────
-
-const fmt     = (n: number) => (n ?? 0).toLocaleString();
-const fmtNaira = (n: number) =>
-  new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(n ?? 0);
-const pct = (n: number) => `${n ?? 0}%`;
-
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
-
-function SkeletonLine({ className }: { className?: string }) {
-  return (
-    <div className={cn(
-      "rounded-md bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 bg-[length:200%_100%] animate-[shimmer_1.4s_ease-in-out_infinite] dark:from-gray-800 dark:via-gray-700 dark:to-gray-800",
-      className
-    )} />
-  );
-}
-
-function StatsSkeleton() {
-  return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-          <SkeletonLine className="h-4 w-24" />
-          <SkeletonLine className="mt-2 h-7 w-32" />
-          <SkeletonLine className="mt-2 h-3 w-20" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ChartSkeleton() {
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-      <SkeletonLine className="h-4 w-40 mb-4" />
-      <SkeletonLine className="h-[180px] w-full" />
-    </div>
-  );
-}
-
-function PageSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <SkeletonLine className="h-8 w-56 mb-2" />
-        <SkeletonLine className="h-4 w-80" />
-      </div>
-      <StatsSkeleton />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {[1,2,3,4,5,6,7,8].map(i => (
-          <div key={i} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-            <SkeletonLine className="h-3 w-20 mb-2" />
-            <SkeletonLine className="h-6 w-24 mb-1" />
-            <SkeletonLine className="h-3 w-16" />
-          </div>
-        ))}
-      </div>
-      <div className="grid gap-3 lg:grid-cols-2">
-        <ChartSkeleton />
-        <ChartSkeleton />
-      </div>
-      <div className="grid gap-3 lg:grid-cols-3">
-        <ChartSkeleton />
-        <ChartSkeleton />
-        <ChartSkeleton />
-      </div>
-    </div>
-  );
-}
-
-// ─── Stat Card — matches your existing StatCard exactly ──────────────────────
-
-function StatCard({
-  label, value, sub, accent,
-}: {
-  label: string;
-  value: React.ReactNode;
-  sub?: string;
-  accent?: string;
-}) {
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</p>
-      <p className={cn("mt-0.5 text-base font-bold", accent ?? "text-gray-900 dark:text-white")}>{value}</p>
-      {sub && <p className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">{sub}</p>}
-    </div>
-  );
-}
-
-// ─── Section header ───────────────────────────────────────────────────────────
-
-function SectionHeader({ title, sub }: { title: string; sub?: string }) {
-  return (
-    <div className="mb-3 mt-8">
-      <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h2>
-      {sub && <p className="text-xs text-gray-500 dark:text-gray-400">{sub}</p>}
-    </div>
-  );
-}
-
-// ─── Chart card wrapper ───────────────────────────────────────────────────────
-
-function ChartCard({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={cn("rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900", className)}>
-      <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
-  );
-}
-
-// ─── Status row ───────────────────────────────────────────────────────────────
+import { AnalyticsData } from "./analytics-types";
+import { fmt, fmtNaira, pct, categoryColors } from "./analytics-types";
+import { PageSkeleton } from "./analytics-skeletons";
+import { TrendBar, TrendLine, MiniPie } from "./analytics-charts";
+import { StatCard } from "./analytics-stat-card";
+import { SectionHeader } from "./analytics-section-header";
+import { ChartCard } from "./analytics-chart-card";
 
 function StatusRow({
   label, value, accent,
@@ -214,107 +28,6 @@ function StatusRow({
     </div>
   );
 }
-
-// ─── Tooltip styles ───────────────────────────────────────────────────────────
-
-const tooltipStyle = {
-  contentStyle: {
-    background: "var(--tooltip-bg, #fff)",
-    border: "1px solid #e5e7eb",
-    borderRadius: 8,
-    fontSize: 12,
-    color: "#111827",
-    boxShadow: "0 4px 12px -2px rgba(0,0,0,0.08)",
-  },
-};
-
-// Use CSS variable so dark mode works
-const CHART_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#f43f5e", "#06b6d4", "#84cc16", "#f97316"];
-
-// ─── Mini chart components ────────────────────────────────────────────────────
-
-function TrendBar({ data, dataKey = "count", color = "#3b82f6", height = 160 }: {
-  data: { label: string; [k: string]: any }[];
-  dataKey?: string;
-  color?: string;
-  height?: number;
-}) {
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" className="dark:stroke-gray-800" />
-        <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fill: "#9ca3af", fontSize: 10 }} tickLine={false} axisLine={false} />
-        <Tooltip {...tooltipStyle} />
-        <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
-
-function TrendLine({ data, lines, height = 160 }: {
-  data: { label: string; [k: string]: any }[];
-  lines: { key: string; color: string; label?: string }[];
-  height?: number;
-}) {
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={data} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" className="dark:stroke-gray-800" />
-        <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fill: "#9ca3af", fontSize: 10 }} tickLine={false} axisLine={false} />
-        <Tooltip {...tooltipStyle} />
-        {lines.length > 1 && <Legend wrapperStyle={{ fontSize: 11, color: "#6b7280" }} />}
-        {lines.map(l => (
-          <Line key={l.key} type="monotone" dataKey={l.key} name={l.label ?? l.key}
-            stroke={l.color} strokeWidth={2} dot={false} />
-        ))}
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
-function MiniPie({ data }: { data: { _id: string; count: number }[] }) {
-  return (
-    <ResponsiveContainer width="100%" height={160}>
-      <PieChart>
-        <Pie data={data} dataKey="count" nameKey="_id" cx="50%" cy="50%"
-          outerRadius={62} innerRadius={32}
-          label={(props) => {
-            const entry = props as typeof props & { _id: string };
-            return `${entry._id} ${(((props.percent) ?? 0) * 100).toFixed(0)}%`;
-          }}
-          labelLine={false}
-        >
-          {data.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-        </Pie>
-        <Tooltip {...tooltipStyle} />
-      </PieChart>
-    </ResponsiveContainer>
-  );
-}
-
-// ─── Category pill colours — mirrors your existing categoryColors ─────────────
-
-const categoryColors: Record<string, string> = {
-  webinar:           "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  seminar:           "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-  entertainment:     "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400",
-  film_show:         "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-  science_tech:      "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
-  school_activities: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  spirituality:      "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  fashion:           "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
-  business:          "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-  sports:            "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  health_wellness:   "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400",
-  art_culture:       "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
-  food_drink:        "bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-400",
-  networking:        "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400",
-  charity:           "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-};
-
-// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
@@ -341,7 +54,6 @@ export default function AnalyticsPage() {
 
   useEffect(() => { load(); }, []);
 
-  // ── Loading ──────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 py-6 dark:bg-gray-900">
@@ -373,7 +85,6 @@ export default function AnalyticsPage() {
 
   const { overview, users, admins, events, registrations, subscriptions, payments, newsletter, campaigns } = data;
 
-  // Combined monthly growth
   const growthData = users.monthly.map((m, i) => ({
     label: m.label,
     Users:         m.count,
@@ -387,7 +98,7 @@ export default function AnalyticsPage() {
       <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
       <div className="px-4">
 
-        {/* ── Page header ───────────────────────────────────────────────── */}
+        {/* Page header */}
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <div className="mb-1 flex items-center gap-2">
@@ -413,7 +124,7 @@ export default function AnalyticsPage() {
           </button>
         </div>
 
-        {/* ── Overview KPIs ──────────────────────────────────────────────── */}
+        {/* Overview KPIs */}
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total Users"          value={fmt(overview.totalUsers)}          sub={`${fmt(overview.verifiedUsers)} verified`} />
           <StatCard label="Active Subscriptions" value={fmt(overview.activeSubscriptions)} sub={`MRR ${fmtNaira(overview.mrr)}`} accent="text-blue-600 dark:text-blue-400" />
@@ -428,7 +139,7 @@ export default function AnalyticsPage() {
           <StatCard label="Active Admins"  value={fmt(overview.activeAdmins)}       sub={`of ${fmt(overview.totalAdmins)} total`} />
         </div>
 
-        {/* ── Monthly Growth Chart ───────────────────────────────────────── */}
+        {/* Monthly Growth Chart */}
         <SectionHeader title="Monthly Growth" sub="New records created over the last 12 months" />
         <ChartCard title="Growth Trends">
           <TrendLine
@@ -443,7 +154,7 @@ export default function AnalyticsPage() {
           />
         </ChartCard>
 
-        {/* ── Revenue ────────────────────────────────────────────────────── */}
+        {/* Revenue */}
         <SectionHeader title="Revenue" sub="Payment income, MRR, discounts and refunds" />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total Revenue"   value={fmtNaira(payments.totalRevenue)}  accent="text-emerald-600 dark:text-emerald-400" />
@@ -474,7 +185,7 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* ── Payments ───────────────────────────────────────────────────── */}
+        {/* Payments */}
         <SectionHeader title="Payments" sub="Transaction status breakdown" />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
@@ -493,7 +204,7 @@ export default function AnalyticsPage() {
           <StatCard label="Refund Count"   value={fmt(payments.refundCount)} sub={fmtNaira(payments.refundTotal)} accent="text-red-600 dark:text-red-400" />
         </div>
 
-        {/* ── Users ──────────────────────────────────────────────────────── */}
+        {/* Users */}
         <SectionHeader title="Users" sub="Signups, verification and role distribution" />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total"        value={fmt(users.total)} />
@@ -510,7 +221,7 @@ export default function AnalyticsPage() {
           </ChartCard>
         </div>
 
-        {/* ── Events ─────────────────────────────────────────────────────── */}
+        {/* Events */}
         <SectionHeader title="Events" sub="Published, scheduled, occupancy and category breakdown" />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total"        value={fmt(events.total)} />
@@ -547,7 +258,7 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {/* ── Registrations ──────────────────────────────────────────────── */}
+        {/* Registrations */}
         <SectionHeader title="Registrations" sub="Attendance, feedback and per-event averages" />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total"        value={fmt(registrations.total)} />
@@ -582,7 +293,7 @@ export default function AnalyticsPage() {
           ))}
         </div>
 
-        {/* ── Subscriptions ──────────────────────────────────────────────── */}
+        {/* Subscriptions */}
         <SectionHeader title="Subscriptions" sub="Plan tiers, billing intervals and churn signals" />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total"          value={fmt(subscriptions.total)} />
@@ -618,7 +329,7 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* ── Newsletter & Campaigns ─────────────────────────────────────── */}
+        {/* Newsletter & Campaigns */}
         <SectionHeader title="Newsletter & Campaigns" sub="Subscriber growth, delivery and engagement rates" />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total Subscribers" value={fmt(newsletter.total)} />
@@ -651,7 +362,7 @@ export default function AnalyticsPage() {
           </ChartCard>
         </div>
 
-        {/* ── Admin Team ─────────────────────────────────────────────────── */}
+        {/* Admin Team */}
         <SectionHeader title="Admin Team" sub="Active administrators and login activity" />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 mb-10">
           <StatCard label="Total Admins"    value={fmt(admins.total)} />

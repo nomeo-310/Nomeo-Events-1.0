@@ -1,18 +1,14 @@
+// newsletter-page.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { useEffect, useState, useRef } from "react";
 import { format } from "date-fns";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  CalendarIcon,
-  CheckmarkCircle02Icon as CheckCircleIcon,
   File01Icon,
   FilterHorizontalIcon,
-  MoreHorizontalCircle01Icon,
   RefreshIcon,
   Search01Icon,
-  ViewIcon,
   UnavailableIcon as BanIcon,
   Delete01Icon,
   AddCircleIcon,
@@ -21,39 +17,19 @@ import {
   DownloadIcon,
   UserMultiple02Icon as UsersIcon,
   Mail01Icon as EnvelopeIcon,
-  ImageIcon,
   FileSpreadsheetIcon,
-  UserAddIcon,
-  TextBoldIcon as Bold01Icon,
-  TextItalicIcon as Italic01Icon,
-  TextUnderlineIcon as Underline01Icon,
-  TextAlignLeftIcon as AlignLeft01Icon,
-  TextAlignCenterIcon as AlignCenter01Icon,
-  TextAlignRightIcon as AlignRight01Icon,
-  LeftToRightListNumberIcon as ListOrderedIcon,
-  LeftToRightListDashIcon as ListUnorderedIcon,
-  Link02Icon,
-  Image01Icon,
-  CodeIcon,
-  QuoteDownIcon as QuoteIcon,
-  EraserIcon,
-  RedoIcon,
-  UndoIcon,
 } from "@hugeicons/core-free-icons";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { PaginationWithInfo } from "@/components/ui/pagination";
+import { ConfirmModal } from "@/components/ui/reusable-modal";
 import {
   Select,
   SelectContent,
@@ -61,19 +37,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { PaginationWithInfo } from "@/components/ui/pagination";
-import { ReusableModal, ConfirmModal, ActionModal } from "@/components/ui/reusable-modal";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { ActionModal } from "@/components/ui/reusable-modal";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 
-// Import hooks
 import {
   useSubscribers,
   useDeleteSubscriber,
@@ -87,1069 +53,18 @@ import {
   useNewsletterStats,
 } from "@/hooks/use-newsletter";
 
-// Import WYSIWYG Editor
-import { useEditor, EditorContent } from '@tiptap/react';
-import { StarterKit } from '@tiptap/starter-kit';
-import { Image } from '@tiptap/extension-image';
-import { Link } from '@tiptap/extension-link';
-import { TextAlign } from '@tiptap/extension-text-align';
-import { Underline } from '@tiptap/extension-underline';
-import { TextStyle } from '@tiptap/extension-text-style';
-import { Color } from '@tiptap/extension-color';
-import { Highlight } from '@tiptap/extension-highlight';
-import { Placeholder } from '@tiptap/extension-placeholder';
-import { CodeBlock } from '@tiptap/extension-code-block';
-import { Blockquote } from '@tiptap/extension-blockquote';
-import { HardBreak } from '@tiptap/extension-hard-break';
-import { HorizontalRule } from '@tiptap/extension-horizontal-rule';
-
-import { useQueryClient } from "@tanstack/react-query";
-import { Campaign, NewsletterSubscriber } from "@/types/newsletter";
-import axios from "axios";
-
-// ─── TYPES ────────────────────────────────────────────────────────────────────
-
-type HugeIcon = typeof ViewIcon;
-
-interface DropdownItem {
-  label: string;
-  icon: HugeIcon;
-  onClick: () => void;
-  danger?: boolean;
-}
-
-interface BulkEmailRecipient {
-  email: string;
-  name?: string;
-}
-
-interface AddRecipientModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onAdd: (recipient: BulkEmailRecipient) => void;
-  currentCount: number;
-}
-
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
-
-function formatDate(date?: string | Date) {
-  if (!date) return "N/A";
-  return format(new Date(date), "dd MMM yyyy");
-}
-
-function formatDateTime(date?: string | Date) {
-  if (!date) return "N/A";
-  return format(new Date(date), "dd MMM yyyy, HH:mm");
-}
-
-function getInitials(name?: string, fallback = "S") {
-  if (!name) return fallback;
-  const trimmed = name?.trim();
-  if (!trimmed) return fallback;
-  return (
-    trimmed
-      .split(/\s+/)
-      .map((p) => p[0])
-      .filter(Boolean)
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || fallback
-  );
-}
-
-// ─── BADGE CONFIGS ────────────────────────────────────────────────────────────
-
-const statusTone: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  active: "default",
-  unsubscribed: "secondary",
-  bounced: "destructive",
-  complained: "outline",
-};
-
-const campaignStatusTone: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  draft: "secondary",
-  scheduled: "outline",
-  sending: "default",
-  completed: "default",
-  failed: "destructive",
-  cancelled: "secondary",
-};
-
-// ─── SKELETON ─────────────────────────────────────────────────────────────────
-
-function SkeletonLine({ className }: { className?: string }) {
-  return (
-    <div
-      className={cn(
-        "rounded-md bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 bg-[length:200%_100%] animate-[shimmer_1.4s_ease-in-out_infinite] dark:from-gray-800 dark:via-gray-700 dark:to-gray-800",
-        className
-      )}
-    />
-  );
-}
-
-function NewsletterSkeleton() {
-  return (
-    <div className="space-y-3">
-      <div className="flex gap-3 mb-6">
-        <SkeletonLine className="h-10 flex-1" />
-        <SkeletonLine className="h-10 w-36" />
-        <SkeletonLine className="h-10 w-36" />
-      </div>
-      <div className="flex gap-4 px-4 pb-3 border-b border-gray-100 dark:border-gray-800">
-        <SkeletonLine className="h-3 w-3" />
-        <SkeletonLine className="h-3 w-32" />
-        <SkeletonLine className="h-3 w-40" />
-        <SkeletonLine className="h-3 w-28" />
-        <SkeletonLine className="h-3 w-24 ml-auto" />
-      </div>
-      {Array.from({ length: 7 }).map((_, i) => (
-        <div
-          key={i}
-          className="flex items-center gap-4 px-4 py-3.5 border-b border-gray-50 dark:border-gray-800"
-          style={{ opacity: 1 - i * 0.08 }}
-        >
-          <SkeletonLine className="h-4 w-4 rounded" />
-          <div className="flex-1 space-y-1">
-            <SkeletonLine className="h-3 w-48" />
-            <SkeletonLine className="h-2 w-32" />
-          </div>
-          <SkeletonLine className="h-5 w-20 rounded-full" />
-          <SkeletonLine className="h-7 w-7 rounded-lg" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function StatsSkeleton() {
-  return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-          <SkeletonLine className="h-4 w-24" />
-          <SkeletonLine className="mt-2 h-7 w-32" />
-          <SkeletonLine className="mt-2 h-3 w-20" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── TAB BUTTON ──────────────────────────────────────────────────────────────
-
-function TabButton({ label, count, isActive, onClick }: { label: string; count?: number; isActive: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "px-4 py-2 lg:py-3 text-sm font-medium rounded-md transition-all",
-        isActive
-          ? "bg-blue-600 text-white shadow-sm"
-          : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-      )}
-    >
-      {label}
-      {count !== undefined && count > 0 && (
-        <span className={cn("ml-2 px-2 py-0.5 text-xs rounded-full", isActive ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400")}>
-          {count}
-        </span>
-      )}
-    </button>
-  );
-}
-
-// ─── ACTION DROPDOWN ─────────────────────────────────────────────────────────
-
-function ActionDropdown({ items, trigger }: { items: (DropdownItem | { divider: true; section?: string })[]; trigger: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState({ top: 0, left: 0 });
-  const triggerRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const menuWidth = 224;
-
-  const updateCoords = () => {
-    if (!triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    let left = rect.right - menuWidth;
-    if (left < 8) left = 8;
-    if (left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const top = spaceBelow >= 300 || spaceBelow >= rect.top ? rect.bottom + 6 : rect.top - 300 - 6;
-    setCoords({ top, left });
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (triggerRef.current?.contains(e.target as Node) || menuRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", updateCoords, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", updateCoords, true);
-    };
-  }, [open]);
-
-  return (
-    <>
-      <div ref={triggerRef} onClick={(e) => { e.stopPropagation(); if (!open) updateCoords(); setOpen((p) => !p); }}>
-        {trigger}
-      </div>
-      {open && typeof window !== "undefined" && createPortal(
-        <div
-          ref={menuRef}
-          className="fixed z-[9999] overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900"
-          style={{ top: coords.top, left: coords.left, width: menuWidth, boxShadow: "0 4px 24px -4px rgba(0,0,0,0.12), 0 1px 4px -1px rgba(0,0,0,0.08)" }}
-          onClick={(e) => { e.stopPropagation(); setOpen(false); }}
-        >
-          {items.map((item, i) => {
-            if ("divider" in item && item.divider) {
-              return item.section
-                ? <p key={i} className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">{item.section}</p>
-                : <div key={i} className="my-1 border-t border-gray-100 dark:border-gray-800" />;
-            }
-            const { label, icon: Icon, onClick, danger } = item as DropdownItem;
-            return (
-              <button key={i} type="button" onClick={onClick}
-                className={cn("w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors",
-                  danger ? "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/50"
-                         : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800")}
-              >
-                <HugeiconsIcon icon={Icon} className={cn("h-3.5 w-3.5 flex-shrink-0", danger ? "text-red-500" : "text-gray-400 dark:text-gray-500")} />
-                {label}
-              </button>
-            );
-          })}
-        </div>,
-        document.body
-      )}
-    </>
-  );
-}
-
-// ─── STAT CARD ────────────────────────────────────────────────────────────────
-
-function StatCard({ label, value, sub, accent }: { label: string; value: React.ReactNode; sub?: string; accent?: string }) {
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</p>
-      <p className={cn("mt-1 text-xl font-bold", accent ?? "text-gray-900 dark:text-white")}>{value}</p>
-      {sub && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{sub}</p>}
-    </div>
-  );
-}
-
-// ─── ADD RECIPIENT MODAL ──────────────────────────────────────────────────────
-
-function AddRecipientModal({ isOpen, onClose, onAdd, currentCount }: AddRecipientModalProps) {
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-
-  const handleSubmit = () => {
-    if (!email || !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-      toast.error("Please enter a valid email address");
-      return;
-    }
-    onAdd({ email, name: name || undefined });
-    setEmail("");
-    setName("");
-    onClose();
-  };
-
-  return (
-    <ActionModal
-      isOpen={isOpen}
-      onClose={() => {
-        setEmail("");
-        setName("");
-        onClose();
-      }}
-      onAction={handleSubmit}
-      title="Add Recipient"
-      description={`Add a single recipient (${currentCount}/5 max before using CSV)`}
-      actionLabel="Add Recipient"
-      cancelLabel="Cancel"
-      actionVariant="primary"
-      size="md"
-    >
-      <div className="space-y-4">
-        {currentCount >= 5 && (
-          <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-lg">
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              You've reached the maximum of 5 manual entries. Please use CSV upload for more recipients.
-            </p>
-          </div>
-        )}
-        <div>
-          <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Email Address *</Label>
-          <Input
-            type="email"
-            placeholder="recipient@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-            disabled={currentCount >= 5}
-          />
-        </div>
-        <div>
-          <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Name (Optional)</Label>
-          <Input
-            placeholder="Recipient Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="mt-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-            disabled={currentCount >= 5}
-          />
-        </div>
-      </div>
-    </ActionModal>
-  );
-}
-
-// ─── IMAGE URL MODAL ─────────────────────────────────────────────────────────
-
-function ImageUrlModal({ isOpen, onClose, onInsert }: { isOpen: boolean; onClose: () => void; onInsert: (url: string) => void }) {
-  const [imageUrl, setImageUrl] = useState("");
-  const [uploading, setUploading] = useState(false);
-
-  const handleDownloadAndUpload = async () => {
-    if (!imageUrl) {
-      toast.error("Please enter an image URL");
-      return;
-    }
-
-    setUploading(true);
-    toast.loading("Downloading and uploading image...");
-
-    try {
-      // First, download the image
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-      const file = new File([blob], "image-from-url.jpg", { type: blob.type });
-
-      // Upload to your server
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const uploadResponse = await axios.post("/api/admin/newsletter/images", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-
-      if (uploadResponse.data.success) {
-        onInsert(uploadResponse.data.image.url);
-        toast.dismiss();
-        toast.success("Image uploaded and inserted");
-        setImageUrl("");
-        onClose();
-      } else {
-        throw new Error("Upload failed");
-      }
-    } catch (error) {
-      console.error("Failed to process image URL:", error);
-      toast.dismiss();
-      toast.error("Failed to process image URL. Please try uploading the file directly.");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <ActionModal
-      isOpen={isOpen}
-      onClose={() => {
-        setImageUrl("");
-        onClose();
-      }}
-      onAction={handleDownloadAndUpload}
-      title="Insert Image from URL"
-      description="Enter the URL of an image to download and upload it to our server"
-      actionLabel={uploading ? "Processing..." : "Upload & Insert"}
-      cancelLabel="Cancel"
-      actionVariant="primary"
-      isLoading={uploading}
-      size="md"
-    >
-      <div>
-        <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Image URL</Label>
-        <Input
-          type="url"
-          placeholder="https://example.com/image.jpg"
-          value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
-          className="mt-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-        />
-        <p className="text-xs text-gray-500 mt-2">
-          The image will be downloaded and uploaded to our CDN for better performance and tracking.
-        </p>
-      </div>
-    </ActionModal>
-  );
-}
-
-// ─── ENHANCED WYSIWYG EDITOR ─────────────────────────────────────────────────
-
-function RichTextEditor({ content, onChange, placeholder, onImageGalleryOpen }: { 
-  content: string; 
-  onChange: (content: string) => void; 
-  placeholder?: string;
-  onImageGalleryOpen?: () => void;
-}) {
-  const [isImageUrlModalOpen, setIsImageUrlModalOpen] = useState(false);
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        codeBlock: false,
-      }),
-      CodeBlock,
-      Blockquote,
-      HardBreak,
-      HorizontalRule,
-      Image.configure({
-        inline: true,
-        allowBase64: false,
-        HTMLAttributes: {
-          class: 'max-w-full h-auto rounded-lg my-2',
-        },
-      }),
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: {
-          class: 'text-blue-600 underline cursor-pointer',
-        },
-      }),
-      TextAlign.configure({
-        types: ['heading', 'paragraph'],
-      }),
-      Underline,
-      TextStyle,
-      Color,
-      Highlight.configure({
-        multicolor: true,
-      }),
-      Placeholder.configure({
-        placeholder: placeholder || 'Write your email content here...',
-        emptyEditorClass: 'is-editor-empty',
-      }),
-    ],
-    content,
-    onUpdate: ({ editor }) => {
-      onChange(editor.getHTML());
-    },
-    editorProps: {
-      attributes: {
-        class: 'prose prose-sm sm:prose focus:outline-none min-h-[300px] p-4 border rounded-lg dark:border-gray-700 dark:bg-gray-900 dark:text-white [&_.is-editor-empty]:text-gray-400 [&_.is-editor-empty]:dark:text-gray-600',
-      },
-    },
-  });
-
-  const handleImageUpload = async () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/jpeg,image/png,image/gif,image/webp,image/svg+xml';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      
-      toast.loading('Uploading image...');
-      
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const response = await axios.post('/api/admin/newsletter/images', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        
-        if (response.data.success && editor) {
-          editor.chain().focus().setImage({ 
-            src: response.data.image.url,
-            alt: response.data.image.alt 
-          }).run();
-          toast.dismiss();
-          toast.success('Image uploaded successfully');
-        } else {
-          toast.dismiss();
-          toast.error('Failed to upload image');
-        }
-      } catch (error) {
-        console.error('Upload error:', error);
-        toast.dismiss();
-        toast.error('Failed to upload image');
-      }
-    };
-    input.click();
-  };
-
-  if (!editor) {
-    return <div className="h-[300px] border rounded-lg animate-pulse bg-gray-100 dark:bg-gray-800" />;
-  }
-
-  return (
-    <>
-      <div className="space-y-2">
-        <div className="flex flex-wrap gap-1 p-2 border rounded-lg dark:border-gray-700 bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
-          {/* Undo/Redo */}
-          <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} className="text-sm">
-            <HugeiconsIcon icon={UndoIcon} className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} className="text-sm">
-            <HugeiconsIcon icon={RedoIcon} className="h-4 w-4" />
-          </Button>
-          
-          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
-          
-          {/* Text Formatting */}
-          <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().toggleBold().run()} className={editor.isActive('bold') ? 'bg-gray-200 dark:bg-gray-700' : ''}>
-            <HugeiconsIcon icon={Bold01Icon} className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().toggleItalic().run()} className={editor.isActive('italic') ? 'bg-gray-200 dark:bg-gray-700' : ''}>
-            <HugeiconsIcon icon={Italic01Icon} className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().toggleUnderline().run()} className={editor.isActive('underline') ? 'bg-gray-200 dark:bg-gray-700' : ''}>
-            <HugeiconsIcon icon={Underline01Icon} className="h-4 w-4" />
-          </Button>
-          
-          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
-          
-          {/* Headings */}
-          <Select onValueChange={(value) => {
-            if (value === 'paragraph') editor.chain().focus().setParagraph().run();
-            else if (value === 'h1') editor.chain().focus().toggleHeading({ level: 1 }).run();
-            else if (value === 'h2') editor.chain().focus().toggleHeading({ level: 2 }).run();
-            else if (value === 'h3') editor.chain().focus().toggleHeading({ level: 3 }).run();
-          }} value={
-            editor.isActive('heading', { level: 1 }) ? 'h1' :
-            editor.isActive('heading', { level: 2 }) ? 'h2' :
-            editor.isActive('heading', { level: 3 }) ? 'h3' : 'paragraph'
-          }>
-            <SelectTrigger className="w-28 h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="paragraph">Paragraph</SelectItem>
-              <SelectItem value="h1">Heading 1</SelectItem>
-              <SelectItem value="h2">Heading 2</SelectItem>
-              <SelectItem value="h3">Heading 3</SelectItem>
-            </SelectContent>
-          </Select>
-          
-          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
-          
-          {/* Lists */}
-          <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().toggleBulletList().run()} className={editor.isActive('bulletList') ? 'bg-gray-200 dark:bg-gray-700' : ''}>
-            <HugeiconsIcon icon={ListUnorderedIcon} className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={editor.isActive('orderedList') ? 'bg-gray-200 dark:bg-gray-700' : ''}>
-            <HugeiconsIcon icon={ListOrderedIcon} className="h-4 w-4" />
-          </Button>
-          
-          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
-          
-          {/* Alignment */}
-          <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().setTextAlign('left').run()} className={editor.isActive({ textAlign: 'left' }) ? 'bg-gray-200 dark:bg-gray-700' : ''}>
-            <HugeiconsIcon icon={AlignLeft01Icon} className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().setTextAlign('center').run()} className={editor.isActive({ textAlign: 'center' }) ? 'bg-gray-200 dark:bg-gray-700' : ''}>
-            <HugeiconsIcon icon={AlignCenter01Icon} className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().setTextAlign('right').run()} className={editor.isActive({ textAlign: 'right' }) ? 'bg-gray-200 dark:bg-gray-700' : ''}>
-            <HugeiconsIcon icon={AlignRight01Icon} className="h-4 w-4" />
-          </Button>
-          
-          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
-          
-          {/* Blocks */}
-          <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={editor.isActive('blockquote') ? 'bg-gray-200 dark:bg-gray-700' : ''}>
-            <HugeiconsIcon icon={QuoteIcon} className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={editor.isActive('codeBlock') ? 'bg-gray-200 dark:bg-gray-700' : ''}>
-            <HugeiconsIcon icon={CodeIcon} className="h-4 w-4" />
-          </Button>
-          
-          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
-          
-          {/* Links & Images */}
-          <Button type="button" size="sm" variant="ghost" onClick={() => {
-            const url = prompt('Enter URL:');
-            if (url && editor) {
-              editor.chain().focus().setLink({ href: url }).run();
-            }
-          }}>
-            <HugeiconsIcon icon={Link02Icon} className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={handleImageUpload}>
-            <HugeiconsIcon icon={Image01Icon} className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => setIsImageUrlModalOpen(true)}>
-            <HugeiconsIcon icon={Image01Icon} className="h-4 w-4" />
-            <span className="text-xs ml-1">URL</span>
-          </Button>
-          {onImageGalleryOpen && (
-            <Button type="button" size="sm" variant="ghost" onClick={onImageGalleryOpen}>
-              <HugeiconsIcon icon={ImageIcon} className="h-4 w-4" />
-              <span className="text-xs ml-1">Gallery</span>
-            </Button>
-          )}
-          
-          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
-          
-          {/* Clear Formatting */}
-          <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}>
-            <HugeiconsIcon icon={EraserIcon} className="h-4 w-4" />
-          </Button>
-        </div>
-        <EditorContent editor={editor} />
-      </div>
-      
-      <ImageUrlModal
-        isOpen={isImageUrlModalOpen}
-        onClose={() => setIsImageUrlModalOpen(false)}
-        onInsert={(url) => {
-          if (editor) {
-            editor.chain().focus().setImage({ src: url }).run();
-          }
-        }}
-      />
-    </>
-  );
-}
-
-// ─── SUBSCRIBERS TABLE ────────────────────────────────────────────────────────
-
-function SubscribersTable({ subscribers, selectedSubscribers, onSelectAll, onToggleSelect, onView, onUnsubscribe, onDelete }: {
-  subscribers: NewsletterSubscriber[];
-  selectedSubscribers: Set<string>;
-  onSelectAll: () => void;
-  onToggleSelect: (id: string) => void;
-  onView: (subscriber: NewsletterSubscriber) => void;
-  onUnsubscribe: (id: string) => void;
-  onDelete: (id: string) => void;
-}) {
-  return (
-    <Table>
-      <TableHeader className="bg-gray-50 dark:bg-gray-800/50">
-        <TableRow className="border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50">
-          <TableHead className="w-12 pl-4">
-            <Checkbox checked={selectedSubscribers.size === subscribers.length && subscribers.length > 0} onCheckedChange={onSelectAll} />
-          </TableHead>
-          <TableHead className="w-[35%]">Subscriber</TableHead>
-          <TableHead className="w-[30%]">Email</TableHead>
-          <TableHead className="w-[15%]">Status</TableHead>
-          <TableHead className="w-[15%]">Subscribed</TableHead>
-          <TableHead className="w-16 text-center">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {subscribers.map((subscriber) => (
-          <TableRow key={subscriber._id} className="border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50">
-            <TableCell className="pl-4">
-              <Checkbox checked={selectedSubscribers.has(subscriber._id)} onCheckedChange={() => onToggleSelect(subscriber._id)} />
-            </TableCell>
-            <TableCell>
-              <div className="flex items-center gap-3">
-                <Avatar className="h-9 w-9 rounded-full bg-blue-600">
-                  <AvatarFallback className="text-white text-xs font-bold bg-blue-600">
-                    {getInitials(subscriber.name || subscriber.email)}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                    {subscriber.name || 'Anonymous Subscriber'}
-                  </p>
-                  {subscriber.userId && (
-                    <p className="text-xs text-gray-400">Registered User</p>
-                  )}
-                </div>
-              </div>
-            </TableCell>
-            <TableCell>
-              <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{subscriber.email}</p>
-            </TableCell>
-            <TableCell>
-              <Badge variant={statusTone[subscriber.status] ?? "secondary"} className="gap-1 capitalize">
-                {subscriber.status}
-              </Badge>
-            </TableCell>
-            <TableCell>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(subscriber.subscribedAt)}</p>
-            </TableCell>
-            <TableCell className="text-center">
-              <div className="flex items-center justify-center gap-1">
-                <button onClick={() => onView(subscriber)} className="rounded-md p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800" title="View">
-                  <HugeiconsIcon icon={ViewIcon} className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                </button>
-                <ActionDropdown
-                  trigger={
-                    <button className="rounded-md p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800">
-                      <HugeiconsIcon icon={MoreHorizontalCircle01Icon} className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                    </button>
-                  }
-                  items={[
-                    { label: "View Details", icon: ViewIcon, onClick: () => onView(subscriber) },
-                    { divider: true } as const,
-                    subscriber.status === "active"
-                      ? { label: "Unsubscribe", icon: BanIcon, onClick: () => onUnsubscribe(subscriber._id) }
-                      : { label: "Resubscribe", icon: CheckCircleIcon, onClick: () => onUnsubscribe(subscriber._id) },
-                    { divider: true, section: "Danger" } as const,
-                    { label: "Delete Permanently", icon: Delete01Icon, onClick: () => onDelete(subscriber._id), danger: true },
-                  ]}
-                />
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
-// ─── BULK RECIPIENTS TABLE ────────────────────────────────────────────────────
-
-function BulkRecipientsTable({ recipients, onRemove }: {
-  recipients: BulkEmailRecipient[];
-  onRemove: (index: number) => void;
-}) {
-  if (recipients.length === 0) return null;
-
-  return (
-    <div className="border rounded-lg overflow-hidden">
-      <Table>
-        <TableHeader className="bg-gray-50 dark:bg-gray-800/50">
-          <TableRow>
-            <TableHead className="w-[40%]">Email</TableHead>
-            <TableHead className="w-[55%]">Name</TableHead>
-            <TableHead className="w-16 text-center">Action</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {recipients.map((recipient, index) => (
-            <TableRow key={index}>
-              <TableCell className="text-sm">{recipient.email}</TableCell>
-              <TableCell className="text-sm">{recipient.name || '-'}</TableCell>
-              <TableCell className="text-center">
-                <button
-                  onClick={() => onRemove(index)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  <HugeiconsIcon icon={Delete01Icon} className="h-4 w-4" />
-                </button>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-// ─── CAMPAIGNS TABLE ──────────────────────────────────────────────────────────
-
-function CampaignsTable({ campaigns, onView, onDelete, onSend }: {
-  campaigns: Campaign[];
-  onView: (campaign: Campaign) => void;
-  onDelete: (id: string) => void;
-  onSend: (id: string) => void;
-}) {
-  return (
-    <Table>
-      <TableHeader className="bg-gray-50 dark:bg-gray-800/50">
-        <TableRow className="border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50">
-          <TableHead className="w-[40%]">Campaign</TableHead>
-          <TableHead className="w-[15%]">Type</TableHead>
-          <TableHead className="w-[15%]">Status</TableHead>
-          <TableHead className="w-[10%]">Recipients</TableHead>
-          <TableHead className="w-[15%]">Sent</TableHead>
-          <TableHead className="w-16 text-center">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {campaigns.map((campaign) => (
-          <TableRow key={campaign._id} className="border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50">
-            <TableCell>
-              <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">{campaign.title}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-md">{campaign.subject}</p>
-              </div>
-            </TableCell>
-            <TableCell>
-              <Badge variant="secondary" className="capitalize">{campaign.type}</Badge>
-            </TableCell>
-            <TableCell>
-              <Badge variant={campaignStatusTone[campaign.status] ?? "secondary"} className="capitalize">
-                {campaign.status}
-              </Badge>
-            </TableCell>
-            <TableCell>
-              <p className="text-sm text-gray-600 dark:text-gray-400">{campaign.recipients.total}</p>
-            </TableCell>
-            <TableCell>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {campaign.sentAt ? formatDate(campaign.sentAt) : 'Not sent'}
-              </p>
-            </TableCell>
-            <TableCell className="text-center">
-              <div className="flex items-center justify-center gap-1">
-                <button onClick={() => onView(campaign)} className="rounded-md p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800" title="View">
-                  <HugeiconsIcon icon={ViewIcon} className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                </button>
-                <ActionDropdown
-                  trigger={
-                    <button className="rounded-md p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800">
-                      <HugeiconsIcon icon={MoreHorizontalCircle01Icon} className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                    </button>
-                  }
-                  items={[
-                    { label: "View Details", icon: ViewIcon, onClick: () => onView(campaign) },
-                    ...(campaign.status === "draft" ? [
-                      { label: "Send Now", icon: SendIcon, onClick: () => onSend(campaign._id) }
-                    ] : []),
-                    { divider: true, section: "Danger" } as const,
-                    { label: "Delete", icon: Delete01Icon, onClick: () => onDelete(campaign._id), danger: true },
-                  ]}
-                />
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
-// ─── IMAGE GALLERY MODAL ─────────────────────────────────────────────────────
-
-function ImageGalleryModal({ isOpen, onClose, onSelectImage }: {
-  isOpen: boolean;
-  onClose: () => void;
-  onSelectImage: (url: string) => void;
-}) {
-  const [images, setImages] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const fetchImages = async () => {
-    setIsLoading(true);
-    try {
-      const response = await axios.get('/api/admin/newsletter/images');
-      setImages(response.data.images);
-    } catch (error) {
-      console.error('Failed to fetch images:', error);
-      toast.error('Failed to load images');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchImages();
-    }
-  }, [isOpen]);
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const response = await axios.post('/api/admin/newsletter/images', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      if (response.data.success) {
-        toast.success('Image uploaded successfully');
-        fetchImages();
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      toast.error('Failed to upload image');
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  return (
-    <ReusableModal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Image Gallery"
-      description="Upload and manage images for your emails"
-      size="xxl"
-      actions={[
-        { label: "Close", onClick: onClose, variant: "outline" },
-        { 
-          label: "Upload Image", 
-          onClick: () => fileInputRef.current?.click(), 
-          variant: "primary",
-        },
-      ]}
-    >
-      <input
-        type="file"
-        ref={fileInputRef}
-        accept="image/jpeg,image/png,image/gif,image/webp"
-        onChange={handleUpload}
-        className="hidden"
-      />
-      
-      {uploading && (
-        <div className="flex items-center justify-center py-20">
-          <div className="flex items-center gap-2">
-            <HugeiconsIcon icon={RefreshIcon} className="h-5 w-5 animate-spin text-blue-500" />
-            <span>Uploading...</span>
-          </div>
-        </div>
-      )}
-      
-      {isLoading ? (
-        <div className="grid grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map(i => (
-            <SkeletonLine key={i} className="h-32 rounded-lg" />
-          ))}
-        </div>
-      ) : images.length === 0 ? (
-        <div className="py-20 text-center">
-          <HugeiconsIcon icon={ImageIcon} className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-500">No images uploaded yet</p>
-          <p className="text-sm text-gray-400 mt-2">Click "Upload Image" to add images</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-3 gap-4 max-h-[500px] overflow-y-auto p-2">
-          {images.map((image) => (
-            <div
-              key={image._id}
-              className="relative group border rounded-lg overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all"
-              onClick={() => {
-                onSelectImage(image.url);
-                onClose();
-              }}
-            >
-              <img
-                src={image.url}
-                alt={image.alt || image.originalName}
-                className="w-full h-32 object-cover"
-              />
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <span className="text-white text-sm">Click to insert</span>
-              </div>
-              <div className="p-2 text-xs truncate bg-gray-50 dark:bg-gray-800">
-                {image.originalName}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </ReusableModal>
-  );
-}
-
-// ─── SEND TO SELECTED MODAL ──────────────────────────────────────────────────
-
-function SendToSelectedModal({ isOpen, onClose, onSend, selectedCount, isLoading }: {
-  isOpen: boolean;
-  onClose: () => void;
-  onSend: (subject: string, content: string, type: "bulk_email" | "newsletter" | "announcement" | "promotion" | undefined) => void;
-  selectedCount: number;
-  isLoading: boolean;
-}) {
-  const [subject, setSubject] = useState("");
-  const [content, setContent] = useState("");
-  const [type, setType] = useState<"newsletter" | "announcement" | "promotion">("announcement");
-  const [isImageGalleryOpen, setIsImageGalleryOpen] = useState(false);
-
-  const handleSend = () => {
-    if (!subject) {
-      toast.error("Please enter a subject");
-      return;
-    }
-    if (!content) {
-      toast.error("Please enter email content");
-      return;
-    }
-    onSend(subject, content, type);
-  };
-
-  const handleInsertImageFromGallery = (imageUrl: string) => {
-    setContent(prev => prev + `<img src="${imageUrl}" alt="Image" style="max-width:100%; height:auto; margin: 16px 0;" />`);
-  };
-
-  return (
-    <>
-      <ReusableModal
-        isOpen={isOpen}
-        onClose={onClose}
-        title="Send Email to Selected Subscribers"
-        description={`Send an email to ${selectedCount} selected subscriber${selectedCount !== 1 ? 's' : ''}`}
-        size="xl"
-        actions={[
-          { label: "Cancel", onClick: onClose, variant: "outline" },
-          { label: `Send to ${selectedCount} Subscriber${selectedCount !== 1 ? 's' : ''}`, onClick: handleSend, variant: "primary", loading: isLoading },
-        ]}
-      >
-        <div className="space-y-4">
-          <div>
-            <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Email Subject</Label>
-            <Input
-              placeholder="Enter email subject"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="mt-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-            />
-          </div>
-          
-          <div>
-            <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Email Type</Label>
-            <Select value={type} onValueChange={(v: any) => setType(v)}>
-              <SelectTrigger className="mt-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white h-10 lg:h-11 w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className={'p-1'}>
-                <SelectItem value="newsletter">Newsletter</SelectItem>
-                <SelectItem value="announcement">Announcement</SelectItem>
-                <SelectItem value="promotion">Promotion</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div>
-            <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Email Content</Label>
-            <div className="mt-2">
-              <RichTextEditor
-                content={content}
-                onChange={setContent}
-                placeholder="Write your email content here..."
-                onImageGalleryOpen={() => setIsImageGalleryOpen(true)}
-              />
-            </div>
-          </div>
-        </div>
-      </ReusableModal>
-      
-      <ImageGalleryModal
-        isOpen={isImageGalleryOpen}
-        onClose={() => setIsImageGalleryOpen(false)}
-        onSelectImage={handleInsertImageFromGallery}
-      />
-    </>
-  );
-}
-
-// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
-
-type MainTab = "subscribers" | "bulk-email" | "campaigns" | "analytics";
-type SubscriberTab = "active" | "unsubscribed";
+import { MainTab, SubscriberTab, BulkEmailRecipient, getInitials, statusTone, formatDate } from "./newsletter-types";
+import { NewsletterSkeleton, StatsSkeleton } from "./newsletter-skeletons";
+import { TabButton, ActionDropdown, StatCard, AddRecipientModal } from "./newsletter-components";
+import { RichTextEditor } from "./newsletter-editor";
+import { SubscribersTable, CampaignsTable, BulkRecipientsTable } from "./newsletter-tables";
+import {
+  ImageGalleryModal,
+  SendToSelectedModal,
+  ViewSubscriberModal,
+  ViewCampaignModal,
+  CreateCampaignModal,
+} from "./newsletter-modals";
 
 export default function NewsletterPage() {
   const queryClient = useQueryClient();
@@ -1181,8 +96,8 @@ export default function NewsletterPage() {
   const [campaignStatusFilter, setCampaignStatusFilter] = useState("all");
   
   // Modal states
-  const [selectedSubscriber, setSelectedSubscriber] = useState<NewsletterSubscriber | null>(null);
-  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [selectedSubscriber, setSelectedSubscriber] = useState<any>(null);
+  const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
   const [isViewSubscriberModalOpen, setIsViewSubscriberModalOpen] = useState(false);
   const [isViewCampaignModalOpen, setIsViewCampaignModalOpen] = useState(false);
   const [isCreateCampaignModalOpen, setIsCreateCampaignModalOpen] = useState(false);
@@ -1202,7 +117,7 @@ export default function NewsletterPage() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   
-  // File input ref
+  // File input refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1240,7 +155,7 @@ export default function NewsletterPage() {
 
   const { data: statsData, isLoading: statsLoading } = useNewsletterStats(30);
 
-  const subscribers: NewsletterSubscriber[] = subscribersData?.subscribers || [];
+  const subscribers: any[] = subscribersData?.subscribers || [];
   const pagination = subscribersData?.pagination;
   const campaigns = campaignsData?.campaigns || [];
   const campaignsPagination = campaignsData?.pagination;
@@ -1341,7 +256,7 @@ export default function NewsletterPage() {
     }
   };
 
-  const handleSendToSelected = async (subject: string, content: string, type: "bulk_email" | "newsletter" | "announcement" | "promotion" | undefined) => {
+  const handleSendToSelected = async (subject: string, content: string, type: any) => {
     if (selectedSubscribers.size === 0) {
       toast.error('No subscribers selected');
       return;
@@ -1372,7 +287,7 @@ export default function NewsletterPage() {
     setSelectedSubscribers(
       selectedSubscribers.size === subscribers.length && subscribers.length > 0
         ? new Set()
-        : new Set(subscribers.map((s) => s._id))
+        : new Set(subscribers.map((s: any) => s._id))
     );
   };
 
@@ -1470,12 +385,6 @@ export default function NewsletterPage() {
     setDeleteTarget(null);
   };
 
-  const handleInsertImageFromGallery = (imageUrl: string) => {
-    // This will be handled by the editor instance
-    const event = new CustomEvent('insertImageFromGallery', { detail: { url: imageUrl } });
-    window.dispatchEvent(event);
-  };
-
   const getSubscriberCount = (status: string) => {
     if (!subscribersData?.stats) return 0;
     if (status === "active") return subscribersData.stats.active;
@@ -1503,7 +412,7 @@ export default function NewsletterPage() {
           </p>
         </div>
 
-        {/* Stats Overview - Only show on analytics tab */}
+        {/* Stats Overview */}
         {activeMainTab === "analytics" && (
           <div className="mb-6">
             {statsLoading ? (
@@ -1555,15 +464,12 @@ export default function NewsletterPage() {
             isActive={activeMainTab === "analytics"} 
             onClick={() => setActiveMainTab("analytics")} 
           />
-          {(subscribersLoading || campaignsLoading) && !subscribersLoading && (
-            <HugeiconsIcon icon={RefreshIcon} className="h-4 w-4 animate-spin text-blue-500" />
-          )}
         </div>
 
         {/* Subscribers Tab */}
         {activeMainTab === "subscribers" && (
           <>
-            {/* Sub Tabs - Only Active and Unsubscribed */}
+            {/* Sub Tabs */}
             <div className="mb-5 flex flex-wrap items-center gap-2">
               <TabButton 
                 label="Active" 
@@ -1610,7 +516,7 @@ export default function NewsletterPage() {
               </Button>
             </div>
 
-            {/* Selection Bar with Send to Selected Button */}
+            {/* Selection Bar */}
             {selectedSubscribers.size > 0 && (
               <div className="mb-5 flex flex-col items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/50 sm:flex-row">
                 <div className="flex items-center gap-2">
@@ -1631,10 +537,9 @@ export default function NewsletterPage() {
               </div>
             )}
 
-            {/* Subscribers Table with proper loading states */}
+            {/* Subscribers Table */}
             <div className="hidden overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 md:block">
               <div className="relative">
-                {/* Overlay loading - shows when fetching but data exists */}
                 {isSubscribersFetching && subscribers.length > 0 && (
                   <div className="absolute inset-0 z-10 flex items-start justify-center bg-white/50 pt-20 dark:bg-gray-900/50">
                     <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
@@ -1644,7 +549,6 @@ export default function NewsletterPage() {
                   </div>
                 )}
                 
-                {/* Full skeleton - shows when loading and no data */}
                 {subscribersLoading && subscribers.length === 0 ? (
                   <div className="p-6"><NewsletterSkeleton /></div>
                 ) : subscribers.length === 0 ? (
@@ -1690,7 +594,7 @@ export default function NewsletterPage() {
                   <p className="text-sm text-gray-500">No subscribers found</p>
                 </div>
               ) : (
-                subscribers.map((subscriber) => (
+                subscribers.map((subscriber: any) => (
                   <div key={subscriber._id} className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
                     <div className="flex items-center gap-3 p-4">
                       <Checkbox checked={selectedSubscribers.has(subscriber._id)} onCheckedChange={() => toggleSelect(subscriber._id)} />
@@ -1724,7 +628,6 @@ export default function NewsletterPage() {
         {/* Bulk Email Tab */}
         {activeMainTab === "bulk-email" && (
           <div className="space-y-6">
-            {/* Recipient Import Section */}
             <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Import Recipients</h3>
               <div className="flex flex-wrap gap-3 mb-4">
@@ -1742,14 +645,13 @@ export default function NewsletterPage() {
                   </Button>
                 </div>
                 <Button type="button" variant="outline" onClick={() => setIsAddRecipientModalOpen(true)} disabled={bulkRecipients.length >= 5} className={'px-5 h-10 lg:h-11 rounded-lg'}>
-                  <HugeiconsIcon icon={UserAddIcon} className="h-4 w-4 mr-2" />
+                  <HugeiconsIcon icon={AddCircleIcon} className="h-4 w-4 mr-2" />
                   Add Single Recipient {bulkRecipients.length >= 5 && "(Max 5)"}
                 </Button>
               </div>
               <p className="text-xs text-gray-500">CSV should have columns: email, name (optional). Max 5 manual entries, use CSV for more.</p>
             </div>
 
-            {/* Recipients List */}
             {bulkRecipients.length > 0 && (
               <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
@@ -1764,7 +666,6 @@ export default function NewsletterPage() {
               </div>
             )}
 
-            {/* Email Content Section */}
             {(bulkRecipients.length > 0 || bulkEmailSubject || bulkEmailContent) && (
               <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Email Details</h3>
@@ -1825,7 +726,6 @@ export default function NewsletterPage() {
         {/* Campaigns Tab */}
         {activeMainTab === "campaigns" && (
           <>
-            {/* Filters */}
             <div className="mb-5 flex flex-wrap items-center gap-2.5 justify-between">
               <Select value={campaignStatusFilter} onValueChange={(v) => { setCampaignStatusFilter(v ?? "all"); setCampaignsPage(1); }}>
                 <SelectTrigger className="h-10 lg:h-11 w-36 dark:border-gray-800 dark:bg-gray-900 dark:text-white">
@@ -1847,10 +747,8 @@ export default function NewsletterPage() {
               </Button>
             </div>
 
-            {/* Campaigns Table with proper loading states */}
             <div className="hidden overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 md:block">
               <div className="relative">
-                {/* Overlay loading - shows when fetching but data exists */}
                 {isCampaignsFetching && campaigns.length > 0 && (
                   <div className="absolute inset-0 z-10 flex items-start justify-center bg-white/50 pt-20 dark:bg-gray-900/50">
                     <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
@@ -1860,7 +758,6 @@ export default function NewsletterPage() {
                   </div>
                 )}
                 
-                {/* Full skeleton - shows when loading and no data */}
                 {campaignsLoading && campaigns.length === 0 ? (
                   <div className="p-6"><NewsletterSkeleton /></div>
                 ) : campaigns.length === 0 ? (
@@ -1895,7 +792,6 @@ export default function NewsletterPage() {
           <StatsSkeleton />
         ) : activeMainTab === "analytics" && stats ? (
           <div className="grid gap-6 md:grid-cols-2">
-            {/* Growth Chart Placeholder */}
             <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Subscriber Growth (Last 30 Days)</h3>
               <div className="h-64 flex items-end gap-2">
@@ -1908,7 +804,6 @@ export default function NewsletterPage() {
               </div>
             </div>
 
-            {/* Campaign Performance */}
             <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Campaign Status</h3>
               <div className="space-y-3">
@@ -1930,197 +825,74 @@ export default function NewsletterPage() {
         ) : null}
       </div>
 
-      {/* View Subscriber Modal */}
-      <ReusableModal
+      {/* Modals */}
+      <ViewSubscriberModal
         isOpen={isViewSubscriberModalOpen}
         onClose={() => setIsViewSubscriberModalOpen(false)}
-        title="Subscriber Details"
-        description="Complete information about the subscriber"
-        size="md"
-        actions={[{ label: "Close", onClick: () => setIsViewSubscriberModalOpen(false), variant: "outline" }]}
-      >
-        {selectedSubscriber && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 pb-3 border-b border-gray-100 dark:border-gray-800">
-              <Avatar className="h-12 w-12 rounded-full bg-blue-600">
-                <AvatarFallback className="text-white font-bold bg-blue-600">
-                  {getInitials(selectedSubscriber.name || selectedSubscriber.email)}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{selectedSubscriber.name || "Anonymous Subscriber"}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{selectedSubscriber.email}</p>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Status</p>
-                <Badge variant={statusTone[selectedSubscriber.status] ?? "secondary"} className="mt-1 capitalize">{selectedSubscriber.status}</Badge>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Subscribed At</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">{formatDateTime(selectedSubscriber.subscribedAt)}</p>
-              </div>
-              {selectedSubscriber.unsubscribedAt && (
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Unsubscribed At</p>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{formatDateTime(selectedSubscriber.unsubscribedAt)}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </ReusableModal>
+        subscriber={selectedSubscriber}
+      />
 
-      {/* View Campaign Modal */}
-      <ReusableModal
+      <ViewCampaignModal
         isOpen={isViewCampaignModalOpen}
         onClose={() => setIsViewCampaignModalOpen(false)}
-        title="Campaign Details"
-        description="Complete information about the email campaign"
-        size="xxl"
-        actions={[{ label: "Close", onClick: () => setIsViewCampaignModalOpen(false), variant: "outline" }]}
-      >
-        {selectedCampaign && (
-          <div className="space-y-4 max-h-[70vh] overflow-y-auto">
-            <div className="border-b border-gray-100 dark:border-gray-800 pb-3">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">{selectedCampaign.title}</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{selectedCampaign.subject}</p>
-              <div className="flex gap-2 mt-2">
-                <Badge variant={campaignStatusTone[selectedCampaign.status] ?? "secondary"} className="capitalize">{selectedCampaign.status}</Badge>
-                <Badge variant="secondary" className="capitalize">{selectedCampaign.type}</Badge>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Total Recipients</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{selectedCampaign.recipients.total}</p>
-              </div>
-              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Sent</p>
-                <p className="text-xl font-bold text-green-600">{selectedCampaign.recipients.successful}</p>
-              </div>
-              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Opened</p>
-                <p className="text-xl font-bold text-blue-600">{selectedCampaign.recipients.opened}</p>
-              </div>
-              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Clicked</p>
-                <p className="text-xl font-bold text-amber-600">{selectedCampaign.recipients.clicked}</p>
-              </div>
-            </div>
-            
-            <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
-              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Email Content</h4>
-              <div className="prose prose-sm max-w-none dark:prose-invert p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <div dangerouslySetInnerHTML={{ __html: selectedCampaign.content }} />
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Created At</p>
-                <p className="text-gray-900 dark:text-white">{formatDateTime(selectedCampaign.createdAt)}</p>
-              </div>
-              {selectedCampaign.sentAt && (
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Sent At</p>
-                  <p className="text-gray-900 dark:text-white">{formatDateTime(selectedCampaign.sentAt)}</p>
-                </div>
-              )}
-              {selectedCampaign.scheduledFor && (
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Scheduled For</p>
-                  <p className="text-gray-900 dark:text-white">{formatDateTime(selectedCampaign.scheduledFor)}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </ReusableModal>
+        campaign={selectedCampaign}
+      />
 
-      {/* Create Campaign Modal */}
-      <ReusableModal
+      <CreateCampaignModal
         isOpen={isCreateCampaignModalOpen}
         onClose={() => setIsCreateCampaignModalOpen(false)}
-        title="Create Campaign"
-        description="Create a new email campaign"
-        size="xxl"
-        actions={[
-          { label: "Cancel", onClick: () => setIsCreateCampaignModalOpen(false), variant: "outline" },
-          { label: "Save Campaign", onClick: handleCreateCampaign, variant: "primary", loading: createCampaign.isPending },
-        ]}
-      >
-        <div className="space-y-4">
-          <div>
-            <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Campaign Title</Label>
-            <Input
-              placeholder="e.g., Summer Newsletter 2024"
-              value={campaignTitle}
-              onChange={(e) => setCampaignTitle(e.target.value)}
-              className="mt-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-            />
-          </div>
-          
-          <div>
-            <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Email Subject</Label>
-            <Input
-              placeholder="e.g., Don't miss our summer specials!"
-              value={campaignSubject}
-              onChange={(e) => setCampaignSubject(e.target.value)}
-              className="mt-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-            />
-          </div>
-          
-          <div>
-            <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Campaign Type</Label>
-            <Select value={campaignType} onValueChange={(v: any) => setCampaignType(v)}>
-              <SelectTrigger className="mt-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className={'p-1'}>
-                <SelectItem value="newsletter">Newsletter</SelectItem>
-                <SelectItem value="announcement">Announcement</SelectItem>
-                <SelectItem value="promotion">Promotion</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div>
-            <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Schedule (Optional)</Label>
-            <Popover>
-              <PopoverTrigger className="w-full">
-                <Button variant="outline" className="mt-1 w-full justify-start dark:border-gray-700">
-                  <HugeiconsIcon icon={CalendarIcon} className="mr-2 h-4 w-4" />
-                  {campaignScheduledFor ? format(campaignScheduledFor, "PPP p") : "Schedule for later"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={campaignScheduledFor}
-                  onSelect={setCampaignScheduledFor}
-                  captionLayout="dropdown"
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-          
-          <div>
-            <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Email Content</Label>
-            <div className="mt-2">
-              <RichTextEditor
-                content={campaignContent}
-                onChange={setCampaignContent}
-                placeholder="Write your email content here..."
-                onImageGalleryOpen={() => setIsImageGalleryOpen(true)}
-              />
-            </div>
-          </div>
-        </div>
-      </ReusableModal>
+        onSubmit={handleCreateCampaign}
+        isLoading={createCampaign.isPending}
+        campaignTitle={campaignTitle}
+        setCampaignTitle={setCampaignTitle}
+        campaignSubject={campaignSubject}
+        setCampaignSubject={setCampaignSubject}
+        campaignContent={campaignContent}
+        setCampaignContent={setCampaignContent}
+        campaignType={campaignType}
+        setCampaignType={setCampaignType}
+        campaignScheduledFor={campaignScheduledFor}
+        setCampaignScheduledFor={setCampaignScheduledFor}
+        onImageGalleryOpen={() => setIsImageGalleryOpen(true)}
+      />
+
+      <ImageGalleryModal
+        isOpen={isImageGalleryOpen}
+        onClose={() => setIsImageGalleryOpen(false)}
+        onSelectImage={(url) => {
+          // Will be handled by the editor instance
+          const event = new CustomEvent('insertImageFromGallery', { detail: { url } });
+          window.dispatchEvent(event);
+        }}
+      />
+
+      <AddRecipientModal
+        isOpen={isAddRecipientModalOpen}
+        onClose={() => setIsAddRecipientModalOpen(false)}
+        onAdd={handleAddSingleRecipient}
+        currentCount={bulkRecipients.length}
+      />
+
+      <SendToSelectedModal
+        isOpen={isSendToSelectedModalOpen}
+        onClose={() => setIsSendToSelectedModalOpen(false)}
+        onSend={handleSendToSelected}
+        selectedCount={selectedSubscribers.size}
+        isLoading={isSendingToSelected}
+      />
+
+      <ConfirmModal
+        isOpen={isDeleteConfirmOpen}
+        onClose={() => setIsDeleteConfirmOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        title={`Delete ${deleteTarget?.type === "subscriber" ? "Subscriber" : "Campaign"}`}
+        description={`Are you sure you want to delete this ${deleteTarget?.type}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        confirmVariant="danger"
+        isLoading={deleteSubscriber.isPending || deleteCampaign.isPending}
+        size="md"
+      />
 
       {/* Import Modal */}
       <ActionModal
@@ -2160,44 +932,6 @@ export default function NewsletterPage() {
           </div>
         </div>
       </ActionModal>
-
-      {/* Image Gallery Modal */}
-      <ImageGalleryModal
-        isOpen={isImageGalleryOpen}
-        onClose={() => setIsImageGalleryOpen(false)}
-        onSelectImage={handleInsertImageFromGallery}
-      />
-
-      {/* Add Recipient Modal */}
-      <AddRecipientModal
-        isOpen={isAddRecipientModalOpen}
-        onClose={() => setIsAddRecipientModalOpen(false)}
-        onAdd={handleAddSingleRecipient}
-        currentCount={bulkRecipients.length}
-      />
-
-      {/* Send to Selected Modal */}
-      <SendToSelectedModal
-        isOpen={isSendToSelectedModalOpen}
-        onClose={() => setIsSendToSelectedModalOpen(false)}
-        onSend={handleSendToSelected}
-        selectedCount={selectedSubscribers.size}
-        isLoading={isSendingToSelected}
-      />
-
-      {/* Delete Confirmation Modal */}
-      <ConfirmModal
-        isOpen={isDeleteConfirmOpen}
-        onClose={() => setIsDeleteConfirmOpen(false)}
-        onConfirm={handleDeleteConfirm}
-        title={`Delete ${deleteTarget?.type === "subscriber" ? "Subscriber" : "Campaign"}`}
-        description={`Are you sure you want to delete this ${deleteTarget?.type}? This action cannot be undone.`}
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        confirmVariant="danger"
-        isLoading={deleteSubscriber.isPending || deleteCampaign.isPending}
-        size="md"
-      />
     </div>
   );
 }

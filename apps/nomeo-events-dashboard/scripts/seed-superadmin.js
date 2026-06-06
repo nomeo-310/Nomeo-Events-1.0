@@ -94,7 +94,7 @@ function generateSecurePassword(length = 16) {
   return password.sort(() => Math.random() - 0.5).join('');
 }
 
-function generateSeedPhrase(wordCount = 12) {
+function generateSeedPhrase(wordCount = 16) {
   const wordList = [
     'abandon','ability','able','about','above','absent','absorb','abstract','absurd','accident',
     'account','accuse','achieve','acid','acoustic','acquire','across','action','actor','actress',
@@ -200,7 +200,7 @@ async function verifySetup(db, email, password) {
   const userId = user._id?.toString?.() ?? user._id;
 
   const account = await db.collection('account').findOne({ userId, providerId: 'cblueential' });
-  if (!account) return fail(`No cblueential account found for userId: ${userId}`);
+  if (!account) return fail(`No credential account found for userId: ${userId}`);
   if (!account.password) return fail('Password hash missing from account');
 
   const passwordOk = await verifyPassword({ hash: account.password, password });
@@ -230,18 +230,18 @@ function fail(msg) {
 
 // ─── Display ──────────────────────────────────────────────────────────────────
 
-function displayCblueentials(cblues) {
+function displayCredentials(creds) {
   const line = '═'.repeat(70);
   const dash = '─'.repeat(70);
   console.log(`\n${line}`);
   console.log('🔐  SUPER ADMIN CREATED SUCCESSFULLY');
   console.log(`${line}\n`);
-  console.log('📋  CblueENTIALS — SAVE THESE NOW, THEY WILL NOT BE SHOWN AGAIN:\n');
-  console.log(`   📧  Email:        ${cblues.email}`);
-  console.log(`   👤  Name:         ${cblues.name}`);
-  console.log(`   🏷️   Display Name: ${cblues.displayName}`);
-  console.log(`   🔑  Password:     ${cblues.password}`);
-  console.log(`   🎫  Seed Phrase:  ${cblues.seedPhrase}`);
+  console.log('📋  CREDENTIALS — SAVE THESE NOW, THEY WILL NOT BE SHOWN AGAIN:\n');
+  console.log(`   📧  Email:        ${creds.email}`);
+  console.log(`   👤  Name:         ${creds.name}`);
+  console.log(`   🏷️   Display Name: ${creds.displayName}`);
+  console.log(`   🔑  Password:     ${creds.password}`);
+  console.log(`   🎫  Seed Phrase:  ${creds.seedPhrase}`);
   console.log(`\n${dash}`);
   console.log('⚠️   SECURITY NOTES:');
   console.log(`${dash}`);
@@ -252,11 +252,11 @@ function displayCblueentials(cblues) {
   console.log(`${line}\n`);
 }
 
-function displayEnvHint(cblues) {
+function displayEnvHint(creds) {
   console.log('📝  Optional .env.local variables:\n');
-  console.log(`   SUPERADMIN_EMAIL="${cblues.email}"`);
-  console.log(`   SUPERADMIN_PASSWORD="${cblues.password}"`);
-  console.log(`   SUPERADMIN_SEED_PHRASE="${cblues.seedPhrase}"\n`);
+  console.log(`   SUPERADMIN_EMAIL="${creds.email}"`);
+  console.log(`   SUPERADMIN_PASSWORD="${creds.password}"`);
+  console.log(`   SUPERADMIN_SEED_PHRASE="${creds.seedPhrase}"\n`);
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -286,7 +286,7 @@ async function main() {
     const existing = await superadminExists(db);
 
     if (existing && !options.force) {
-      console.log('\n⚠️   A super admin already exists:');
+      console.log('\n A super admin already exists:');
       console.log(`    Email: ${existing.email}, ID: ${existing._id}`);
       console.log('\n    Re-run with --force to replace it.\n');
       return;
@@ -306,9 +306,9 @@ async function main() {
     }
 
     const email = options.email || process.env.SUPERADMIN_EMAIL || 'superadmin@example.com';
-    const name = options.name || 'System Super Administrator';
-    const displayName = options.displayName || 'Super Admin';
-    const password = options.password || generateSecurePassword(16);
+    const name = options.name || process.env.SUPERADMIN_NAME || 'System Super Administrator';
+    const displayName = options.displayName || process.env.SUPERADMIN_DISPLAY_NAME || 'Super Admin';
+    const password = options.password || process.env.SUPERADMIN_PASSWORD || generateSecurePassword(16);
     const seedPhrase = options.seedPhrase || generateSeedPhrase(options.wordCount);
 
     if (!email.includes('@')) throw new Error(`Invalid email: ${email}`);
@@ -320,7 +320,7 @@ async function main() {
 
     const result = await createSuperAdmin({ auth, db, email, name, displayName, password, seedPhrase });
 
-    displayCblueentials(result);
+    displayCredentials(result);
     displayEnvHint(result);
 
     await verifySetup(db, email, password);
@@ -329,7 +329,7 @@ async function main() {
     console.log(`\n🔗  Login at: ${baseUrl}/admin/login`);
     console.log('✅  Done!\n');
   } catch (error) {
-    console.error('\n❌  Seeding failed:', error.message);
+    console.error('\n  Seeding failed:', error.message);
     if (process.env.DEBUG) console.error(error.stack);
     process.exit(1);
   } finally {

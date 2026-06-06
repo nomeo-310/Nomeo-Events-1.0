@@ -280,6 +280,7 @@ export async function PUT(req: NextRequest) {
   try {
     await connectDB();
     const user = await requireSuperAdmin();
+
     const body = await req.json();
     
     const { id, ...updates } = body;
@@ -316,6 +317,8 @@ export async function PUT(req: NextRequest) {
     if (updates.coupons !== undefined) plan.coupons = updates.coupons;
     
     plan.isFree = plan.priceKobo === 0;
+
+    console.log(updates)
     
     // If updating tier or interval, validate they exist
     if (updates.tierId) {

@@ -89,8 +89,27 @@ export interface IPlan {
   paystackPlanCode?: string;
   isFree: boolean;
   trialDays: number;
-  tierId?: string;
-  intervalId?: string;
+  tierId?: {
+    _id: string;
+    name: string;
+    slug: string;
+    description: string;
+    sortOrder: number,
+    isActive: boolean,
+    createdAt: string;
+    updatedAt: string;
+  };
+  intervalId?: {
+      _id: string;
+    name: string;
+    slug: string;
+    monthsCount: number;
+    multiplier: number;
+    sortOrder: number;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+  };
   maxEvents?: number;
   maxAttendeesPerEvent?: number;
   maxTeamMembers?: number;
