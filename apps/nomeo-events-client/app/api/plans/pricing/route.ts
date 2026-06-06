@@ -1,70 +1,34 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongoose';
 import { Plan } from '@/models/plan';
-import {
-  ApiResponse,
-  PricingResponse,
-  PlanInterval,
-  PlanTier,
-  IntervalPricing,
-  TierPricing,
-  SupportedInterval
-} from '@/types/plan-type';
+import { ApiResponse, PricingResponse, TierPricing, SupportedInterval } from '@/types/plan-type';
+import { PlanInterval } from '@/models/plan-interval';
 
-// ---------- helpers (unchanged mostly) ----------
-function getMonthsCount(interval: PlanInterval): number {
-  const map: Record<PlanInterval, number> = {
-    [PlanInterval.MONTHLY]: 1,
-    [PlanInterval.QUARTERLY]: 3,
-    [PlanInterval.BIANNUAL]: 6,
-    [PlanInterval.ANNUAL]: 12,
-    [PlanInterval.LIFETIME]: Infinity
-  };
-  return map[interval];
+// ---------- FIXED HELPERS ----------
+async function getAllIntervals() {
+  await connectDB();
+  return await PlanInterval.find({ isActive: true }).sort({ sortOrder: 1 }).lean();
 }
 
-function getIntervalSortOrder(interval: PlanInterval): number {
-  const order: Record<PlanInterval, number> = {
-    [PlanInterval.MONTHLY]: 0,
-    [PlanInterval.QUARTERLY]: 1,
-    [PlanInterval.BIANNUAL]: 2,
-    [PlanInterval.ANNUAL]: 3,
-    [PlanInterval.LIFETIME]: 4
-  };
-  return order[interval];
+async function getIntervalMap() {
+  const intervals = await getAllIntervals();
+  const map = new Map();
+  intervals.forEach(interval => {
+    map.set(interval.slug, interval);
+  });
+  return map;
 }
 
-function formatPrice(priceKobo: number): string {
-  return `NGN ${(priceKobo / 100).toLocaleString('en-NG')}`;
-}
-
-function calculateSavings(currentPrice: number, monthlyPrice: number, months: number) {
-  if (months === 1 || !monthlyPrice || monthlyPrice === 0 || !isFinite(months)) return null;
-
-  const totalMonthlyCost = monthlyPrice * months;
-  const savingsAmount = totalMonthlyCost - currentPrice;
-
-  if (savingsAmount <= 0) return null;
-
-  const savingsPercent = Math.round((savingsAmount / totalMonthlyCost) * 100);
-
-  return {
-    amount: savingsAmount,
-    percent: savingsPercent,
-    text: `Save ${savingsPercent}%`,
-    detailedText: `Save ${savingsPercent}% (${formatPrice(savingsAmount)})`
-  };
-}
-
-// ---------- FIXED API ----------
+// ---------- MAIN API ----------
 export async function GET() {
   try {
     await connectDB();
 
-    const plans = await Plan.find({
-      isActive: true,
-      isPublic: true
-    })
+    // ✅ Get all active intervals once (not per plan)
+    const intervalMap = await getIntervalMap();
+    const allIntervals = Array.from(intervalMap.values());
+
+    const plans = await Plan.find({ isActive: true, isPublic: true })
       .select('-__v')
       .sort({ sortOrder: 1, tier: 1, interval: 1 })
       .lean();
@@ -77,10 +41,11 @@ export async function GET() {
       } as ApiResponse, { status: 404 });
     }
 
-    // ✅ monthly baseline
+    // ✅ monthly baseline - now uses interval slug "monthly"
     const monthlyPrices: Record<string, number> = {};
+
     plans.forEach((plan: any) => {
-      if (plan.interval === PlanInterval.MONTHLY) {
+      if (plan.interval === "monthly") {
         monthlyPrices[plan.tier] = plan.priceKobo;
       }
     });
@@ -89,8 +54,15 @@ export async function GET() {
 
     for (const plan of plans as any[]) {
       const tier = plan.tier;
+      const intervalData = intervalMap.get(plan.interval);
 
-      // ✅ FIX: safe metadata handling
+      // ✅ Skip if interval not found or inactive
+      if (!intervalData) {
+        console.warn(`Interval "${plan.interval}" not found for plan ${plan.name}`);
+        continue;
+      }
+
+      // ✅ safe metadata handling
       const safeMetadata =
         plan.metadata instanceof Map
           ? Object.fromEntries(plan.metadata)
@@ -100,13 +72,13 @@ export async function GET() {
 
       if (!tiersMap.has(tier)) {
         tiersMap.set(tier, {
-          tier: tier as PlanTier,
+          tier: tier,
           name: tier.charAt(0).toUpperCase() + tier.slice(1),
           description: plan.description || '',
           tagline: '',
           sortOrder: plan.sortOrder ?? 0,
           isActive: !!plan.isActive,
-          isPopular: tier === PlanTier.BASIC || tier === PlanTier.PRO,
+          isPopular: false, // Will be determined per interval
           features: Array.isArray(plan.features) ? plan.features : [],
           limits: {
             maxEvents: plan.maxEvents ?? 0,
@@ -122,40 +94,67 @@ export async function GET() {
 
       const tierData = tiersMap.get(tier)!;
 
-      const interval = plan.interval as PlanInterval;
-      const months = getMonthsCount(interval);
+      const months = intervalData.monthsCount || 1;
+      const monthlyBaseline = monthlyPrices[tier] || (months === 1 ? plan.priceKobo : 0);
 
-      // ⚠️ FIX: avoid Infinity math
-      const monthlyBaseline =
-        monthlyPrices[tier] || (months === 1 ? plan.priceKobo : 0);
+      const perMonthKobo = intervalData.slug === "monthly" || months === 0
+        ? plan.priceKobo
+        : Math.round(plan.priceKobo / months);
 
-      const perMonthKobo =
-        interval === PlanInterval.MONTHLY || !isFinite(months)
-          ? plan.priceKobo
-          : Math.round(plan.priceKobo / months);
+      // ✅ Calculate savings using interval's built-in discount
+      let savings = null;
+      if (intervalData.discount && intervalData.discount > 0) {
+        const savingsAmount = Math.round(plan.priceKobo * (intervalData.discount / 100));
+        if (savingsAmount > 0) {
+          savings = {
+            amount: savingsAmount,
+            percent: intervalData.discount,
+            text: `Save ${intervalData.discount}%`,
+            detailedText: `Save ${intervalData.discount}% (${formatPrice(savingsAmount)})`
+          };
+        }
+      }
 
-      const savings = calculateSavings(
-        plan.priceKobo,
-        monthlyBaseline,
-        months
-      );
+      // ✅ Or calculate based on monthly baseline (fallback)
+      if (!savings && monthlyBaseline > 0 && months > 1) {
+        const totalMonthlyCost = monthlyBaseline * months;
+        const savingsAmount = totalMonthlyCost - plan.priceKobo;
+        if (savingsAmount > 0) {
+          const savingsPercent = Math.round((savingsAmount / totalMonthlyCost) * 100);
+          savings = {
+            amount: savingsAmount,
+            percent: savingsPercent,
+            text: `Save ${savingsPercent}%`,
+            detailedText: `Save ${savingsPercent}% (${formatPrice(savingsAmount)})`
+          };
+        }
+      }
 
       tierData.intervals.push({
-        interval,
+        interval: intervalData.slug,
         priceKobo: plan.priceKobo,
         priceDisplay: formatPrice(plan.priceKobo),
         pricePerMonthKobo: perMonthKobo,
         pricePerMonthDisplay: `${formatPrice(perMonthKobo)}/month`,
         savings,
-        badge: null,
-        isBestValue: false,
-        isPopular: false,
+        badge: intervalData.discount ? `${intervalData.discount}% OFF` : null,
+        isBestValue: intervalData.discount ? intervalData.discount >= 15 : false,
+        isPopular: intervalData.popular || false,
         trialDays: plan.trialDays ?? 0,
         paystackPlanCode: plan.paystackPlanCode,
         isAvailable: true,
-        sortOrder: getIntervalSortOrder(interval)
+        sortOrder: intervalData.sortOrder ?? 0
       });
     }
+
+    // ✅ Build supportedIntervals from database (not hardcoded)
+    const supportedIntervals: SupportedInterval[] = allIntervals.map(interval => ({
+      value: interval.slug,
+      label: interval.name,
+      discount: interval.discount ? `${interval.discount}% OFF` : null,
+      isPopular: interval.popular || false,
+      sortOrder: interval.sortOrder ?? 0
+    }));
 
     const tiers = Array.from(tiersMap.values())
       .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -164,18 +163,14 @@ export async function GET() {
         intervals: tier.intervals.sort((a, b) => a.sortOrder - b.sortOrder)
       }));
 
-    const supportedIntervals: SupportedInterval[] = [
-      { value: PlanInterval.MONTHLY, label: 'Monthly', discount: null, sortOrder: 0 },
-      { value: PlanInterval.QUARTERLY, label: 'Quarterly', discount: 'Save 11%', sortOrder: 1 },
-      { value: PlanInterval.BIANNUAL, label: 'Biannual', discount: 'Save 17%', sortOrder: 2 },
-      { value: PlanInterval.ANNUAL, label: 'Annual', discount: 'Save 20%', isPopular: true, sortOrder: 3 }
-    ];
+    // ✅ Find default interval (monthly or first active)
+    const defaultInterval = allIntervals.find(i => i.isDefault)?.slug || "monthly";
 
     return NextResponse.json({
       success: true,
       data: {
         tiers,
-        defaultInterval: PlanInterval.MONTHLY,
+        defaultInterval,
         supportedIntervals: supportedIntervals.sort((a, b) => a.sortOrder - b.sortOrder)
       } as PricingResponse,
       timestamp: new Date().toISOString()
@@ -192,4 +187,9 @@ export async function GET() {
       timestamp: new Date().toISOString()
     } as ApiResponse, { status: 500 });
   }
+}
+
+// ---------- HELPER FUNCTIONS ----------
+function formatPrice(priceKobo: number): string {
+  return `NGN ${(priceKobo / 100).toLocaleString('en-NG')}`;
 }

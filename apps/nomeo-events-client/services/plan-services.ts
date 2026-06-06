@@ -1,35 +1,46 @@
+// services/plan-service.ts
 import { Plan } from '@/models/plan';
-import {  PlanInterval, PlanTier, PricingResponse, TierPricing, IntervalPricing, SupportedInterval, PlansListResponse, PlanDocument, IPlanDocument } from '@/types/plan-type';
+import { PricingResponse, TierPricing, IntervalPricing, SupportedInterval, PlansListResponse, PlanDocument, IPlanDocument } from '@/types/plan-type';
 
 class PlanService {
-  private getMonthsCount(interval: PlanInterval): number {
-    const map: Record<PlanInterval, number> = {
-      [PlanInterval.MONTHLY]: 1,
-      [PlanInterval.QUARTERLY]: 3,
-      [PlanInterval.BIANNUAL]: 6,
-      [PlanInterval.ANNUAL]: 12,
-      [PlanInterval.LIFETIME]: Infinity
+  // Helper to get months count from interval (now dynamic)
+  private getMonthsCount(interval: string): number {
+    // You could fetch from database, but for pricing display we use common values
+    const map: Record<string, number> = {
+      'daily': 0.033,
+      'weekly': 0.23,
+      'monthly': 1,
+      'quarterly': 3,
+      'biannual': 6,
+      'semi-annual': 6,
+      'annual': 12,
+      'yearly': 12,
+      'lifetime': Infinity
     };
-    return map[interval];
+    return map[interval.toLowerCase()] || 1;
   }
 
-  private getIntervalSortOrder(interval: PlanInterval): number {
-    const order: Record<PlanInterval, number> = {
-      [PlanInterval.MONTHLY]: 0,
-      [PlanInterval.QUARTERLY]: 1,
-      [PlanInterval.BIANNUAL]: 2,
-      [PlanInterval.ANNUAL]: 3,
-      [PlanInterval.LIFETIME]: 4
+  private getIntervalSortOrder(interval: string): number {
+    const order: Record<string, number> = {
+      'daily': 0,
+      'weekly': 1,
+      'monthly': 2,
+      'quarterly': 3,
+      'biannual': 4,
+      'semi-annual': 4,
+      'annual': 5,
+      'yearly': 5,
+      'lifetime': 6
     };
-    return order[interval];
+    return order[interval.toLowerCase()] || 99;
   }
 
   private formatPrice(priceKobo: number): string {
     return `₦${(priceKobo / 100).toLocaleString('en-NG')}`;
   }
 
-  private calculateSavings( currentPrice: number, monthlyPrice: number, months: number ) {
-    if (months === 1 || !monthlyPrice || monthlyPrice === 0) return null;
+  private calculateSavings(currentPrice: number, monthlyPrice: number, months: number) {
+    if (months === 1 || !monthlyPrice || monthlyPrice === 0 || months === Infinity) return null;
     
     const totalMonthlyCost = monthlyPrice * months;
     const savingsAmount = totalMonthlyCost - currentPrice;
@@ -47,52 +58,42 @@ class PlanService {
   }
 
   private getTierDisplayName(tier: string): string {
-    const names: Record<string, string> = {
-      [PlanTier.FREE]: 'Free',
-      [PlanTier.STARTER]: 'Starter',
-      [PlanTier.BASIC]: 'Basic',
-      [PlanTier.PRO]: 'Professional',
-      [PlanTier.BUSINESS]: 'Business',
-      [PlanTier.ENTERPRISE]: 'Enterprise'
-    };
-    return names[tier] || tier.charAt(0).toUpperCase() + tier.slice(1);
+    // Capitalize first letter
+    return tier.charAt(0).toUpperCase() + tier.slice(1);
   }
 
   private getTierTagline(tier: string): string {
     const taglines: Record<string, string> = {
-      [PlanTier.FREE]: 'Perfect for getting started',
-      [PlanTier.STARTER]: 'Ideal for growing organizers',
-      [PlanTier.BASIC]: 'Professional features for serious organizers',
-      [PlanTier.PRO]: 'Advanced capabilities for large events',
-      [PlanTier.BUSINESS]: 'Enterprise-grade tools for organizations',
-      [PlanTier.ENTERPRISE]: 'Custom solutions for large-scale operations'
+      'free': 'Perfect for getting started',
+      'starter': 'Ideal for growing organizers',
+      'basic': 'Professional features for serious organizers',
+      'pro': 'Advanced capabilities for large events',
+      'business': 'Enterprise-grade tools for organizations',
+      'enterprise': 'Custom solutions for large-scale operations'
     };
-    return taglines[tier] || '';
+    return taglines[tier.toLowerCase()] || 'Flexible plan for your needs';
   }
 
   private getTierCTAText(tier: string): string {
     const ctas: Record<string, string> = {
-      [PlanTier.FREE]: 'Get Started',
-      [PlanTier.STARTER]: 'Start Free Trial',
-      [PlanTier.BASIC]: 'Subscribe Now',
-      [PlanTier.PRO]: 'Go Pro',
-      [PlanTier.BUSINESS]: 'Contact Sales',
-      [PlanTier.ENTERPRISE]: 'Contact Sales'
+      'free': 'Get Started',
+      'starter': 'Start Free Trial',
+      'basic': 'Subscribe Now',
+      'pro': 'Go Pro',
+      'business': 'Contact Sales',
+      'enterprise': 'Contact Sales'
     };
-    return ctas[tier] || 'Subscribe';
+    return ctas[tier.toLowerCase()] || 'Subscribe';
   }
 
   private getIntervalBadge(
-    interval: PlanInterval,
+    interval: string,
     savings: { percent: number } | null,
     tier: string
   ): string | null {
     if (savings && savings.percent >= 20) return 'Best Value';
     if (savings && savings.percent >= 15) return `Save ${savings.percent}%`;
     if (savings && savings.percent >= 10) return `Save ${savings.percent}%`;
-    if (interval === PlanInterval.ANNUAL && tier !== PlanTier.FREE) return 'Save 20%';
-    if (interval === PlanInterval.BIANNUAL) return 'Save 17%';
-    if (interval === PlanInterval.QUARTERLY) return 'Save 11%';
     return null;
   }
 
@@ -144,13 +145,15 @@ class PlanService {
       throw new Error('No plans found');
     }
 
+    // Get monthly baseline prices
     const monthlyPrices: Record<string, number> = {};
     plans.forEach((plan: IPlanDocument) => {
-      if (plan.interval === PlanInterval.MONTHLY) {
+      if (plan.interval === 'monthly') {
         monthlyPrices[plan.tier] = plan.priceKobo;
       }
     });
 
+    // Get unique tiers
     const tiersMap = new Map<string, TierPricing>();
 
     for (const plan of plans) {
@@ -158,13 +161,13 @@ class PlanService {
       
       if (!tiersMap.has(tier)) {
         tiersMap.set(tier, {
-          tier: tier as PlanTier,
+          tier: tier,
           name: this.getTierDisplayName(tier),
           description: plan.description || '',
           tagline: this.getTierTagline(tier),
           sortOrder: plan.sortOrder,
           isActive: plan.isActive,
-          isPopular: tier === PlanTier.BASIC || tier === PlanTier.PRO,
+          isPopular: tier === 'basic' || tier === 'pro',
           features: plan.features || [],
           limits: {
             maxEvents: plan.maxEvents,
@@ -179,19 +182,20 @@ class PlanService {
       }
 
       const tierData = tiersMap.get(tier)!;
-      const months = this.getMonthsCount(plan.interval as PlanInterval);
+      const months = this.getMonthsCount(plan.interval);
       const monthlyBaseline = monthlyPrices[tier] || (months === 1 ? plan.priceKobo : 0);
-      const perMonthKobo = plan.interval === PlanInterval.MONTHLY 
+      const perMonthKobo = plan.interval === 'monthly' 
         ? plan.priceKobo 
-        : Math.round(plan.priceKobo / months);
+        : months !== Infinity 
+          ? Math.round(plan.priceKobo / months)
+          : plan.priceKobo;
       const savings = this.calculateSavings(plan.priceKobo, monthlyBaseline, months);
-      const badge = this.getIntervalBadge(plan.interval as PlanInterval, savings, tier);
+      const badge = this.getIntervalBadge(plan.interval, savings, tier);
       const isBestValue = badge === 'Best Value';
-      const isPopular = plan.interval === PlanInterval.ANNUAL && 
-        (tier === PlanTier.BASIC || tier === PlanTier.STARTER);
+      const isPopular = plan.interval === 'annual' && (tier === 'basic' || tier === 'starter');
 
       tierData.intervals.push({
-        interval: plan.interval as PlanInterval,
+        interval: plan.interval,
         priceKobo: plan.priceKobo,
         priceDisplay: this.formatPrice(plan.priceKobo),
         pricePerMonthKobo: perMonthKobo,
@@ -203,7 +207,7 @@ class PlanService {
         trialDays: plan.trialDays || 0,
         paystackPlanCode: plan.paystackPlanCode,
         isAvailable: true,
-        sortOrder: this.getIntervalSortOrder(plan.interval as PlanInterval)
+        sortOrder: this.getIntervalSortOrder(plan.interval)
       });
     }
 
@@ -214,21 +218,31 @@ class PlanService {
         intervals: tier.intervals.sort((a: IntervalPricing, b: IntervalPricing) => a.sortOrder - b.sortOrder)
       }));
 
-    const supportedIntervals: SupportedInterval[] = [
-      { value: PlanInterval.MONTHLY, label: 'Monthly', discount: null, sortOrder: 0 },
-      { value: PlanInterval.QUARTERLY, label: 'Quarterly', discount: 'Save 11%', sortOrder: 1 },
-      { value: PlanInterval.BIANNUAL, label: 'Biannual', discount: 'Save 17%', sortOrder: 2 },
-      { value: PlanInterval.ANNUAL, label: 'Annual', discount: 'Save 20%', isPopular: true, sortOrder: 3 }
-    ];
+    // Get unique intervals from database for supported intervals
+    const uniqueIntervals = [...new Set(plans.map(p => p.interval))];
+    const supportedIntervals: SupportedInterval[] = uniqueIntervals.map(interval => ({
+      value: interval,
+      label: interval.charAt(0).toUpperCase() + interval.slice(1),
+      discount: null,
+      sortOrder: this.getIntervalSortOrder(interval)
+    })).sort((a, b) => a.sortOrder - b.sortOrder);
+
+    // Ensure monthly is default if exists
+    const defaultInterval = supportedIntervals.find(i => i.value === 'monthly')?.value || supportedIntervals[0]?.value || 'monthly';
 
     return {
       tiers,
-      defaultInterval: PlanInterval.MONTHLY,
-      supportedIntervals: supportedIntervals.sort((a: SupportedInterval, b: SupportedInterval) => a.sortOrder - b.sortOrder)
+      defaultInterval,
+      supportedIntervals
     };
   }
 
-  async getAllPlans(filters?: { tier?: PlanTier[];  interval?: PlanInterval[]; isActive?: boolean; isPublic?: boolean }): Promise<PlansListResponse> {
+  async getAllPlans(filters?: { 
+    tier?: string[]; 
+    interval?: string[]; 
+    isActive?: boolean; 
+    isPublic?: boolean 
+  }): Promise<PlansListResponse> {
     const query: any = {};
     
     if (filters?.tier && filters.tier.length) query.tier = { $in: filters.tier };
@@ -253,14 +267,36 @@ class PlanService {
     return this.convertToPlanDocument(mongoosePlan);
   }
 
-  async getPlansByTier(tier: PlanTier): Promise<PlanDocument[]> {
+  async getPlansByTier(tier: string): Promise<PlanDocument[]> {
     const mongoosePlans = await Plan.find({ tier, isActive: true })
       .sort({ interval: 1 })
       .lean() as unknown as IPlanDocument[];
     return this.convertManyToPlanDocuments(mongoosePlans);
   }
 
-  async validateCoupon(code: string, planId: string, interval: PlanInterval): Promise<{ valid: boolean; discountAmount?: number; discountPercentage?: number; message?: string; }> {
+  async getPlansByInterval(interval: string): Promise<PlanDocument[]> {
+    const mongoosePlans = await Plan.find({ interval, isActive: true })
+      .sort({ tier: 1 })
+      .lean() as unknown as IPlanDocument[];
+    return this.convertManyToPlanDocuments(mongoosePlans);
+  }
+
+  async getAvailableTiers(): Promise<string[]> {
+    const tiers = await Plan.distinct('tier', { isActive: true });
+    return tiers.sort();
+  }
+
+  async getAvailableIntervals(): Promise<string[]> {
+    const intervals = await Plan.distinct('interval', { isActive: true });
+    return intervals.sort((a, b) => this.getIntervalSortOrder(a) - this.getIntervalSortOrder(b));
+  }
+
+  async validateCoupon(code: string, planId: string, interval: string): Promise<{ 
+    valid: boolean; 
+    discountAmount?: number; 
+    discountPercentage?: number; 
+    message?: string; 
+  }> {
     const plan = await Plan.findById(planId);
     if (!plan) return { valid: false, message: 'Plan not found' };
 
@@ -271,7 +307,7 @@ class PlanService {
     if (coupon.maxRedemptions && coupon.redemptionCount >= coupon.maxRedemptions) {
       return { valid: false, message: 'Coupon has reached maximum redemptions' };
     }
-    if (coupon.applicableIntervals && !coupon.applicableIntervals.includes(interval)) {
+    if (coupon.applicableIntervals && coupon.applicableIntervals.length > 0 && !coupon.applicableIntervals.includes(interval)) {
       return { valid: false, message: `Coupon not applicable for ${interval} billing` };
     }
     if (coupon.minAmountKobo && plan.priceKobo < coupon.minAmountKobo) {

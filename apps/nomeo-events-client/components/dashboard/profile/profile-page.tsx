@@ -649,7 +649,7 @@ const ProfilePage = () => {
         isOpen={showVerificationModal}
         onClose={() => setShowVerificationModal(false)}
         accountType={profile.accountType}
-        userId={profile.userId}
+        userId={profile.userId._id}
         onSuccess={handleVerificationSuccess}
       />
     </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongoose';
 import { Plan } from '@/models/plan';
-import { ApiResponse, PlansListResponse, PlanTier, PlanInterval } from '@/types/plan-type';
+import { ApiResponse, PlansListResponse } from '@/types/plan-type';
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,23 +22,6 @@ export async function GET(request: NextRequest) {
       isPublicParam === 'false' ? false : true; // default true
 
     const query: any = {};
-
-    // ✅ validate enums instead of blind casting
-    if (tiersParam) {
-      const tiers = tiersParam
-        .split(',')
-        .filter(t => Object.values(PlanTier).includes(t as PlanTier));
-
-      if (tiers.length) query.tier = { $in: tiers };
-    }
-
-    if (intervalsParam) {
-      const intervals = intervalsParam
-        .split(',')
-        .filter(i => Object.values(PlanInterval).includes(i as PlanInterval));
-
-      if (intervals.length) query.interval = { $in: intervals };
-    }
 
     if (isActive !== undefined) query.isActive = isActive;
     if (isPublic !== undefined) query.isPublic = isPublic;

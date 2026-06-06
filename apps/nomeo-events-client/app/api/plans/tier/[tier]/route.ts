@@ -1,6 +1,7 @@
 import { connectDB } from '@/lib/mongoose';
 import { Plan } from '@/models/plan';
-import { ApiResponse, PlanTier, PlanDocument } from '@/types/plan-type';
+import { PlanTier } from '@/models/plan-tier';
+import { ApiResponse, PlanDocument } from '@/types/plan-type';
 import { NextResponse } from 'next/server';
 
 export async function GET(request: Request, { params }: { params: Promise<{ tier: string }> }) {
@@ -10,7 +11,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ tier
     await connectDB();
 
     // ✅ validate tier
-    if (!Object.values(PlanTier).includes(tier as PlanTier)) {
+    if (typeof tier !== 'string' || tier.trim() === '') {
       return NextResponse.json(
         {
           success: false,
@@ -21,14 +22,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ tier
       );
     }
 
-    const plans = await Plan.find({
-      tier: tier as PlanTier,
-      isActive: true
-    })
-      .sort({ interval: 1 })
+    // ✅ Get tier details from PlanTier collection (for metadata)
+    const tierDetails = await PlanTier.findOne({ slug: tier, isActive: true }).lean();
+
+    // ✅ Find all plans for this tier
+    const plans = await Plan.find({ tier, isActive: true })
+      .populate('tierId')
+      .populate('intervalId')
+      .sort({ sortOrder: 1, interval: 1 })
       .lean();
 
-    // ✅ helper inline (so it never crashes again)
+    // ✅ helper for safe metadata
     const safeMetadata = (metadata: any) => {
       if (metadata instanceof Map) return Object.fromEntries(metadata);
       if (typeof metadata === 'object' && metadata !== null) return metadata;
@@ -38,15 +42,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ tier
     const formattedPlans: PlanDocument[] = plans.map((plan: any) => ({
       ...plan,
       _id: plan._id?.toString(),
+      
+      // Extract tier slug from populated data or use existing
+      tier: plan.tierId ? (plan.tierId as any).slug : plan.tier,
+      interval: plan.intervalId ? (plan.intervalId as any).slug : plan.interval,
+      
+      // Keep IDs for reference
+      tierId: plan.tierId ? (plan.tierId as any)._id?.toString() : undefined,
+      intervalId: plan.intervalId ? (plan.intervalId as any)._id?.toString() : undefined,
 
       // ✅ safe dates
-      createdAt: plan.createdAt
-        ? new Date(plan.createdAt).toISOString()
-        : undefined,
-
-      updatedAt: plan.updatedAt
-        ? new Date(plan.updatedAt).toISOString()
-        : undefined,
+      createdAt: plan.createdAt ? new Date(plan.createdAt).toISOString() : undefined,
+      updatedAt: plan.updatedAt ? new Date(plan.updatedAt).toISOString() : undefined,
 
       metadata: safeMetadata(plan.metadata)
     }));
@@ -55,8 +62,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ tier
       success: true,
       data: {
         tier,
+        tierDetails: tierDetails ? {
+          _id: tierDetails._id.toString(),
+          name: tierDetails.name,
+          slug: tierDetails.slug,
+          description: tierDetails.description,
+          sortOrder: tierDetails.sortOrder,
+          isActive: tierDetails.isActive,
+        } : null,
         plans: formattedPlans,
-        count: formattedPlans.length
+        count: formattedPlans.length,
+        intervals: [...new Set(formattedPlans.map(p => p.interval))] // Unique intervals available
       },
       timestamp: new Date().toISOString()
     } as ApiResponse);

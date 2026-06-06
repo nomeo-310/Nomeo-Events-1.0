@@ -1,6 +1,5 @@
 "use client"
 
-
 import React, { useState } from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
@@ -9,27 +8,32 @@ import {
   ArrowDataTransferHorizontalIcon as CompareIcon,
 } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
-import { PlanTier } from '@/hooks/use-plans';
-import { TierPricing, IntervalPricing, PlanInterval } from './types';
+import { TierPricing, IntervalPricing } from './types';
+
+// ✅ Helper to check if a tier is free (based on name/slug)
+const isFreeTier = (tier: TierPricing): boolean => {
+  return tier.tier === 'free' || tier.name?.toLowerCase() === 'free' || tier.slug === 'free';
+};
 
 interface CompareModalProps {
   tiers:             TierPricing[];
-  selectedTiers:     PlanTier[];
-  selectedInterval:  PlanInterval;
+  selectedTiers:     string[];  // ✅ Changed from PlanTier[] to string[]
+  selectedInterval:  string;    // ✅ Changed from PlanInterval to string
   onClose:           () => void;
-  onUpdateSelection: (tiers: PlanTier[]) => void;
+  onUpdateSelection: (tiers: string[]) => void;  // ✅ Changed to string[]
   getPricingForTier: (tier: TierPricing) => IntervalPricing | null | undefined;
 }
 
 export const CompareModal: React.FC<CompareModalProps> = ({
   tiers, selectedTiers, selectedInterval, onClose, onUpdateSelection, getPricingForTier,
 }) => {
-  const [tempSelectedTiers, setTempSelectedTiers] = useState<PlanTier[]>(selectedTiers);
+  const [tempSelectedTiers, setTempSelectedTiers] = useState<string[]>(selectedTiers);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const compareableTiers = tiers.filter((t) => t.tier !== PlanTier.FREE);
+  // ✅ Filter out free tiers for comparison (can't compare free tier)
+  const compareableTiers = tiers.filter((t) => !isFreeTier(t));
 
-  const handleToggleTier = (tier: PlanTier) => {
+  const handleToggleTier = (tier: string) => {
     setTempSelectedTiers((prev) => {
       if (prev.includes(tier)) return prev.filter((t) => t !== tier);
       if (prev.length >= 3) {
@@ -51,9 +55,19 @@ export const CompareModal: React.FC<CompareModalProps> = ({
   };
 
   const tiersToCompare = tiers.filter((t) => tempSelectedTiers.includes(t.tier));
+  
+  // ✅ Get unique features across selected tiers
   const allFeatures = Array.from(
     new Map(tiersToCompare.flatMap((t) => t.features.map((f) => [f.name, f]))).values(),
   );
+
+  // ✅ Helper to format limit values
+  const formatLimitValue = (value: number | undefined, label: string): string => {
+    if (value === undefined) return '∞';
+    if (label === 'attendees/event') return value.toLocaleString();
+    if (label === 'GB storage') return `${value} GB`;
+    return String(value);
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -108,15 +122,17 @@ export const CompareModal: React.FC<CompareModalProps> = ({
                     {tiersToCompare.map((tier) => {
                       const pricing = getPricingForTier(tier);
                       return (
-                        <th key={tier.tier} className="text-center p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-r border-b border-gray-100 dark:border-gray-800 last:rounded-r-xl">
+                        <th key={tier.tier} className="text-center p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-r border-b border-gray-100 dark:border-gray-800 last:rounded-r-xl min-w-[180px]">
                           <div className="space-y-2">
-                            <div className="flex items-center justify-center gap-2">
+                            <div className="flex items-center justify-center gap-2 flex-wrap">
                               <span className="text-base font-semibold text-gray-900 dark:text-white">{tier.name}</span>
                               {tier.isPopular && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300">Popular</span>
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
+                                  Popular
+                                </span>
                               )}
                             </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">{tier.tagline}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{tier.tagline || tier.description?.slice(0, 60)}</p>
                             {pricing && (
                               <>
                                 <div className="text-xl font-bold text-gray-900 dark:text-white">{pricing.priceDisplay}</div>
@@ -125,6 +141,11 @@ export const CompareModal: React.FC<CompareModalProps> = ({
                                   <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
                                     {pricing.savings.text}
                                   </span>
+                                )}
+                                {pricing.trialDays > 0 && (
+                                  <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
+                                    {pricing.trialDays}-day trial
+                                  </div>
                                 )}
                               </>
                             )}
@@ -140,20 +161,31 @@ export const CompareModal: React.FC<CompareModalProps> = ({
                     <td className="p-4 font-medium text-gray-900 dark:text-white bg-gray-50/50">Plan limits</td>
                     {tiersToCompare.map((tier) => (
                       <td key={`limits-${tier.tier}`} className="p-4 text-center border-l border-gray-100 dark:border-gray-800">
-                        <div className="space-y-1">
-                          {[
-                            { val: tier.limits.maxEvents,            label: 'events' },
-                            { val: tier.limits.maxAttendeesPerEvent, label: 'attendees/event', format: (v: number) => v.toLocaleString() },
-                            { val: tier.limits.maxTeamMembers,       label: 'team members' },
-                            { val: tier.limits.storageGb,            label: 'GB storage', format: (v: number) => `${v} GB` },
-                          ].map(({ val, label, format }) => (
-                            <div key={label} className="text-sm">
-                              <span className="font-semibold text-gray-900 dark:text-white">
-                                {val === undefined ? '∞' : (format ? format(val as number) : val)}
-                              </span>
-                              <span className="text-gray-500 text-xs ml-1">{label}</span>
-                            </div>
-                          ))}
+                        <div className="space-y-1.5">
+                          <div className="text-sm">
+                            <span className="font-semibold text-gray-900 dark:text-white">
+                              {formatLimitValue(tier.limits.maxEvents, 'events')}
+                            </span>
+                            <span className="text-gray-500 text-xs ml-1">events</span>
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-semibold text-gray-900 dark:text-white">
+                              {formatLimitValue(tier.limits.maxAttendeesPerEvent, 'attendees/event')}
+                            </span>
+                            <span className="text-gray-500 text-xs ml-1">attendees/event</span>
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-semibold text-gray-900 dark:text-white">
+                              {formatLimitValue(tier.limits.maxTeamMembers, 'team members')}
+                            </span>
+                            <span className="text-gray-500 text-xs ml-1">team members</span>
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-semibold text-gray-900 dark:text-white">
+                              {formatLimitValue(tier.limits.storageGb, 'GB storage')}
+                            </span>
+                            <span className="text-gray-500 text-xs ml-1">storage</span>
+                          </div>
                         </div>
                       </td>
                     ))}
@@ -175,8 +207,8 @@ export const CompareModal: React.FC<CompareModalProps> = ({
                             {tf?.included ? (
                               <div className="flex flex-col items-center gap-1">
                                 <HugeiconsIcon icon={Tick01Icon} size={16} className="text-emerald-500" />
-                                {tf.limit != null && (
-                                  <span className="text-xs text-gray-500">{tf.limit} {tf.unit}</span>
+                                {tf.limit != null && tf.limit > 0 && (
+                                  <span className="text-xs text-gray-500">{tf.limit} {tf.unit || ''}</span>
                                 )}
                               </div>
                             ) : (

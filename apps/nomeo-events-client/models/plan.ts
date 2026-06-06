@@ -1,25 +1,6 @@
 // models/plan.ts
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-// ─── Enums ────────────────────────────────────────────────────────────────────
-
-export enum PlanInterval {
-  MONTHLY = 'monthly',
-  QUARTERLY = 'quarterly',
-  BIANNUAL = 'biannual',
-  ANNUAL = 'annual',
-  LIFETIME = 'lifetime'
-}
-
-export enum PlanTier {
-  FREE = 'free',
-  STARTER = 'starter',
-  BASIC = 'basic',
-  PRO = 'pro',
-  BUSINESS = 'business',
-  ENTERPRISE = 'enterprise'
-}
-
 export enum DiscountType {
   PERCENTAGE = 'percentage',
   FIXED = 'fixed'
@@ -42,7 +23,7 @@ export interface ICoupon {
   maxRedemptions?: number;
   redemptionCount: number;
   minAmountKobo?: number;
-  applicableIntervals?: PlanInterval[];
+  applicableIntervals?: string[];
   status: CouponStatus;
   expiresAt?: Date;
   createdAt: Date;
@@ -53,7 +34,7 @@ export interface IDiscount {
   description?: string;
   discountType: DiscountType;
   discountValue: number;
-  interval?: PlanInterval;
+  interval?: string;
   startsAt?: Date;
   endsAt?: Date;
   isActive: boolean;
@@ -72,14 +53,17 @@ export interface IPlanFeature {
 export interface IPlan {
   name: string;
   slug: string;
-  tier: PlanTier;
+  tier: string;
   description?: string;
   isActive: boolean;
   isPublic: boolean;
 
   priceKobo: number;
   currency: string;
-  interval: PlanInterval;
+  interval: string;
+
+  tierId?: mongoose.Types.ObjectId;
+  intervalId?: mongoose.Types.ObjectId;
 
   paystackPlanCode?: string;
 
@@ -110,7 +94,7 @@ export interface IPlan {
 }
 
 export interface IPlanDocument extends IPlan, Document {
-  calculatePrice(interval: PlanInterval, couponCode?: string): {
+  calculatePrice(interval: string, couponCode?: string): {
     originalKobo: number;
     discountKobo: number;
     finalKobo: number;
@@ -136,7 +120,7 @@ const CouponSchema = new Schema<ICoupon>(
     maxRedemptions: Number,
     redemptionCount: { type: Number, default: 0 },
     minAmountKobo: Number,
-    applicableIntervals: [{ type: String, enum: Object.values(PlanInterval) }],
+    applicableIntervals: [{ type: String }],
     status: { type: String, enum: Object.values(CouponStatus), default: CouponStatus.ACTIVE },
     expiresAt: Date
   },
@@ -149,7 +133,7 @@ const DiscountSchema = new Schema<IDiscount>(
     description: String,
     discountType: { type: String, enum: Object.values(DiscountType), required: true },
     discountValue: { type: Number, required: true, min: 0 },
-    interval: { type: String, enum: Object.values(PlanInterval) },
+    interval: { type: String },
     startsAt: Date,
     endsAt: Date,
     isActive: { type: Boolean, default: true }
@@ -174,14 +158,17 @@ const PlanSchema = new Schema<IPlanDocument>(
   {
     name: { type: String, required: true, trim: true },
     slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    tier: { type: String, enum: Object.values(PlanTier), required: true },
+    tier: { type: String, required: true },
     description: String,
     isActive: { type: Boolean, default: true },
     isPublic: { type: Boolean, default: true },
 
     priceKobo: { type: Number, required: true, min: 0, default: 0 },
     currency: { type: String, default: 'NGN' },
-    interval: { type: String, enum: Object.values(PlanInterval), required: true },
+    interval: { type: String, required: true },
+
+    intervalId: { type: Schema.Types.ObjectId, ref: 'PlanInterval' },
+    tierId: { type: Schema.Types.ObjectId, ref: 'PlanTier' },
 
     paystackPlanCode: String,
 
@@ -222,7 +209,7 @@ PlanSchema.pre('save', function () {
 
 // ─── Instance methods ─────────────────────────────────────────────────────────
 
-PlanSchema.methods.calculatePrice = function ( interval: PlanInterval, couponCode?: string ): {
+PlanSchema.methods.calculatePrice = function ( interval: string, couponCode?: string ): {
   originalKobo: number;
   discountKobo: number;
   finalKobo: number;

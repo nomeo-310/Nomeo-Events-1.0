@@ -1,21 +1,5 @@
+// types/plan-type.ts
 import { Types } from 'mongoose';
-
-export enum PlanInterval {
-  MONTHLY = 'monthly',
-  QUARTERLY = 'quarterly',
-  BIANNUAL = 'biannual',
-  ANNUAL = 'annual',
-  LIFETIME = 'lifetime'
-}
-
-export enum PlanTier {
-  FREE = 'free',
-  STARTER = 'starter',
-  BASIC = 'basic',
-  PRO = 'pro',
-  BUSINESS = 'business',
-  ENTERPRISE = 'enterprise'
-}
 
 export enum DiscountType {
   PERCENTAGE = 'percentage',
@@ -42,7 +26,7 @@ export interface Discount {
   description?: string;
   discountType: DiscountType;
   discountValue: number;
-  interval?: PlanInterval;
+  interval?: string;
   startsAt?: Date;
   endsAt?: Date;
   isActive: boolean;
@@ -56,9 +40,38 @@ export interface Coupon {
   maxRedemptions?: number;
   redemptionCount: number;
   minAmountKobo?: number;
-  applicableIntervals?: PlanInterval[];
+  applicableIntervals?: string[];
   status: CouponStatus;
   expiresAt?: Date;
+}
+
+// NEW: Plan Tier Type
+export interface PlanTierDocument {
+  _id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  sortOrder: number;
+  isActive: boolean;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// NEW: Plan Interval Type
+export interface PlanIntervalDocument {
+  _id: string;
+  name: string;
+  slug: string;
+  value: string;
+  monthsCount: number;
+  multiplier: number;
+  discount: number;
+  sortOrder: number;
+  isActive: boolean;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Mongoose Document Type
@@ -66,13 +79,15 @@ export interface IPlanDocument {
   _id: Types.ObjectId;
   name: string;
   slug: string;
-  tier: PlanTier;
+  tier: string;
   description?: string;
   isActive: boolean;
   isPublic: boolean;
   priceKobo: number;
   currency: string;
-  interval: PlanInterval;
+  interval: string;
+  tierId?: Types.ObjectId;
+  intervalId?: Types.ObjectId;
   paystackPlanCode?: string;
   isFree: boolean;
   trialDays: number;
@@ -94,13 +109,15 @@ export interface PlanDocument {
   _id: string;
   name: string;
   slug: string;
-  tier: PlanTier;
+  tier: string;
   description?: string;
   isActive: boolean;
   isPublic: boolean;
   priceKobo: number;
   currency: string;
-  interval: PlanInterval;
+  interval: string;
+  tierId?: string;
+  intervalId?: string;
   paystackPlanCode?: string;
   isFree: boolean;
   trialDays: number;
@@ -118,12 +135,12 @@ export interface PlanDocument {
 }
 
 export interface IntervalPricing {
-  interval: PlanInterval;
+  interval: string;
   priceKobo: number;
   priceDisplay: string;
   pricePerMonthKobo: number;
   pricePerMonthDisplay: string;
-  savings: {
+  savings?: {
     amount: number;
     percent: number;
     text: string;
@@ -139,7 +156,7 @@ export interface IntervalPricing {
 }
 
 export interface TierPricing {
-  tier: PlanTier;
+  tier: string;
   name: string;
   description: string;
   tagline: string;
@@ -159,7 +176,7 @@ export interface TierPricing {
 }
 
 export interface SupportedInterval {
-  value: PlanInterval;
+  value: string;
   label: string;
   discount: string | null;
   isPopular?: boolean;
@@ -168,17 +185,26 @@ export interface SupportedInterval {
 
 export interface PricingResponse {
   tiers: TierPricing[];
-  defaultInterval: PlanInterval;
+  defaultInterval: string;
   supportedIntervals: SupportedInterval[];
+  availableOptions?: {
+    tiers: PlanTierDocument[];
+    intervals: PlanIntervalDocument[];
+  };
 }
 
 export interface PlansListResponse {
   plans: PlanDocument[];
   total: number;
   filters: {
-    tiers?: PlanTier[];
-    intervals?: PlanInterval[];
+    tiers?: string[];
+    intervals?: string[];
     isActive?: boolean;
+    isPublic?: boolean;
+  };
+  availableOptions?: {
+    tiers: PlanTierDocument[];
+    intervals: PlanIntervalDocument[];
   };
 }
 

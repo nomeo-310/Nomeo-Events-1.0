@@ -1,27 +1,15 @@
+// hooks/use-plans.ts
 import { useQuery, useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 import { useState, useCallback } from 'react';
 
 // ============================================================================
-// Types
+// Types - Updated for Dynamic System
 // ============================================================================
 
-export enum PlanInterval {
-  MONTHLY = 'monthly',
-  QUARTERLY = 'quarterly',
-  BIANNUAL = 'biannual',
-  ANNUAL = 'annual',
-  LIFETIME = 'lifetime'
-}
-
-export enum PlanTier {
-  FREE = 'free',
-  STARTER = 'starter',
-  BASIC = 'basic',
-  PRO = 'pro',
-  BUSINESS = 'business',
-  ENTERPRISE = 'enterprise'
-}
+// ✅ Changed from enums to strings (dynamic)
+export type PlanTier = string;
+export type PlanInterval = string;
 
 export interface PlanFeature {
   name: string;
@@ -31,8 +19,28 @@ export interface PlanFeature {
   unit?: string;
 }
 
+// ✅ NEW: Tier and Interval types from API
+export interface AvailableTier {
+  _id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface AvailableInterval {
+  _id: string;
+  name: string;
+  slug: string;
+  monthsCount: number;
+  multiplier: number;
+  sortOrder: number;
+  isActive: boolean;
+}
+
 export interface IntervalPricing {
-  interval: PlanInterval;
+  interval: string;
   priceKobo: number;
   priceDisplay: string;
   pricePerMonthKobo: number;
@@ -53,7 +61,7 @@ export interface IntervalPricing {
 }
 
 export interface TierPricing {
-  tier: PlanTier;
+  tier: string;
   name: string;
   slug: string;
   description: string;
@@ -74,7 +82,7 @@ export interface TierPricing {
 }
 
 export interface SupportedInterval {
-  value: PlanInterval;
+  value: string;
   label: string;
   discount: string | null;
   isPopular?: boolean;
@@ -83,7 +91,7 @@ export interface SupportedInterval {
 
 export interface PricingResponse {
   tiers: TierPricing[];
-  defaultInterval: PlanInterval;
+  defaultInterval: string;
   supportedIntervals: SupportedInterval[];
 }
 
@@ -91,13 +99,13 @@ export interface PlanDocument {
   _id: string;
   name: string;
   slug: string;
-  tier: PlanTier;
+  tier: string;
   description?: string;
   isActive: boolean;
   isPublic: boolean;
   priceKobo: number;
   currency: string;
-  interval: PlanInterval;
+  interval: string;
   paystackPlanCode?: string;
   isFree: boolean;
   trialDays: number;
@@ -118,8 +126,8 @@ export interface PlansListResponse {
   plans: PlanDocument[];
   total: number;
   filters: {
-    tiers?: PlanTier[];
-    intervals?: PlanInterval[];
+    tiers?: string[];
+    intervals?: string[];
     isActive?: boolean;
   };
 }
@@ -133,6 +141,46 @@ const queryKeys = {
   plans: ['plans'] as const,
   plan: (slug: string) => ['plan', slug] as const,
   plansByTier: (tier: string) => ['plans', 'tier', tier] as const,
+  availableTiers: ['available-tiers'] as const,
+  availableIntervals: ['available-intervals'] as const,
+};
+
+// ============================================================================
+// NEW: Hooks for fetching available tiers and intervals from database
+// ============================================================================
+
+/**
+ * Hook: Get available tiers from database (for dynamic filters)
+ */
+export const useAvailableTiers = () => {
+  return useQuery({
+    queryKey: queryKeys.availableTiers,
+    queryFn: async () => {
+      const response = await axios.get('/api/plans/tiers');
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to fetch tiers');
+      }
+      return response.data.data as AvailableTier[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+};
+
+/**
+ * Hook: Get available intervals from database (for dynamic filters)
+ */
+export const useAvailableIntervals = () => {
+  return useQuery({
+    queryKey: queryKeys.availableIntervals,
+    queryFn: async () => {
+      const response = await axios.get('/api/plans/intervals');
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to fetch intervals');
+      }
+      return response.data.data as AvailableInterval[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 };
 
 // ============================================================================
@@ -146,17 +194,17 @@ interface UsePricingReturn {
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
-  selectedInterval: PlanInterval;
-  setSelectedInterval: (interval: PlanInterval) => void;
+  selectedInterval: string;
+  setSelectedInterval: (interval: string) => void;
   getPricingForTier: (tier: TierPricing) => IntervalPricing | undefined;
-  getPricingForTierAndInterval: (tier: string, interval: PlanInterval) => IntervalPricing | undefined;
-  getIntervalLabel: (interval: PlanInterval) => string;
+  getPricingForTierAndInterval: (tier: string, interval: string) => IntervalPricing | undefined;
+  getIntervalLabel: (interval: string) => string;
   getBestValueInterval: (tier: TierPricing) => IntervalPricing | undefined;
   refetch: () => void;
 }
 
-export function usePricing(initialInterval: PlanInterval = PlanInterval.MONTHLY): UsePricingReturn {
-  const [selectedInterval, setSelectedInterval] = useState<PlanInterval>(initialInterval);
+export function usePricing(initialInterval = "monthly"): UsePricingReturn {
+  const [selectedInterval, setSelectedInterval] = useState(initialInterval);
   
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: queryKeys.pricing,
@@ -175,21 +223,16 @@ export function usePricing(initialInterval: PlanInterval = PlanInterval.MONTHLY)
     return tier.intervals.find(i => i.interval === selectedInterval);
   }, [selectedInterval]);
 
-  const getPricingForTierAndInterval = useCallback((tier: string, interval: PlanInterval) => {
+  const getPricingForTierAndInterval = useCallback((tier: string, interval: string) => {
     if (!data) return undefined;
     const tierData = data.tiers.find(t => t.tier === tier || t.name.toLowerCase() === tier.toLowerCase());
     return tierData?.intervals.find(i => i.interval === interval);
   }, [data]);
 
-  const getIntervalLabel = useCallback((interval: PlanInterval) => {
-    const labels: Record<PlanInterval, string> = {
-      [PlanInterval.MONTHLY]: 'Monthly',
-      [PlanInterval.QUARTERLY]: 'Quarterly',
-      [PlanInterval.BIANNUAL]: 'Biannual',
-      [PlanInterval.ANNUAL]: 'Annual',
-      [PlanInterval.LIFETIME]: 'Lifetime'
-    };
-    return labels[interval];
+  // ✅ Updated: Dynamic interval label lookup
+  const getIntervalLabel = useCallback((interval: string) => {
+    // Return the interval name capitalized (or you could fetch from API)
+    return interval.charAt(0).toUpperCase() + interval.slice(1);
   }, []);
 
   const getBestValueInterval = useCallback((tier: TierPricing) => {
@@ -218,8 +261,8 @@ export function usePricing(initialInterval: PlanInterval = PlanInterval.MONTHLY)
 // ============================================================================
 
 interface UsePlansOptions {
-  tiers?: PlanTier[];
-  intervals?: PlanInterval[];
+  tiers?: string[];  // ✅ Changed from PlanTier[] to string[]
+  intervals?: string[];  // ✅ Changed from PlanInterval[] to string[]
   isActive?: boolean;
   isPublic?: boolean;
 }
@@ -321,7 +364,7 @@ interface UsePlansByTierReturn {
   refetch: () => void;
 }
 
-export function usePlansByTier(tier: PlanTier): UsePlansByTierReturn {
+export function usePlansByTier(tier: string): UsePlansByTierReturn {  // ✅ Changed from PlanTier to string
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: queryKeys.plansByTier(tier),
     queryFn: async () => {
@@ -408,6 +451,36 @@ export function useCoupon(): UseCouponReturn {
 }
 
 // ============================================================================
+// NEW: Helper hook to get all available options for filters
+// ============================================================================
+
+interface UsePlanOptionsReturn {
+  tiers: AvailableTier[];
+  intervals: AvailableInterval[];
+  isLoading: boolean;
+  isError: boolean;
+  error: Error | null;
+  refetch: () => void;
+}
+
+export function usePlanOptions(): UsePlanOptionsReturn {
+  const { data: tiers, isLoading: tiersLoading, isError: tiersIsError, error: tiersError, refetch: refetchTiers } = useAvailableTiers();
+  const { data: intervals, isLoading: intervalsLoading, isError: intervalsIsError, error: intervalsError, refetch: refetchIntervals } = useAvailableIntervals();
+  
+  return {
+    tiers: tiers || [],
+    intervals: intervals || [],
+    isLoading: tiersLoading || intervalsLoading,
+    isError: tiersIsError || intervalsIsError,
+    error: (tiersError || intervalsError) as Error | null,
+    refetch: () => {
+      refetchTiers();
+      refetchIntervals();
+    },
+  };
+}
+
+// ============================================================================
 // Export all hooks
 // ============================================================================
 
@@ -417,4 +490,7 @@ export default {
   usePlan,
   usePlansByTier,
   useCoupon,
+  useAvailableTiers,
+  useAvailableIntervals,
+  usePlanOptions,
 };

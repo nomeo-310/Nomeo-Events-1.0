@@ -1,6 +1,6 @@
 // models/subscription.ts
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import { PlanInterval, PlanTier, DiscountType, Plan } from './plan';
+import { DiscountType, Plan } from './plan';
 import { Notification } from './notification';
 import { ObjectId } from 'mongodb';
 
@@ -29,9 +29,9 @@ export interface ISubscription {
   status: SubscriptionStatus;
 
   // Plan snapshot — denormalized so billing history is correct if plan changes
-  planTier: PlanTier;
+  planTier: string;    // ✅ Changed from enum to string
   planName: string;
-  interval: PlanInterval;
+  interval: string;    // ✅ Changed from enum to string
   priceKobo: number;
   currency: string;
 
@@ -75,8 +75,6 @@ export interface ISubscriptionDocument extends ISubscription, Document {
 }
 
 // ── Static methods ─────────────────────────────────────────────────────────────
-// initialSubscription takes (userId, username) — username is used in the
-// welcome notification. subscribeToFreePlan mirrors this signature.
 
 interface ISubscriptionModel extends Model<ISubscriptionDocument> {
   findActiveByUser(userId: string): Promise<ISubscriptionDocument | null>;
@@ -101,10 +99,10 @@ const SubscriptionSchema = new Schema<ISubscriptionDocument, ISubscriptionModel>
       default: SubscriptionStatus.TRIALING
     },
 
-    // Plan snapshot
-    planTier: { type: String, enum: Object.values(PlanTier), required: true },
+    // Plan snapshot - now using strings (no enum validation)
+    planTier: { type: String, required: true },  // ✅ Removed enum
     planName: { type: String, required: true },
-    interval: { type: String, enum: Object.values(PlanInterval), required: true },
+    interval: { type: String, required: true },  // ✅ Removed enum
     priceKobo: { type: Number, required: true, min: 0 },
     currency: { type: String, default: 'NGN' },
 
@@ -162,10 +160,7 @@ SubscriptionSchema.methods.isInTrial = function (): boolean {
   );
 };
 
-SubscriptionSchema.methods.cancel = async function (
-  reason?: string,
-  immediately = false
-): Promise<ISubscriptionDocument> {
+SubscriptionSchema.methods.cancel = async function ( reason?: string, immediately = false ): Promise<ISubscriptionDocument> {
   this.cancelledAt = new Date();
   this.cancellationReason = reason ?? 'User cancelled';
 
@@ -174,16 +169,12 @@ SubscriptionSchema.methods.cancel = async function (
     this.currentPeriodEnd = new Date();
   } else {
     this.cancelAtPeriodEnd = true;
-    // Status stays ACTIVE — cron expires it at period end
   }
 
   return this.save();
 };
 
-SubscriptionSchema.methods.recordPayment = async function (
-  paymentId: mongoose.Types.ObjectId,
-  newPeriodEnd: Date
-): Promise<ISubscriptionDocument> {
+SubscriptionSchema.methods.recordPayment = async function ( paymentId: mongoose.Types.ObjectId, newPeriodEnd: Date ): Promise<ISubscriptionDocument> {
   this.payments.push(paymentId);
   this.currentPeriodStart = this.currentPeriodEnd;
   this.currentPeriodEnd = newPeriodEnd;
@@ -193,9 +184,7 @@ SubscriptionSchema.methods.recordPayment = async function (
 
 // ─── Static methods ───────────────────────────────────────────────────────────
 
-SubscriptionSchema.statics.findActiveByUser = function (
-  userId: string
-): Promise<ISubscriptionDocument | null> {
+SubscriptionSchema.statics.findActiveByUser = function ( userId: string ): Promise<ISubscriptionDocument | null> {
   return this.findOne({
     userId: new mongoose.Types.ObjectId(userId),
     status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
@@ -207,10 +196,10 @@ SubscriptionSchema.statics.findActiveByUser = function (
     .exec();
 };
 
-SubscriptionSchema.statics.findFreePlan = function () {
-  return Plan.findOne({
-    $or: [{ priceKobo: 0 }, { tier: PlanTier.FREE }],
-  }).exec();
+// ✅ FIXED: findFreePlan - no longer depends on PlanTier enum
+SubscriptionSchema.statics.findFreePlan = async function () {
+  // Find free plan by priceKobo === 0 (most reliable)
+  return Plan.findOne({ priceKobo: 0 }).exec();
 };
 
 /**
@@ -221,22 +210,17 @@ SubscriptionSchema.statics.findFreePlan = function () {
  * @param userId   - The new user's ObjectId string
  * @param username - Used in the welcome notification message
  */
-SubscriptionSchema.statics.initialSubscription = async function (
-  userId: string,
-  username: string
-): Promise<ISubscriptionDocument> {
+SubscriptionSchema.statics.initialSubscription = async function ( userId: string, username: string ): Promise<ISubscriptionDocument> {
   // Guard: only one subscription per user
   const existing = await this.findOne({ userId: new mongoose.Types.ObjectId(userId) });
   if (existing) {
     throw new Error('User already has a subscription');
   }
 
-  const freePlan = await Plan.findOne({
-    $or: [{ priceKobo: 0 }, { tier: PlanTier.FREE }],
-  });
+  const freePlan = await this.findFreePlan();
 
   if (!freePlan) {
-    throw new Error('No free plan found. Please seed a free plan first.');
+    throw new Error('No free plan found. Please create a free plan first (priceKobo = 0).');
   }
 
   const now = new Date();
@@ -274,7 +258,7 @@ SubscriptionSchema.statics.initialSubscription = async function (
     trialEnd,
     currentPeriodStart: now,
     currentPeriodEnd,
-    cancelAtPeriodEnd: true,
+    cancelAtPeriodEnd: false,
     payments: [],
     maxEvents: freePlan.maxEvents,
     maxAttendeesPerEvent: freePlan.maxAttendeesPerEvent,
@@ -283,7 +267,7 @@ SubscriptionSchema.statics.initialSubscription = async function (
     metadata: new Map([['source', 'initial_signup']]),
   });
 
-// Send welcome notification
+  // Send welcome notification
   const trialEndDateFormatted = trialEnd?.toLocaleDateString() || 'the end of your trial';
   
   await Notification.create({
@@ -328,6 +312,10 @@ SubscriptionSchema.index({ userId: 1 });
 SubscriptionSchema.index({ planId: 1, status: 1 });
 SubscriptionSchema.index({ currentPeriodEnd: 1, status: 1 });
 SubscriptionSchema.index({ paystackSubscriptionCode: 1 });
+// ✅ Added indexes for dynamic tier/interval filtering
+SubscriptionSchema.index({ planTier: 1, status: 1 });
+SubscriptionSchema.index({ interval: 1, status: 1 });
+SubscriptionSchema.index({ createdAt: -1 });
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 

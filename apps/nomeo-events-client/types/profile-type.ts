@@ -82,7 +82,11 @@ export interface ProfileMetadata {
 // Base profile (fields always present)
 export interface BaseProfile {
   _id: string;
-  userId?: string;
+  userId?: {
+    _id: string;
+    email: string;
+    createdAt: string;
+  };
   fullName: string;
   displayName?: string;
   accountType: "individual" | "organization";
@@ -124,7 +128,11 @@ export interface BaseProfile {
 
 // Private profile (own user, full data)
 export interface PrivateProfile extends BaseProfile {
-  userId: string;
+  userId: {
+    _id: string;
+    email: string;
+    createdAt: string;
+  };
   verificationDocuments?: VerificationDocument[];
   analytics?: ProfileAnalytics;
   metadata?: ProfileMetadata;

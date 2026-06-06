@@ -37,6 +37,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       ...plan,
 
       // ✅ FIXED: remove optional chaining (guaranteed to exist)
+      tierId: plan.tierId ? plan.tierId.toString() : undefined,
+      intervalId: plan.intervalId ? plan.intervalId.toString() : undefined,
+
+      // ✅ FIXED: ensure _id is always string
       _id: plan._id.toString(),
 
       // ✅ FIXED: ensure always string

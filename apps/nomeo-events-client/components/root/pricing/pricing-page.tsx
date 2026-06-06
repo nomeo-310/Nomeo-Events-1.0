@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ChampionIcon, SparklesIcon, ArrowRight01Icon, Tick01Icon, ArrowDataTransferHorizontalIcon as CompareIcon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
-import { usePricing, PlanTier } from '@/hooks/use-plans';
+import { usePricing, usePlanOptions } from '@/hooks/use-plans';
 import { authClient } from '@/lib/auth-client';
 import { useModal } from '@/hooks/use-modal';
 import { AuthWrapper } from '@/components/root/auth/auth-wrapper';
@@ -22,19 +22,25 @@ import { CompareModal } from './compare-modal';
 import { ConfirmationModal } from './confirmation-modal';
 import { PaymentModal } from './payment-modal';
 
+// ✅ Helper to check if a tier is free (based on name/slug)
+const isFreeTier = (tier: TierPricing): boolean => {
+  return tier.tier === 'free' || tier.name?.toLowerCase() === 'free' || tier.slug === 'free';
+};
+
 export const PricingPage: React.FC = () => {
   const { data: session } = authClient.useSession();
   const router = useRouter();
   const { openModal, closeModal } = useModal();
 
   const { tiers, supportedIntervals, isLoading, isError, error, selectedInterval, setSelectedInterval, getPricingForTier, refetch } = usePricing();
+  const { tiers: availableTiers, intervals: availableIntervals } = usePlanOptions();
 
   // ── State ──────────────────────────────────────────────────────────────────
-  const [selectedTier,            setSelectedTier]            = useState<PlanTier | null>(null);
+  const [selectedTier,            setSelectedTier]            = useState<string | null>(null);
   const [showPaymentModal,        setShowPaymentModal]        = useState(false);
   const [showConfirmationModal,   setShowConfirmationModal]   = useState(false);
   const [showCompareModal,        setShowCompareModal]        = useState(false);
-  const [selectedPlansForCompare, setSelectedPlansForCompare] = useState<PlanTier[]>([]);
+  const [selectedPlansForCompare, setSelectedPlansForCompare] = useState<string[]>([]);
   const [selectedPlanForPayment,  setSelectedPlanForPayment]  = useState<SelectedPlanForPayment | null>(null);
 
   const isLoggedIn = !!session;
@@ -59,17 +65,13 @@ export const PricingPage: React.FC = () => {
   // ── Default plan selection ─────────────────────────────────────────────────
   useEffect(() => {
     if (tiers.length > 0 && !selectedTier) {
-      const firstPaid = tiers.find((t) => t.tier !== PlanTier.FREE);
+      // ✅ Find first paid tier (not free)
+      const firstPaid = tiers.find((t) => !isFreeTier(t));
       setSelectedTier(firstPaid?.tier ?? tiers[0]?.tier ?? null);
     }
   }, [tiers, selectedTier]);
 
   // ── Subscribe flow ─────────────────────────────────────────────────────────
-  // No pre-created pending subscription. We only resolve planId + planSlug
-  // here so PaymentModal can call POST /api/payments/initiate with just
-  // { purpose, email, amount, planId }.
-  // The subscription record is created by POST /api/subscriptions AFTER
-  // payment is verified — mirroring exactly how registration works.
   const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing) => {
     if (!session) { saveReturnUrl(); handleOpenLogin(); return; }
 
@@ -265,7 +267,8 @@ export const PricingPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {displayTier.tier !== PlanTier.FREE && (
+                  {/* ✅ Changed: Check if tier is free using helper function */}
+                  {!isFreeTier(displayTier) && (
                     <div className="mt-6">
                       <button
                         onClick={() => handleSubscribeClick(displayTier, displayPricing)}

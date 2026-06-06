@@ -1,6 +1,6 @@
 import { connectDB } from '@/lib/mongoose';
 import { Plan } from '@/models/plan';
-import { ApiResponse, PlanInterval, DiscountType, CouponStatus } from '@/types/plan-type';
+import { ApiResponse, DiscountType, CouponStatus } from '@/types/plan-type';
 import { NextRequest, NextResponse } from 'next/server';
 
 function formatPrice(priceKobo: number): string {

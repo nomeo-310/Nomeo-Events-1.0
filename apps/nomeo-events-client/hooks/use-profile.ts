@@ -1,7 +1,7 @@
 // hooks/use-profile.ts
 'use client';
 
-import { BaseProfile, PrivateProfile, ProfilePicture } from '@/types/profile-type';
+import { BaseProfile, PrivateProfile } from '@/types/profile-type';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { toast } from 'sonner';
