@@ -1,16 +1,22 @@
 "use client";
 
-import Link from "next/link";
+
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Mail01Icon, TelephoneIcon } from "@hugeicons/core-free-icons";
 import { socialLinks } from "./data/social-links";
 import { BrandColumnProps } from "@/types/footer-type";
+import Image from "next/image";
 
 const BrandColumn = ({ onContactClick }: BrandColumnProps) => {
   return (
     <div className="space-y-4">
-      <div className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-        Nomeo Events
+      <div className="flex items-center gap-3">
+        <div className="size-9 flex items-center justify-center">
+          <Image src={'/images/logo.png'} width={32} height={32} className="object-contain" alt="logo" priority/>
+        </div>
+        <div className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+          Nomeo Events
+        </div>
       </div>
       <p className="text-sm text-gray-400 leading-relaxed">
         Where moments meet magic. The all-in-one event management platform for seminars, webinars, and entertainment events.

@@ -9,6 +9,7 @@ import { ResetPasswordForm } from "./reset-password-form";
 import { motion, AnimatePresence } from "framer-motion";
 import { authClient } from "@/lib/auth-client";
 import { VerifyOtpForm } from "./verify-otp-form";
+import Image from "next/image";
 
 type AuthView =
   | "login"
@@ -151,13 +152,18 @@ export const AuthWrapper = ({
 
   return (
     <div className="space-y-6">
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {getTitle()}
-        </h2>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          {getDescription()}
-        </p>
+      <div className="flex items-center justify-center gap-3">
+        <div className="size-20 flex items-center justify-center">
+          <Image src={'/images/logo.png'} alt="logo" width={100} height={100} className="object-contain "/>
+        </div>
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+            {getTitle()}
+          </h2>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            {getDescription()}
+          </p>
+        </div>
       </div>
 
       <AnimatePresence mode="wait">
