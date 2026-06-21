@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Image from "next/image";
-import Logo from '@/public/logo.jpg'
+import Logo from '@/public/logo.png'
 
 const LoginPage = () => {
   const [step, setStep] = useState<1 | 2>(1);
