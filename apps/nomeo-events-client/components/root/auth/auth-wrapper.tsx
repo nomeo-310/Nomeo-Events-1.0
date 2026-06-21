@@ -154,7 +154,7 @@ export const AuthWrapper = ({
     <div className="space-y-6">
       <div className="flex items-center justify-center gap-3">
         <div className="size-20 flex items-center justify-center">
-          <Image src={'/images/logo.png'} alt="logo" width={100} height={100} className="object-contain "/>
+          <Image src={'/images/logo.png'} alt="logo" width={50} height={50} className="object-contain "/>
         </div>
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
