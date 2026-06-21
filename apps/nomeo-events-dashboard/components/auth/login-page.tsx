@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
+import Image from "next/image";
 
 const LoginPage = () => {
   const [step, setStep] = useState<1 | 2>(1);
@@ -177,8 +178,8 @@ const LoginPage = () => {
               transition={{ duration: 0.6 }}
               className="mb-16 flex gap-2 items-center"
             >
-              <div className="border-2 border-white/30 flex items-center justify-center size-12 font-extrabold text-2xl text-white rounded-xl bg-white/10 backdrop-blur-sm">
-                N
+              <div className="flex items-center justify-center size-14">
+                <Image src={'/logo.png'} alt="logo" width={48} height={48}/>
               </div>
               <span className="text-white text-2xl font-bold tracking-tight">Nomeo Events</span>
             </motion.div>
