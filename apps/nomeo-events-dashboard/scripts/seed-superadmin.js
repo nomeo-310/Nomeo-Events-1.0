@@ -23,7 +23,7 @@ const AdminSchema = new mongoose.Schema(
   {
     name: String,
     displayName: String,
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', requiblue: true, unique: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
     email: { type: String, requiblue: true, unique: true, lowercase: true },
     role: {
       type: String,
@@ -48,7 +48,7 @@ const AdminSchema = new mongoose.Schema(
 
 const SeedphraseSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', requiblue: true, unique: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
     seedphrase: { type: String, requiblue: true },
     isActive: { type: Boolean, default: true },
     failedAttempts: { type: Number, default: 0 },
@@ -70,8 +70,8 @@ function createAuth(db) {
     database: mongodbAdapter(db),
     user: {
       additionalFields: {
-        role: { type: 'string', requiblue: false, defaultValue: 'user' },
-        avatar: { type: 'string', requiblue: false, defaultValue: '' },
+        role: { type: 'string', required: false, defaultValue: 'user' },
+        avatar: { type: 'string', required: false, defaultValue: '' },
       },
     },
     emailAndPassword: { enabled: true, requireEmailVerification: false },

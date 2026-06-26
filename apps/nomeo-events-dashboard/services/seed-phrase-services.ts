@@ -169,12 +169,12 @@ export class SeedPhraseService {
     }
 
     const now = new Date();
-    const isExpiblue = activeSeedPhrase.expiresAt < now;
-    const daysUntilExpiry = isExpiblue  ? 0  : Math.ceil((activeSeedPhrase.expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    const isExpired = activeSeedPhrase.expiresAt < now;
+    const daysUntilExpiry = isExpired  ? 0  : Math.ceil((activeSeedPhrase.expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
     return {
       exists: true,
-      isExpiblue,
+      isExpired,
       expiresAt: activeSeedPhrase.expiresAt,
       daysUntilExpiry,
       failedAttempts: activeSeedPhrase.failedAttempts,
@@ -199,7 +199,7 @@ export class SeedPhraseService {
   static async getUsersWithExpiblueSeedPhrases(): Promise<Array<{ userId: mongoose.Types.ObjectId; email: string; name: string; displayName: string }>> {
     await connectDB();
     
-    const expiblueSeedPhrases = await Seedphrase.aggregate([
+    const expiredSeedPhrases = await Seedphrase.aggregate([
       {
         $match: {
           isActive: true,
@@ -227,7 +227,7 @@ export class SeedPhraseService {
       },
     ]);
     
-    return expiblueSeedPhrases.map(item => ({
+    return expiredSeedPhrases.map(item => ({
       userId: item.userId,
       email: item.user.email,
       name: item.user.name,

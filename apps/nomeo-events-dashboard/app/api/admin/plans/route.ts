@@ -65,8 +65,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await connectDB();
-    const user = await requireSuperAdmin();
+
+    await requireSuperAdmin();
+
     const body = await req.json();
+
+    console.log(body)
     
     // Validate Required Fields
     const requiredFields = ['name', 'slug', 'tierId', 'intervalId', 'priceKobo'];
@@ -318,7 +322,6 @@ export async function PUT(req: NextRequest) {
     
     plan.isFree = plan.priceKobo === 0;
 
-    console.log(updates)
     
     // If updating tier or interval, validate they exist
     if (updates.tierId) {

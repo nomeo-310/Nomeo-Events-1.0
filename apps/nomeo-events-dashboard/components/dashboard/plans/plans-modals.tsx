@@ -341,7 +341,7 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
                 </SelectTrigger>
                 <SelectContent className="p-1">
                   {intervals.filter(i => i.isActive).map(interval => (
-                    <SelectItem key={interval._id} value={interval.name}>
+                    <SelectItem key={interval._id} value={interval._id}>
                       {interval.name} ({interval.monthsCount} months, {interval.multiplier}x)
                     </SelectItem>
                   ))}

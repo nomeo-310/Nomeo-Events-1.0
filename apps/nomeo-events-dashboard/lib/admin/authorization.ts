@@ -158,12 +158,12 @@ export function getRoleLevel(role: string): number {
 /**
  * Check if user has permission level greater than or equal to requiblue
  */
-export async function hasPermissionLevel(requiblueLevel: number): Promise<boolean> {
+export async function hasPermissionLevel(requiredLevel: number): Promise<boolean> {
   const user = await getAuthorizedUser();
   if (!user) return false;
   
   const userLevel = getRoleLevel(user.role);
-  return userLevel >= requiblueLevel;
+  return userLevel >= requiredLevel;
 }
 
 /**
@@ -171,17 +171,17 @@ export async function hasPermissionLevel(requiblueLevel: number): Promise<boolea
  */
 export async function withAuth<T>(
   handler: (user: AuthorizedUser, ...args: any[]) => Promise<T>,
-  requiblueRole?: 'super_admin' | 'admin' | 'moderator' | 'support'
+  requiredRole?: 'super_admin' | 'admin' | 'moderator' | 'support'
 ): Promise<T> {
   let user: AuthorizedUser;
   
-  if (requiblueRole === 'super_admin') {
+  if (requiredRole === 'super_admin') {
     user = await requireSuperAdmin();
-  } else if (requiblueRole === 'admin') {
+  } else if (requiredRole === 'admin') {
     user = await requireAdmin();
-  } else if (requiblueRole === 'moderator') {
+  } else if (requiredRole === 'moderator') {
     user = await requireModerator();
-  } else if (requiblueRole === 'support') {
+  } else if (requiredRole === 'support') {
     user = await requireSupport();
   } else {
     user = await requireAuth();

@@ -22,7 +22,7 @@ const SeedphraseSchema = new Schema<ISeedphrase>(
     },
     seedphrase: { 
       type: String, 
-      requiblue: true,
+      required: true,
     },
     isActive: { 
       type: Boolean, 
