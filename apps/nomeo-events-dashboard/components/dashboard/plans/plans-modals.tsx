@@ -110,7 +110,7 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
       setIsActive(true);
       setIsPublic(true);
       setTrialDays('0');
-      setSortOrder(String(Math.max(0, totalPlans - 1)));
+      setSortOrder(String(totalPlans));
       setMaxEvents('');
       setMaxAttendeesPerEvent('');
       setMaxTeamMembers('');
