@@ -37,7 +37,7 @@ interface PlanFormModalProps {
   totalPlans?: number;
 }
 
-export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmit, isLoading, totalPlans }: PlanFormModalProps) {
+export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmit, isLoading, totalPlans = 0 }: PlanFormModalProps) {
 
   const isEdit = !!plan;
 
@@ -68,7 +68,7 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
   const [newFeatureUnit, setNewFeatureUnit] = useState('');
   const [editingFeatureIndex, setEditingFeatureIndex] = useState<number | null>(null);
 
-  // Discounts (simplified for now)
+  // Discounts
   const [discountName, setDiscountName] = useState('');
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');
   const [discountValue, setDiscountValue] = useState('');
@@ -77,11 +77,11 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
   const [discountEndsAt, setDiscountEndsAt] = useState('');
   const [discounts, setDiscounts] = useState<any[]>([]);
 
+  // ── Populate / reset on open ───────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen) return;
 
     if (plan) {
-      // Populate form with existing plan data
       setName(plan.name);
       setSlug(plan.slug);
       setSelectedTierId(plan.tierId?._id || '');
@@ -93,42 +93,60 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
       setIsPublic(plan.isPublic);
       setTrialDays(String(plan.trialDays || 0));
       setSortOrder(String(plan.sortOrder || 0));
-
-      // Limits
       setMaxEvents(plan.maxEvents !== undefined && plan.maxEvents !== null ? String(plan.maxEvents) : '');
       setMaxAttendeesPerEvent(plan.maxAttendeesPerEvent !== undefined && plan.maxAttendeesPerEvent !== null ? String(plan.maxAttendeesPerEvent) : '');
       setMaxTeamMembers(plan.maxTeamMembers !== undefined && plan.maxTeamMembers !== null ? String(plan.maxTeamMembers) : '');
       setStorageGb(plan.storageGb !== undefined && plan.storageGb !== null ? String(plan.storageGb) : '');
-
-      // Features
       setFeatures(plan.features || []);
       setDiscounts(plan.discounts || []);
     } else {
-      // Reset form for new plan
       setName('');
       setSlug('');
-      setSelectedTierId(tiers[0]?._id || '');
-      setSelectedIntervalId(intervals[0]?._id || '');
+      setSelectedTierId('');
+      setSelectedIntervalId('');
       setPriceKobo('0');
       setCurrency('NGN');
       setDescription('');
       setIsActive(true);
       setIsPublic(true);
       setTrialDays('0');
-      // Ensure totalPlans can't be undefined when calculating default sort order
-      setSortOrder(String(totalPlans || 0));
-
-      // Limits
+      setSortOrder(String(Math.max(0, totalPlans - 1)));
       setMaxEvents('');
       setMaxAttendeesPerEvent('');
       setMaxTeamMembers('');
       setStorageGb('');
-
-      // Features
       setFeatures([]);
       setDiscounts([]);
     }
   }, [isOpen, plan, tiers, intervals]);
+
+  // ── Auto-generate name & slug from tier + interval (create mode only) ──────
+  useEffect(() => {
+    if (isEdit) return;
+    if (!selectedTierId) return;
+
+    const tier = tiers.find(t => t._id === selectedTierId);
+    if (!tier) return;
+
+    const isFree = tier.name.toLowerCase() === 'free';
+
+    if (isFree) {
+      // Free plans: name is always just "Free", interval doesn't affect it
+      setName('Free');
+      setSlug('free');
+    } else {
+      const interval = intervals.find(i => i._id === selectedIntervalId);
+      if (interval) {
+        const generatedName = `${tier.name} ${interval.name}`;
+        setName(generatedName);
+        setSlug(generateSlug(generatedName));
+      } else {
+        // Interval not yet selected — use tier name only as placeholder
+        setName(tier.name);
+        setSlug(generateSlug(tier.name));
+      }
+    }
+  }, [selectedTierId, selectedIntervalId, isEdit]);
 
   const generateSlug = (n: string) =>
     n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -138,7 +156,7 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
     if (!isEdit) setSlug(generateSlug(n));
   };
 
-  // Feature management
+  // ── Feature management ─────────────────────────────────────────────────────
   const addFeature = () => {
     if (!newFeatureName.trim()) {
       toast.error('Feature name is required');
@@ -162,7 +180,6 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
       setFeatures([...features, newFeature]);
     }
 
-    // Reset form
     setNewFeatureName('');
     setNewFeatureDescription('');
     setNewFeatureLimit('');
@@ -189,7 +206,7 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
     }
   };
 
-  // Discount management
+  // ── Discount management ────────────────────────────────────────────────────
   const addDiscount = () => {
     if (!discountName.trim()) {
       toast.error('Discount name is required');
@@ -212,8 +229,6 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
     };
 
     setDiscounts([...discounts, newDiscount]);
-
-    // Reset form
     setDiscountName('');
     setDiscountValue('');
     setDiscountInterval('');
@@ -225,6 +240,7 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
     setDiscounts(discounts.filter((_, i) => i !== index));
   };
 
+  // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!name.trim() || !slug.trim()) {
       toast.error('Name and slug are required');
@@ -234,12 +250,15 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
       toast.error('Please select a tier');
       return;
     }
+
+    const selectedTierObj = tiers.find(t => t._id === selectedTierId);
+    const isFree = selectedTierObj?.name?.toLowerCase() === 'free';
+
     if (!selectedIntervalId) {
-      toast.error('Please select an interval');
+      toast.error('Please select a billing interval');
       return;
     }
 
-    // Parse limits (empty string means unlimited/null)
     const parseLimit = (value: string): number | undefined => {
       if (!value || value === '') return undefined;
       const num = parseFloat(value);
@@ -258,17 +277,11 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
       isPublic,
       trialDays: Math.max(0, parseInt(trialDays) || 0),
       sortOrder: parseInt(sortOrder) || 0,
-      
-      // Limits
       maxEvents: parseLimit(maxEvents),
       maxAttendeesPerEvent: parseLimit(maxAttendeesPerEvent),
       maxTeamMembers: parseLimit(maxTeamMembers),
       storageGb: parseLimit(storageGb),
-      
-      // Features
       features: features.filter(f => f.name.trim()),
-      
-      // Discounts
       discounts: discounts,
     };
 
@@ -276,9 +289,8 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
     onClose();
   };
 
-  const selectedTier = tiers.find(t => t._id === selectedTierId);
-  const selectedInterval = intervals.find(i => i._id === selectedIntervalId);
-
+  const selectedTierObj = tiers.find(t => t._id === selectedTierId);
+  const selectedIntervalObj = intervals.find(i => i._id === selectedIntervalId);
   const isEditingFeature = editingFeatureIndex !== null;
 
   return (
@@ -297,34 +309,20 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
       ]}
     >
       <div className="space-y-6 max-h-[70vh] overflow-y-auto px-2">
+
         {/* Basic Information Section */}
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-800 pb-2">
             Basic Information
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label className="text-xs font-semibold">Plan Name *</Label>
-              <Input value={name} onChange={e => handleNameChange(e.target.value)}
-                placeholder="e.g. Pro Monthly" className="mt-1.5" />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Slug *</Label>
-              <Input value={slug}
-                onChange={e => setSlug(generateSlug(e.target.value))}
-                placeholder="e.g. pro-monthly" className="mt-1.5"
-                disabled={isEdit} />
-            </div>
-          </div>
 
+          {/* ── Tier & Interval FIRST ── */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label className="text-xs font-semibold">Tier *</Label>
-              <Select value={selectedTierId} onValueChange={(v) => setSelectedTierId(v ?? "")}>
+              <Select value={selectedTierId} onValueChange={(v) => setSelectedTierId(v ?? '')}>
                 <SelectTrigger className="mt-1.5 w-full h-10 lg:h-11">
-                  <SelectValue placeholder="Select tier">
-                    {selectedTier && selectedTier.name}
-                  </SelectValue>
+                  <SelectValue placeholder="Select tier" />
                 </SelectTrigger>
                 <SelectContent className="p-1">
                   {tiers.filter(t => t.isActive).map(tier => (
@@ -336,12 +334,15 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
               </Select>
             </div>
             <div>
-              <Label className="text-xs font-semibold">Billing Interval *</Label>
-              <Select value={selectedIntervalId} onValueChange={(v) => setSelectedIntervalId(v ?? "")}>
+              <Label className="text-xs font-semibold">
+                Billing Interval {selectedTierObj?.name?.toLowerCase() !== 'free' ? '*' : '(optional for free)'}
+              </Label>
+              <Select
+                value={selectedIntervalId}
+                onValueChange={(v) => setSelectedIntervalId(v ?? '')}
+              >
                 <SelectTrigger className="mt-1.5 w-full h-10 lg:h-11">
-                  <SelectValue placeholder="Select interval">
-                    {selectedInterval && selectedInterval.name}
-                  </SelectValue>
+                  <SelectValue placeholder="Select interval" />
                 </SelectTrigger>
                 <SelectContent className="p-1">
                   {intervals.filter(i => i.isActive).map(interval => (
@@ -351,6 +352,37 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
                   ))}
                 </SelectContent>
               </Select>
+              {selectedTierObj?.name?.toLowerCase() === 'free' && (
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Interval won't appear in the plan name or slug for free plans
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* ── Name & Slug SECOND — auto-filled, editable ── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-xs font-semibold">Plan Name *</Label>
+              <Input
+                value={name}
+                onChange={e => handleNameChange(e.target.value)}
+                placeholder="Select tier and interval above…"
+                className="mt-1.5"
+              />
+              {!isEdit && (
+                <p className="text-[10px] text-gray-400 mt-1">Auto-filled from tier + interval, editable</p>
+              )}
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Slug *</Label>
+              <Input
+                value={slug}
+                onChange={e => setSlug(generateSlug(e.target.value))}
+                placeholder="e.g. pro-monthly"
+                className="mt-1.5"
+                disabled={isEdit}
+              />
             </div>
           </div>
 
@@ -371,7 +403,7 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
             </div>
             <div>
               <Label className="text-xs font-semibold">Currency</Label>
-              <Select value={currency} onValueChange={(v) => setCurrency(v ?? "NGN")}>
+              <Select value={currency} onValueChange={(v) => setCurrency(v ?? 'NGN')}>
                 <SelectTrigger className="mt-1.5 w-full h-10 lg:h-11">
                   <SelectValue />
                 </SelectTrigger>
@@ -419,50 +451,50 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label className="text-xs font-semibold">Max Events</Label>
-              <Input 
-                type="number" 
-                min={0} 
+              <Input
+                type="number"
+                min={0}
                 value={maxEvents}
-                onChange={e => setMaxEvents(e.target.value)} 
+                onChange={e => setMaxEvents(e.target.value)}
                 placeholder="Leave empty for unlimited"
-                className="mt-1.5" 
+                className="mt-1.5"
               />
               <p className="text-[10px] text-gray-400 mt-1">Maximum number of events allowed</p>
             </div>
             <div>
               <Label className="text-xs font-semibold">Max Attendees Per Event</Label>
-              <Input 
-                type="number" 
-                min={0} 
+              <Input
+                type="number"
+                min={0}
                 value={maxAttendeesPerEvent}
-                onChange={e => setMaxAttendeesPerEvent(e.target.value)} 
+                onChange={e => setMaxAttendeesPerEvent(e.target.value)}
                 placeholder="Leave empty for unlimited"
-                className="mt-1.5" 
+                className="mt-1.5"
               />
               <p className="text-[10px] text-gray-400 mt-1">Maximum attendees per single event</p>
             </div>
             <div>
               <Label className="text-xs font-semibold">Max Team Members</Label>
-              <Input 
-                type="number" 
-                min={0} 
+              <Input
+                type="number"
+                min={0}
                 value={maxTeamMembers}
-                onChange={e => setMaxTeamMembers(e.target.value)} 
+                onChange={e => setMaxTeamMembers(e.target.value)}
                 placeholder="Leave empty for unlimited"
-                className="mt-1.5" 
+                className="mt-1.5"
               />
               <p className="text-[10px] text-gray-400 mt-1">Number of team members allowed</p>
             </div>
             <div>
               <Label className="text-xs font-semibold">Storage (GB)</Label>
-              <Input 
-                type="number" 
+              <Input
+                type="number"
                 min={0}
                 step={'any'}
                 value={storageGb}
-                onChange={e => setStorageGb(e.target.value)} 
+                onChange={e => setStorageGb(e.target.value)}
                 placeholder="Leave empty for unlimited"
-                className="mt-1.5" 
+                className="mt-1.5"
               />
               <p className="text-[10px] text-gray-400 mt-1">Storage space in gigabytes</p>
             </div>
@@ -474,8 +506,7 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-800 pb-2">
             Plan Features
           </h3>
-          
-          {/* Existing Features List */}
+
           {features.length > 0 && (
             <div className="space-y-2 mb-4">
               {features.map((feature, idx) => (
@@ -514,7 +545,6 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
             </div>
           )}
 
-          {/* Add/Edit Feature Form */}
           <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4">
             <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-3">
               {isEditingFeature ? 'Edit Feature' : 'Add New Feature'}
@@ -522,42 +552,42 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
             <div className="space-y-3">
               <div>
                 <Label className="text-xs font-semibold">Feature Name</Label>
-                <Input 
+                <Input
                   value={newFeatureName}
                   onChange={e => setNewFeatureName(e.target.value)}
                   placeholder="e.g., Custom Domain, API Access"
-                  className="mt-1" 
+                  className="mt-1"
                 />
               </div>
               <div>
                 <Label className="text-xs font-semibold">Description (Optional)</Label>
-                <Input 
+                <Input
                   value={newFeatureDescription}
                   onChange={e => setNewFeatureDescription(e.target.value)}
                   placeholder="Brief description of this feature"
-                  className="mt-1" 
+                  className="mt-1"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs font-semibold">Limit (Optional)</Label>
-                  <Input 
-                    type="number" 
+                  <Input
+                    type="number"
                     min={0}
                     step={'any'}
                     value={newFeatureLimit}
                     onChange={e => setNewFeatureLimit(e.target.value)}
                     placeholder="e.g., 5"
-                    className="mt-1" 
+                    className="mt-1"
                   />
                 </div>
                 <div>
                   <Label className="text-xs font-semibold">Unit (Optional)</Label>
-                  <Input 
+                  <Input
                     value={newFeatureUnit}
                     onChange={e => setNewFeatureUnit(e.target.value)}
                     placeholder="e.g., GB, seats, domains"
-                    className="mt-1" 
+                    className="mt-1"
                   />
                 </div>
               </div>
@@ -592,12 +622,12 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
           </div>
         </div>
 
-        {/* Discounts Section (Simplified) */}
+        {/* Discounts Section */}
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-800 pb-2">
             Discounts
           </h3>
-          
+
           {discounts.length > 0 && (
             <div className="space-y-2 mb-4">
               {discounts.map((discount, idx) => (
@@ -626,11 +656,11 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs font-semibold">Discount Name</Label>
-                <Input 
+                <Input
                   value={discountName}
                   onChange={e => setDiscountName(e.target.value)}
                   placeholder="e.g., Early Bird Special"
-                  className="mt-1" 
+                  className="mt-1"
                 />
               </div>
               <div>
@@ -647,23 +677,23 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
               </div>
               <div>
                 <Label className="text-xs font-semibold">Discount Value</Label>
-                <Input 
-                  type="number" 
+                <Input
+                  type="number"
                   min={0}
                   step={discountType === 'percentage' ? 1 : 100}
                   value={discountValue}
                   onChange={e => setDiscountValue(e.target.value)}
                   placeholder={discountType === 'percentage' ? 'e.g., 20' : 'e.g., 5000'}
-                  className="mt-1" 
+                  className="mt-1"
                 />
               </div>
               <div>
                 <Label className="text-xs font-semibold">Applicable Interval (Optional)</Label>
-                <Input 
+                <Input
                   value={discountInterval}
                   onChange={e => setDiscountInterval(e.target.value)}
                   placeholder="e.g., monthly, annual"
-                  className="mt-1" 
+                  className="mt-1"
                 />
               </div>
             </div>
