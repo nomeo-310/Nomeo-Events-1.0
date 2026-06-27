@@ -116,7 +116,7 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
       setIsPublic(true);
       setTrialDays('0');
       // Ensure totalPlans can't be undefined when calculating default sort order
-      setSortOrder(String(Math.max(0, (totalPlans ?? 0) - 1)));
+      setSortOrder(String(totalPlans || 0));
 
       // Limits
       setMaxEvents('');
