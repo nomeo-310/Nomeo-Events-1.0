@@ -306,7 +306,7 @@ export const PricingPage: React.FC = () => {
               </>
             ) : (
               <div className="flex items-center justify-center h-64 rounded-xl border border-gray-100 dark:border-gray-800">
-                <p className="text-sm text-gray-400">Select a plan to see details</p>
+                <p className="text-sm text-gray-400">No plan for the selected tier or interval.</p>
               </div>
             )}
           </div>
