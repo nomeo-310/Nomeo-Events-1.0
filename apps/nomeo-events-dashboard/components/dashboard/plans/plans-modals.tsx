@@ -251,9 +251,6 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
       return;
     }
 
-    const selectedTierObj = tiers.find(t => t._id === selectedTierId);
-    const isFree = selectedTierObj?.name?.toLowerCase() === 'free';
-
     if (!selectedIntervalId) {
       toast.error('Please select a billing interval');
       return;
@@ -322,7 +319,9 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
               <Label className="text-xs font-semibold">Tier *</Label>
               <Select value={selectedTierId} onValueChange={(v) => setSelectedTierId(v ?? '')}>
                 <SelectTrigger className="mt-1.5 w-full h-10 lg:h-11">
-                  <SelectValue placeholder="Select tier" />
+                  <SelectValue placeholder="Select tier">
+                    {selectedTierObj && selectedTierObj.name}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="p-1">
                   {tiers.filter(t => t.isActive).map(tier => (
@@ -342,7 +341,9 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
                 onValueChange={(v) => setSelectedIntervalId(v ?? '')}
               >
                 <SelectTrigger className="mt-1.5 w-full h-10 lg:h-11">
-                  <SelectValue placeholder="Select interval" />
+                  <SelectValue placeholder="Select interval">
+                    {selectedIntervalObj && selectedIntervalObj.name}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="p-1">
                   {intervals.filter(i => i.isActive).map(interval => (
