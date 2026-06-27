@@ -34,9 +34,10 @@ interface PlanFormModalProps {
   intervals: IPlanInterval[];
   onSubmit: (data: CreatePlanParams) => Promise<void>;
   isLoading: boolean;
+  totalPlans?: number;
 }
 
-export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmit, isLoading }: PlanFormModalProps) {
+export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmit, isLoading, totalPlans }: PlanFormModalProps) {
 
   const isEdit = !!plan;
 
@@ -114,7 +115,8 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
       setIsActive(true);
       setIsPublic(true);
       setTrialDays('0');
-      setSortOrder('0');
+      // Ensure totalPlans can't be undefined when calculating default sort order
+      setSortOrder(String(Math.max(0, (totalPlans ?? 0) - 1)));
 
       // Limits
       setMaxEvents('');

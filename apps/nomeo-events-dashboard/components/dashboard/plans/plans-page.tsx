@@ -516,6 +516,7 @@ export default function PlansManagementPage() {
         intervals={intervals.filter((i: any) => i.isActive)}
         onSubmit={createPlan.mutateAsync}
         isLoading={createPlan.isPending}
+        totalPlans={plans.length} 
       />
 
       <PlanFormModal
