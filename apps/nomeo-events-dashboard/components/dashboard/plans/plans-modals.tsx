@@ -281,6 +281,8 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
 
   return (
     <ReusableModal
+      closeOnOutsideClick={false}
+      closeOnEscape={false}
       isOpen={isOpen}
       onClose={onClose}
       title={isEdit ? `Edit — ${plan!.name}` : 'Create New Plan'}
