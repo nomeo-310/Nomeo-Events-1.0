@@ -7,6 +7,7 @@ import {
   Delete03Icon as TrashIcon,
 } from '@hugeicons/core-free-icons';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -67,6 +68,8 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
   const [newFeatureLimit, setNewFeatureLimit] = useState('');
   const [newFeatureUnit, setNewFeatureUnit] = useState('');
   const [editingFeatureIndex, setEditingFeatureIndex] = useState<number | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Discounts
   const [discountName, setDiscountName] = useState('');
@@ -131,7 +134,6 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
     const isFree = tier.name.toLowerCase() === 'free';
 
     if (isFree) {
-      // Free plans: name is always just "Free", interval doesn't affect it
       setName('Free');
       setSlug('free');
     } else {
@@ -141,7 +143,6 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
         setName(generatedName);
         setSlug(generateSlug(generatedName));
       } else {
-        // Interval not yet selected — use tier name only as placeholder
         setName(tier.name);
         setSlug(generateSlug(tier.name));
       }
@@ -204,6 +205,31 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
       setNewFeatureLimit('');
       setNewFeatureUnit('');
     }
+  };
+
+  // ── Feature drag-and-drop ──────────────────────────────────────────────────
+  const handleDragStart = (index: number) => {
+    setDragIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  };
+
+  const handleDrop = (index: number) => {
+    if (dragIndex === null || dragIndex === index) return;
+    const updated = [...features];
+    const [moved] = updated.splice(dragIndex, 1);
+    updated.splice(index, 0, moved);
+    setFeatures(updated);
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setDragOverIndex(null);
   };
 
   // ── Discount management ────────────────────────────────────────────────────
@@ -511,7 +537,29 @@ export function PlanFormModal({ isOpen, onClose, plan, tiers, intervals, onSubmi
           {features.length > 0 && (
             <div className="space-y-2 mb-4">
               {features.map((feature, idx) => (
-                <div key={idx} className="flex items-start justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                <div
+                  key={idx}
+                  draggable
+                  onDragStart={() => handleDragStart(idx)}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDrop={() => handleDrop(idx)}
+                  onDragEnd={handleDragEnd}
+                  className={cn(
+                    'flex items-start justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg transition-all border-2',
+                    dragIndex === idx ? 'opacity-40 cursor-grabbing' : 'cursor-grab',
+                    dragOverIndex === idx && dragIndex !== idx
+                      ? 'border-blue-400 dark:border-blue-500 scale-[1.01]'
+                      : 'border-transparent',
+                  )}
+                >
+                  {/* Drag handle */}
+                  <div className="flex items-center mr-2 mt-0.5 text-gray-300 dark:text-gray-600 shrink-0">
+                    <svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor">
+                      <circle cx="4" cy="3" r="1.5"/><circle cx="8" cy="3" r="1.5"/>
+                      <circle cx="4" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
+                      <circle cx="4" cy="13" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
+                    </svg>
+                  </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-medium text-gray-900 dark:text-white">{feature.name}</span>
