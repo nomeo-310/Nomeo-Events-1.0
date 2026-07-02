@@ -25,7 +25,6 @@ import {
   EventMode,
   getDefaultMode,
   isVirtualMode,
-  PlanType,
 } from "@/types/create-event-type";
 import { EventTabs } from "../event-tabs";
 import { useSubscription } from "@/hooks/use-subscription";
@@ -89,6 +88,7 @@ const eventFormSchema = z
     }),
     totalSeats: z.number().min(1, "Total seats must be at least 1"),
     waitlistEnabled: z.boolean().default(false),
+    // ✅ plans is optional — ticket types may not be available on the user's plan
     plans: z
       .array(
         z.object({
@@ -101,7 +101,8 @@ const eventFormSchema = z
           earlyBirdDeadline: z.date().optional().nullable(),
         })
       )
-      .min(1, "At least one ticket plan is required"),
+      .optional()
+      .default([]),
     ageRequirement: z.object({
       required: z.boolean().default(false),
       minAge: z.number().min(0).max(120).optional().nullable(),
@@ -175,11 +176,12 @@ const ALL_STEPS = [
   { id: "summary",  title: "Summary",            description: "Review your event before publishing",     component: SummaryStep          },
 ];
 
+// ✅ Removed "plans" from tickets validation — plans are optional now
 const STEP_VALIDATION: Record<string, (keyof EventFormData)[]> = {
   basic:    ["title", "shortDescription", "description", "category", "type"],
   datetime: ["startDate", "endDate"],
   location: ["location"],
-  tickets:  ["totalSeats", "plans"],
+  tickets:  ["totalSeats"],
   age:      [],
   speakers: [],
   media:    [],
@@ -187,7 +189,7 @@ const STEP_VALIDATION: Record<string, (keyof EventFormData)[]> = {
   summary:  [],
 };
 
-// ─── Skeleton (matching dashboard pattern) ───────────────────────────────────
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function CreateEventPageSkeleton() {
   return (
@@ -200,8 +202,6 @@ function CreateEventPageSkeleton() {
         <div className="h-9 w-32 bg-gray-200 dark:bg-gray-700 rounded-lg" />
         <div className="h-9 w-24 bg-gray-200 dark:bg-gray-700 rounded-lg" />
       </div>
-      
-      {/* Progress steps skeleton */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-3">
           <div className="space-y-1">
@@ -214,35 +214,25 @@ function CreateEventPageSkeleton() {
           </div>
         </div>
       </div>
-
-      {/* Card skeleton */}
       <div className="rounded-xl bg-gray-200 dark:bg-gray-700 h-96" />
-      
-      {/* Navigation skeleton */}
       <div className="flex justify-between gap-4">
         <div className="h-10 w-24 bg-gray-200 dark:bg-gray-700 rounded-lg" />
         <div className="h-10 w-24 bg-gray-200 dark:bg-gray-700 rounded-lg" />
       </div>
     </div>
-  )
+  );
 }
 
 // ─── Not Allowed Message ──────────────────────────────────────────────────────
 
-interface NotAllowedMessageProps {
-  reason?: string;
-}
-
-function NotAllowedMessage({ reason }: NotAllowedMessageProps) {
+function NotAllowedMessage({ reason }: { reason?: string }) {
   const router = useRouter();
-  
   return (
     <div className="animate-pulse space-y-6">
       <div className="space-y-2">
         <div className="h-7 w-48 bg-gray-200 dark:bg-gray-700 rounded-lg" />
         <div className="h-4 w-72 bg-gray-200 dark:bg-gray-700 rounded-md" />
       </div>
-      
       <div className="max-w-2xl mx-auto text-center py-12">
         <div className="mb-6">
           <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -257,11 +247,7 @@ function NotAllowedMessage({ reason }: NotAllowedMessageProps) {
             {reason || "Your current plan doesn't allow creating more events. Please upgrade your subscription to continue creating events."}
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
-              onClick={() => router.back()}
-              variant="outline"
-              className="gap-2 h-11 px-4"
-            >
+            <Button onClick={() => router.back()} variant="outline" className="gap-2 h-11 px-4">
               <HugeiconsIcon icon={ArrowLeft02Icon} className="w-4 h-4" />
               Go Back
             </Button>
@@ -310,15 +296,8 @@ export default function CreateEventPage() {
       },
       totalSeats: 100,
       waitlistEnabled: false,
-      plans: [{
-        type: PlanType.REGULAR,
-        name: "Regular Ticket",
-        price: 0,
-        currency: "USD",
-        benefits: ["General admission"],
-        maxSeats: null,
-        earlyBirdDeadline: null,
-      }],
+      // ✅ Start empty — TicketsStep manages adding plans based on plan limits
+      plans: [],
       ageRequirement: {
         required: false,
         minAge: null,
@@ -351,7 +330,7 @@ export default function CreateEventPage() {
   const eventMode = watch("eventMode") as EventMode;
   const isSummaryStep = currentStep === ALL_STEPS.length - 1;
 
-  // ── Explicit submit — only ever called by the Create Event button onClick ──
+  // ── Submit ─────────────────────────────────────────────────────────────────
   const handleCreateEvent = async () => {
     const isValid = await form.trigger();
     if (!isValid) return;
@@ -362,11 +341,14 @@ export default function CreateEventPage() {
     try {
       await createEvent.mutateAsync({
         ...data,
-        plans: data.plans.map((p) => ({
-          ...p,
-          maxSeats: p.maxSeats ?? undefined,
-          earlyBirdDeadline: p.earlyBirdDeadline ?? undefined,
-        })),
+        // ✅ Filter out any empty/unsaved plans before submitting
+        plans: (data.plans ?? [])
+          .filter((p) => p.name?.trim() && p.type)
+          .map((p) => ({
+            ...p,
+            maxSeats: p.maxSeats ?? undefined,
+            earlyBirdDeadline: p.earlyBirdDeadline ?? undefined,
+          })),
         ageRequirement: {
           ...data.ageRequirement,
           minAge: data.ageRequirement.minAge ?? undefined,
@@ -383,7 +365,7 @@ export default function CreateEventPage() {
     }
   };
 
-  // ── Navigation ──────────────────────────────────────────────────────────────
+  // ── Navigation ─────────────────────────────────────────────────────────────
   const nextStep = async () => {
     const stepId = ALL_STEPS[currentStep].id;
     const fields = STEP_VALIDATION[stepId] ?? [];
@@ -415,14 +397,12 @@ export default function CreateEventPage() {
   };
 
   const StepComponent = ALL_STEPS[currentStep].component;
-
   const isLocationStep = ALL_STEPS[currentStep].id === "location";
   const stepTitle = isLocationStep && isVirtualMode(eventMode) ? "Online Details" : ALL_STEPS[currentStep].title;
   const stepDescription = isLocationStep && isVirtualMode(eventMode)
     ? "Platform and meeting link for your online event"
     : ALL_STEPS[currentStep].description;
 
-  // Show skeleton when loading (matches dashboard pattern)
   if (isLoading) {
     return (
       <>
@@ -439,7 +419,6 @@ export default function CreateEventPage() {
     );
   }
 
-  // Show not allowed message if user can't create events
   if (!allowCreation.allowed) {
     return (
       <>
@@ -447,9 +426,7 @@ export default function CreateEventPage() {
         <div className="container mx-auto pb-6">
           <div className="mb-6">
             <div className="flex items-center gap-6 mb-1">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Create Event
-              </h1>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create Event</h1>
             </div>
           </div>
           <NotAllowedMessage reason={allowCreation.reason} />
@@ -464,9 +441,7 @@ export default function CreateEventPage() {
       <div className="container mx-auto pb-6">
         <div className="mb-6">
           <div className="flex items-center gap-6 mb-1">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Create Event
-            </h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create Event</h1>
           </div>
         </div>
 
@@ -482,17 +457,13 @@ export default function CreateEventPage() {
           >
             {/* Progress steps */}
             <div className="mb-8">
-              {/* Step label header — shows current step info on mobile/tablet */}
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
                     Step {currentStep + 1} of {ALL_STEPS.length}
                   </p>
-                  <p className="text-sm font-semibold text-foreground mt-0.5">
-                    {stepTitle}
-                  </p>
+                  <p className="text-sm font-semibold text-foreground mt-0.5">{stepTitle}</p>
                 </div>
-                {/* Next step preview */}
                 {currentStep < ALL_STEPS.length - 1 && (
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">Next</p>
@@ -505,7 +476,6 @@ export default function CreateEventPage() {
                 )}
               </div>
 
-              {/* Progress bar */}
               <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-4">
                 <div
                   className="h-full bg-indigo-600 transition-all duration-300 ease-in-out"
@@ -537,7 +507,6 @@ export default function CreateEventPage() {
                     ) : (
                       <span className="text-xs font-semibold">{index + 1}</span>
                     )}
-                    {/* Connector line between dots */}
                     {index < ALL_STEPS.length - 1 && (
                       <span
                         className={cn(
@@ -551,7 +520,7 @@ export default function CreateEventPage() {
                 ))}
               </div>
 
-              {/* Step pills — desktop only (lg+) */}
+              {/* Step pills — desktop */}
               <div className="hidden lg:flex items-center justify-between">
                 {ALL_STEPS.map((step, index) => (
                   <div
@@ -581,7 +550,7 @@ export default function CreateEventPage() {
                       {step.id === "location" && isVirtualMode(eventMode)
                         ? "Online Details"
                         : step.id === "summary"
-                        ? "Review Changes"
+                        ? "Review & Create"
                         : step.title}
                     </span>
                   </div>

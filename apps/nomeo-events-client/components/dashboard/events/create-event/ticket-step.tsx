@@ -3,7 +3,7 @@
 import { memo, useRef, useState } from "react";
 import { useFormContext, useFieldArray, FieldError } from "react-hook-form";
 import { format } from "date-fns";
-import { CalendarIcon, PlusIcon, Trash2Icon, XIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { CalendarIcon, PlusIcon, Trash2Icon, XIcon, CheckIcon, ChevronUpIcon } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,12 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PlanType } from "@/types/create-event-type";
 import { cn } from "@/lib/utils";
+import { usePlanLimits } from "@/hooks/use-plan-limits";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Alert01Icon, SparklesIcon, InformationCircleIcon, Ticket01Icon } from "@hugeicons/core-free-icons";
+import Link from "next/link";
+
+// ─── Plan Card ────────────────────────────────────────────────────────────────
 
 const PlanCard = memo(function PlanCard({
   index,
@@ -30,6 +36,7 @@ const PlanCard = memo(function PlanCard({
   onAddAnother,
   canRemove,
   isLast,
+  canAddAnother,
 }: {
   index: number;
   onRemove: (i: number) => void;
@@ -37,6 +44,7 @@ const PlanCard = memo(function PlanCard({
   onAddAnother: () => void;
   canRemove: boolean;
   isLast: boolean;
+  canAddAnother: boolean;
 }) {
   const { register, watch, setValue, getValues, formState: { errors } } = useFormContext();
   const benefitInputRef = useRef<HTMLInputElement>(null);
@@ -46,11 +54,11 @@ const PlanCard = memo(function PlanCard({
   type PlanFieldError = { type?: FieldError; name?: FieldError; price?: FieldError; currency?: FieldError };
   const planErrors = (errors.plans as PlanFieldError[] | undefined) ?? [];
 
-  const planType = watch(`plans.${index}.type`);
-  const planName = watch(`plans.${index}.name`);
-  const planPrice = watch(`plans.${index}.price`);
-  const planCurrency = watch(`plans.${index}.currency`);
-  const benefits = watch(`plans.${index}.benefits`) || [];
+  const planType         = watch(`plans.${index}.type`);
+  const planName         = watch(`plans.${index}.name`);
+  const planPrice        = watch(`plans.${index}.price`);
+  const planCurrency     = watch(`plans.${index}.currency`);
+  const benefits         = watch(`plans.${index}.benefits`) || [];
   const earlyBirdDeadline = watch(`plans.${index}.earlyBirdDeadline`);
 
   const addBenefit = () => {
@@ -77,7 +85,7 @@ const PlanCard = memo(function PlanCard({
     setCollapsed(false);
   };
 
-  // Collapsed / saved state — shows a summary row
+  // ── Collapsed / saved summary row ──────────────────────────────────────────
   if (collapsed && saved) {
     return (
       <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
@@ -138,12 +146,7 @@ const PlanCard = memo(function PlanCard({
               </button>
             )}
             {canRemove && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => onRemove(index)}
-              >
+              <Button type="button" variant="ghost" size="sm" onClick={() => onRemove(index)}>
                 <Trash2Icon className="w-4 h-4 text-red-500" />
               </Button>
             )}
@@ -260,11 +263,7 @@ const PlanCard = memo(function PlanCard({
           {benefits.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-3 p-3 rounded-lg bg-muted/50 border border-border">
               {benefits.map((benefit: string, bi: number) => (
-                <Badge
-                  key={bi}
-                  variant="secondary"
-                  className="gap-1 px-3 py-1.5 text-sm"
-                >
+                <Badge key={bi} variant="secondary" className="gap-1 px-3 py-1.5 text-sm">
                   {benefit}
                   <button
                     type="button"
@@ -279,7 +278,6 @@ const PlanCard = memo(function PlanCard({
           )}
         </div>
 
-        {/* Card actions */}
         <Separator />
         <div className="flex items-center justify-between gap-3 pt-1">
           <p className="text-xs text-muted-foreground">
@@ -291,7 +289,9 @@ const PlanCard = memo(function PlanCard({
                 type="button"
                 variant="outline"
                 className="h-9 px-4 text-sm"
+                disabled={!canAddAnother}
                 onClick={() => {
+                  if (!canAddAnother) return;
                   handleSave();
                   onAddAnother();
                 }}
@@ -315,26 +315,147 @@ const PlanCard = memo(function PlanCard({
   );
 });
 
+// ─── Banners ──────────────────────────────────────────────────────────────────
+
+function TicketTypeRestrictionBanner({ planName }: { planName?: string }) {
+  return (
+    <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-5">
+      <div className="flex gap-3">
+        <div className="shrink-0 mt-0.5">
+          <HugeiconsIcon icon={Alert01Icon} className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+        </div>
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+            Ticket types not available on your current plan
+          </p>
+          <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+            Your <span className="font-medium">{planName ?? 'current'}</span> plan does not include
+            the ability to create custom ticket types for events. This means all attendees will
+            register under a single general admission type.
+          </p>
+          <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+            If you need multiple ticket types — such as VIP, Early Bird, or Student tickets —
+            please upgrade your subscription to a plan that includes this feature.
+          </p>
+          <div className="flex items-center gap-3 pt-1">
+            <Link href="/pricing">
+              <Button
+                type="button"
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-700 text-white h-8 px-4 text-xs gap-1.5"
+              >
+                <HugeiconsIcon icon={SparklesIcon} className="w-3.5 h-3.5" />
+                Upgrade Plan
+              </Button>
+            </Link>
+            <span className="text-xs text-amber-600 dark:text-amber-400">
+              You can still continue to the next step.
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TicketLimitBanner({ current, max, planName }: { current: number; max: number; planName?: string }) {
+  return (
+    <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20 px-4 py-3 flex items-start gap-2.5">
+      <HugeiconsIcon icon={InformationCircleIcon} className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+      <p className="text-xs text-blue-800 dark:text-blue-300">
+        You've used <span className="font-semibold">{current} of {max}</span> ticket types allowed
+        on your <span className="font-medium">{planName ?? 'current'}</span> plan.{' '}
+        <Link href="/pricing" className="underline font-medium hover:text-blue-600">
+          Upgrade
+        </Link>{' '}
+        to add more.
+      </p>
+    </div>
+  );
+}
+
+// ─── Empty state — no plans added yet ────────────────────────────────────────
+
+function NoPlansEmptyState({ onAdd, canAdd }: { onAdd: () => void; canAdd: boolean }) {
+  return (
+    <div className="rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 p-8 text-center">
+      <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-3">
+        <HugeiconsIcon icon={Ticket01Icon} className="w-6 h-6 text-gray-400 dark:text-gray-500" />
+      </div>
+      <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">No ticket plans</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 max-w-sm mx-auto">
+        Leaving this empty means your event is free and open to all — attendees can register
+        without selecting a ticket type. Add plans only if you want paid or categorised tickets.
+      </p>
+      {canAdd && (
+        <Button
+          type="button"
+          onClick={onAdd}
+          variant="outline"
+          className="h-9 px-5 text-sm"
+        >
+          <PlusIcon className="w-4 h-4 mr-1.5" />
+          Add Ticket Plan (Optional)
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// ─── Main step ────────────────────────────────────────────────────────────────
+
 export function TicketsStep() {
   const { register, watch, setValue, control, formState: { errors } } = useFormContext();
   const { fields, append, remove } = useFieldArray({ control, name: "plans" });
 
+  const { limits, plan: activePlan, isLoading: limitsLoading } = usePlanLimits();
+
   const waitlistEnabled = watch("waitlistEnabled");
 
+  // ── Edit mode detection ────────────────────────────────────────────────────
+  // If plans already exist when the step first mounts, we're editing an existing
+  // event. In this case we always allow editing existing plans regardless of the
+  // current subscription — only adding new ones is restricted.
+  const [hadPlansOnMount] = useState(() => fields.length > 0);
+
+  // ── Derived limit state ────────────────────────────────────────────────────
+  const hasTicketTypes = limits?.hasTicketTypes ?? true;  // optimistic until loaded
+  const maxTicketTypes = limits?.maxTicketTypes ?? null;  // null = unlimited
+  const currentCount   = fields.length;
+
+  // Show the full restriction banner only in create mode (no pre-existing plans)
+  const showRestrictionBanner = !limitsLoading && !hasTicketTypes && !hadPlansOnMount;
+
+  // Show a softer info banner in edit mode when the user has downgraded
+  const showDowngradedBanner = !limitsLoading && !hasTicketTypes && hadPlansOnMount;
+
+  const canAddMore = limitsLoading
+    ? false
+    : !hasTicketTypes
+    ? false  // feature not on plan — can edit existing but not add new
+    : limits
+    ? limits.canCreateTicketType(currentCount)
+    : true;
+
+  const limitReached = !limitsLoading && hasTicketTypes && !canAddMore && maxTicketTypes !== null;
+
   const addNewPlan = () => {
+    if (!canAddMore) return;
     append({
-      type: PlanType.REGULAR,
-      name: "",
-      price: 0,
-      currency: "NGN",
-      benefits: [],
-      maxSeats: null,
+      type:              PlanType.REGULAR,
+      name:              "",
+      price:             0,
+      currency:          "NGN",
+      benefits:          [],
+      maxSeats:          null,
       earlyBirdDeadline: null,
     });
   };
 
   return (
     <div className="space-y-6">
+
+      {/* Total seats */}
       <div>
         <Label htmlFor="totalSeats">Total Seats Available *</Label>
         <Input
@@ -348,6 +469,7 @@ export function TicketsStep() {
         )}
       </div>
 
+      {/* Waitlist */}
       <div className="flex items-center justify-between">
         <Label htmlFor="waitlistEnabled">Enable Waitlist</Label>
         <Switch
@@ -359,44 +481,89 @@ export function TicketsStep() {
 
       <Separator />
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <Label>Ticket Plans</Label>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Fill in each plan and save it before adding another.
-            </p>
-          </div>
-          <Button
-            type="button"
-            className="bg-indigo-600 hover:bg-indigo-700 px-5 h-10 lg:h-11 rounded-lg"
-            onClick={addNewPlan}
-          >
-            <PlusIcon className="w-4 h-4 mr-1" />
-            Add Plan
-          </Button>
-        </div>
-
-        {errors.plans && typeof errors.plans.message === "string" && (
-          <p className="text-sm text-red-500">{errors.plans.message}</p>
-        )}
-
+      {/* ── Create mode: ticket types not on plan at all ── */}
+      {showRestrictionBanner ? (
+        <TicketTypeRestrictionBanner planName={activePlan?.name} />
+      ) : (
         <div className="space-y-3">
-          {fields.map((field, index) => (
-            <PlanCard
-              key={field.id}
-              index={index}
-              onRemove={remove}
-              onSave={(i) => {
-                // saving is handled internally by the card's local state
-              }}
-              onAddAnother={addNewPlan}
-              canRemove={fields.length > 1}
-              isLast={index === fields.length - 1}
+
+          {/* ── Edit mode: user has downgraded but has existing plans ── */}
+          {showDowngradedBanner && (
+            <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20 px-4 py-3 flex items-start gap-2.5">
+              <HugeiconsIcon icon={InformationCircleIcon} className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-800 dark:text-blue-300">
+                Your current plan doesn't include ticket types, but you can still edit your existing ones.
+                You won't be able to add new ticket types without{' '}
+                <Link href="/pricing" className="underline font-medium">upgrading your plan</Link>.
+              </p>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Ticket Plans</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Fill in each plan and save it before adding another.
+              </p>
+              {/* Usage indicator — only show when there's a cap and plans exist */}
+              {!limitsLoading && maxTicketTypes !== null && hasTicketTypes && currentCount > 0 && (
+                <p className={cn(
+                  "text-xs mt-1 font-medium",
+                  limitReached ? "text-red-500" : "text-muted-foreground"
+                )}>
+                  {currentCount} of {maxTicketTypes} ticket type{maxTicketTypes !== 1 ? "s" : ""} used
+                </p>
+              )}
+            </div>
+
+            {/* Add Plan button — only visible when plans already exist */}
+            {currentCount > 0 && (
+              <Button
+                type="button"
+                className="bg-indigo-600 hover:bg-indigo-700 px-5 h-10 lg:h-11 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={addNewPlan}
+                disabled={!canAddMore || limitsLoading}
+              >
+                <PlusIcon className="w-4 h-4 mr-1" />
+                Add Plan
+              </Button>
+            )}
+          </div>
+
+          {/* Limit reached banner */}
+          {limitReached && maxTicketTypes !== null && (
+            <TicketLimitBanner
+              current={currentCount}
+              max={maxTicketTypes}
+              planName={activePlan?.name}
             />
-          ))}
+          )}
+
+          {errors.plans && typeof errors.plans.message === "string" && (
+            <p className="text-sm text-red-500">{errors.plans.message}</p>
+          )}
+
+          {/* Empty state — no plans = free/general admission, perfectly valid */}
+          {currentCount === 0 ? (
+            <NoPlansEmptyState onAdd={addNewPlan} canAdd={canAddMore && !limitsLoading} />
+          ) : (
+            <div className="space-y-3">
+              {fields.map((field, index) => (
+                <PlanCard
+                  key={field.id}
+                  index={index}
+                  onRemove={remove}
+                  onSave={(i) => {}}
+                  onAddAnother={addNewPlan}
+                  canRemove={true}
+                  isLast={index === fields.length - 1}
+                  canAddAnother={canAddMore}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

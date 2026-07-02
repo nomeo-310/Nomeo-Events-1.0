@@ -6,7 +6,7 @@ import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Loading03Icon, CheckmarkCircle02Icon, ArrowLeft02Icon } from "@hugeicons/core-free-icons";
+import { Loading03Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,8 +24,7 @@ import { SummaryStep } from "./summary-step";
 import { EventTabs } from "../event-tabs";
 import { useSubscription } from "@/hooks/use-subscription";
 
-
-// ─── Schema (identical to create) ────────────────────────────────────────────
+// ─── Schema ───────────────────────────────────────────────────────────────────
 
 const physicalLocationSchema = z.object({
   venue:          z.string().min(1, "Venue is required"),
@@ -83,26 +82,30 @@ const eventFormSchema = z
     }),
     totalSeats:      z.number().min(1, "Total seats must be at least 1"),
     waitlistEnabled: z.boolean().default(false),
-    plans: z.array(
-      z.object({
-        type:             z.string().min(1, "Plan type is required"),
-        name:             z.string().min(1, "Plan name is required"),
-        price:            z.number().min(0, "Price cannot be negative"),
-        currency:         z.string().default("NGN"),
-        benefits:         z.array(z.string()),
-        maxSeats:         z.number().optional().nullable(),
-        earlyBirdDeadline: z.date().optional().nullable(),
-      })
-    ).min(1, "At least one ticket plan is required"),
+    // ✅ plans is optional — ticket types may not be available on the user's plan
+    plans: z
+      .array(
+        z.object({
+          type:              z.string().min(1, "Plan type is required"),
+          name:              z.string().min(1, "Plan name is required"),
+          price:             z.number().min(0, "Price cannot be negative"),
+          currency:          z.string().default("NGN"),
+          benefits:          z.array(z.string()),
+          maxSeats:          z.number().optional().nullable(),
+          earlyBirdDeadline: z.date().optional().nullable(),
+        })
+      )
+      .optional()
+      .default([]),
     ageRequirement: z.object({
-      required:               z.boolean().default(false),
-      minAge:                 z.number().min(0).max(120).optional().nullable(),
-      maxAge:                 z.number().min(0).max(120).optional().nullable(),
-      allowedAgeGroups:       z.array(z.string()).optional(),
+      required:                z.boolean().default(false),
+      minAge:                  z.number().min(0).max(120).optional().nullable(),
+      maxAge:                  z.number().min(0).max(120).optional().nullable(),
+      allowedAgeGroups:        z.array(z.string()).optional(),
       requiresParentalConsent: z.boolean().default(false),
-      parentalConsentMessage: z.string().optional(),
+      parentalConsentMessage:  z.string().optional(),
       ageVerificationRequired: z.boolean().default(false),
-      ageVerificationMethod:  z.enum(["id_check", "self_declaration", "guardian_confirmation"]).default("self_declaration"),
+      ageVerificationMethod:   z.enum(["id_check", "self_declaration", "guardian_confirmation"]).default("self_declaration"),
     }),
     speakers: z.array(
       z.object({
@@ -162,11 +165,12 @@ const ALL_STEPS = [
   { id: "summary",  title: "Review Changes",     description: "Review your changes before saving",       component: SummaryStep          },
 ];
 
+// ✅ Removed "plans" from tickets validation — plans are optional now
 const STEP_VALIDATION: Record<string, (keyof EventFormData)[]> = {
   basic:    ["title", "shortDescription", "description", "category", "type"],
   datetime: ["startDate", "endDate"],
   location: ["location"],
-  tickets:  ["totalSeats", "plans"],
+  tickets:  ["totalSeats"],
   age:      [],
   speakers: [],
   media:    [],
@@ -174,7 +178,7 @@ const STEP_VALIDATION: Record<string, (keyof EventFormData)[]> = {
   summary:  [],
 };
 
-// ─── Loader skeleton ──────────────────────────────────────────────────────────
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function PageSkeleton() {
   return (
@@ -197,24 +201,20 @@ function PageSkeleton() {
 export default function EditEventPage() {
   const router = useRouter();
   const params = useParams();
-
   const eventId = params.id as string;
 
-  const { useGetEvent, useUpdateEvent } = useEvents();
+  const { useGetEvent, useUpdateEvent, useOrganizerAllEvents } = useEvents();
   const { data: eventData, isLoading: eventLoading, isError } = useGetEvent(eventId);
-  
   const updateEvent = useUpdateEvent();
-
-  const [currentStep,  setCurrentStep]  = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [populated,    setPopulated]    = useState(false);
-
-  const { useOrganizerAllEvents} = useEvents();
-  const { data, isLoading, isError:newDataError } = useOrganizerAllEvents();
+  const { data, isLoading } = useOrganizerAllEvents();
   const eventCount = data?.eventCount;
 
   const { checkEventCreation } = useSubscription();
   const allowCreation = checkEventCreation(eventCount?.total);
+
+  const [currentStep,  setCurrentStep]  = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [populated,    setPopulated]    = useState(false);
 
   const form = useForm<EventFormData>({
     resolver: zodResolver(eventFormSchema) as any,
@@ -234,15 +234,8 @@ export default function EditEventPage() {
       },
       totalSeats:      100,
       waitlistEnabled: false,
-      plans: [{
-        type:             PlanType.REGULAR,
-        name:             "Regular Ticket",
-        price:            0,
-        currency:         "USD",
-        benefits:         ["General admission"],
-        maxSeats:         null,
-        earlyBirdDeadline: null,
-      }],
+      // ✅ Start empty — populated from event data in useEffect
+      plans: [],
       ageRequirement: {
         required:                false,
         minAge:                  null,
@@ -265,16 +258,14 @@ export default function EditEventPage() {
     },
   });
 
-  const { watch, setValue } = form;
+  const { watch } = form;
   const eventMode = watch("eventMode") as EventMode;
 
-  // ── Populate form once event data arrives ──────────────────────────────────
+  // ── Populate form from event data ──────────────────────────────────────────
   useEffect(() => {
     if (!eventData || populated) return;
 
     const e = eventData;
-
-    // Detect eventMode from location data
     const hasVenue    = !!(e.location?.venue);
     const hasPlatform = !!(e.location as any)?.platform;
     const detectedMode: EventMode = hasVenue && hasPlatform ? "hybrid" : hasPlatform ? "virtual" : "physical";
@@ -290,38 +281,31 @@ export default function EditEventPage() {
       endDate:          e.endDate          ? new Date(e.endDate)   : new Date(Date.now() + 3600000),
       timezone:         (e as any).timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       location: {
-        venue:          e.location?.venue           ?? "",
-        address:        e.location?.address         ?? "",
-        city:           e.location?.city            ?? "",
-        country:        e.location?.country         ?? "",
-        notes:          e.location?.notes           ?? "",
-        googleMapsLink: e.location?.googleMapsLink  ?? "",
+        venue:          e.location?.venue          ?? "",
+        address:        e.location?.address        ?? "",
+        city:           e.location?.city           ?? "",
+        country:        e.location?.country        ?? "",
+        notes:          e.location?.notes          ?? "",
+        googleMapsLink: e.location?.googleMapsLink ?? "",
         platform:       (e.location as any)?.platform  ?? "",
-        streamUrl:      (e.location as any)?.streamUrl  ?? "",
+        streamUrl:      (e.location as any)?.streamUrl ?? "",
       },
-      totalSeats:      e.totalSeats      ?? 100,
+      totalSeats:      e.totalSeats             ?? 100,
       waitlistEnabled: (e as any).waitlistEnabled ?? false,
+      // ✅ Keep existing plans from the event — empty array if none (no forced default plan)
       plans: e.plans?.length
         ? e.plans.map((p) => ({
-            type:             p.type     ?? PlanType.REGULAR,
-            name:             p.name     ?? "",
-            price:            p.price    ?? 0,
-            currency:         p.currency ?? "USD",
-            benefits:         p.benefits ?? [],
-            maxSeats:         (p as any).maxSeats          ?? null,
+            type:              p.type              ?? PlanType.REGULAR,
+            name:              p.name              ?? "",
+            price:             p.price             ?? 0,
+            currency:          p.currency          ?? "NGN",
+            benefits:          p.benefits          ?? [],
+            maxSeats:          (p as any).maxSeats ?? null,
             earlyBirdDeadline: p.earlyBirdDeadline
               ? new Date(p.earlyBirdDeadline)
               : null,
           }))
-        : [{
-            type:             PlanType.REGULAR,
-            name:             "Regular Ticket",
-            price:            0,
-            currency:         "USD",
-            benefits:         [],
-            maxSeats:         null,
-            earlyBirdDeadline: null,
-          }],
+        : [],
       ageRequirement: {
         required:                (e as any).ageRequirement?.required                ?? false,
         minAge:                  (e as any).ageRequirement?.minAge                  ?? null,
@@ -340,16 +324,16 @@ export default function EditEventPage() {
             company: s.company ?? "",
           }))
         : [],
-      banner:               e.banner   ?? null,
+      banner:               e.banner ?? null,
       registrationDeadline: (e as any).registrationDeadline
         ? new Date((e as any).registrationDeadline)
         : null,
-      isPublic:         e.isPublic         ?? true,
+      isPublic:         e.isPublic             ?? true,
       requiresApproval: (e as any).requiresApproval ?? false,
-      tags:             (e as any).tags    ?? [],
-      featured:         e.featured         ?? false,
-      seoTitle:         (e as any).seoTitle        ?? "",
-      seoDescription:   (e as any).seoDescription  ?? "",
+      tags:             (e as any).tags        ?? [],
+      featured:         e.featured             ?? false,
+      seoTitle:         (e as any).seoTitle    ?? "",
+      seoDescription:   (e as any).seoDescription ?? "",
     });
 
     setPopulated(true);
@@ -368,11 +352,14 @@ export default function EditEventPage() {
         eventId,
         eventData: {
           ...data,
-          plans: data.plans.map((p) => ({
-            ...p,
-            maxSeats:          p.maxSeats          ?? undefined,
-            earlyBirdDeadline: p.earlyBirdDeadline ?? undefined,
-          })),
+          // ✅ Filter out any empty/unsaved plans before submitting
+          plans: (data.plans ?? [])
+            .filter((p) => p.name?.trim() && p.type)
+            .map((p) => ({
+              ...p,
+              maxSeats:          p.maxSeats          ?? undefined,
+              earlyBirdDeadline: p.earlyBirdDeadline ?? undefined,
+            })),
           ageRequirement: {
             ...data.ageRequirement,
             minAge: data.ageRequirement.minAge ?? undefined,
@@ -430,17 +417,11 @@ export default function EditEventPage() {
         <div className="w-16 h-16 rounded-2xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center mb-4">
           <span className="text-2xl">⚠️</span>
         </div>
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-          Event not found
-        </h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Event not found</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
           This event could not be loaded. It may have been deleted.
         </p>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => router.push("/dashboard/events")}
-        >
+        <Button type="button" variant="outline" onClick={() => router.push("/dashboard/events")}>
           Back to Events
         </Button>
       </div>
@@ -450,23 +431,20 @@ export default function EditEventPage() {
   const StepComponent   = ALL_STEPS[currentStep].component;
   const isSummaryStep   = currentStep === ALL_STEPS.length - 1;
   const isLocationStep  = ALL_STEPS[currentStep].id === "location";
-  const stepTitle       = isLocationStep && isVirtualMode(eventMode) ? "Online Details"                              : ALL_STEPS[currentStep].title;
-  const stepDescription = isLocationStep && isVirtualMode(eventMode) ? "Platform and meeting link for your online event" : ALL_STEPS[currentStep].description;
+  const stepTitle       = isLocationStep && isVirtualMode(eventMode) ? "Online Details" : ALL_STEPS[currentStep].title;
+  const stepDescription = isLocationStep && isVirtualMode(eventMode)
+    ? "Platform and meeting link for your online event"
+    : ALL_STEPS[currentStep].description;
 
   return (
     <>
       <EventTabs allowCreation={allowCreation.allowed} />
       <div className="container mx-auto pb-6">
-        {/* Page title */}
         <div className="mb-6">
           <div className="flex items-center gap-6 mb-1">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Edit Event
-            </h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Edit Event</h1>
           </div>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {eventData.title}
-          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">{eventData.title}</p>
         </div>
 
         <FormProvider {...form}>
@@ -481,7 +459,6 @@ export default function EditEventPage() {
           >
             {/* Progress steps */}
             <div className="mb-8">
-              {/* Step label header — shows current step info on mobile/tablet */}
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
@@ -491,11 +468,10 @@ export default function EditEventPage() {
                     {ALL_STEPS[currentStep].id === "location" && isVirtualMode(eventMode)
                       ? "Online Details"
                       : ALL_STEPS[currentStep].id === "summary"
-                      ? "Review Changes"      // use "Review & Create" on the create page
+                      ? "Review Changes"
                       : ALL_STEPS[currentStep].title}
                   </p>
                 </div>
-                {/* Next step preview */}
                 {currentStep < ALL_STEPS.length - 1 && (
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">Next</p>
@@ -508,7 +484,6 @@ export default function EditEventPage() {
                 )}
               </div>
 
-              {/* Progress bar */}
               <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-4">
                 <div
                   className="h-full bg-indigo-600 transition-all duration-300 ease-in-out"
@@ -527,9 +502,7 @@ export default function EditEventPage() {
                     aria-label={step.title}
                     className={cn(
                       "relative flex items-center justify-center rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
-                      // Size: current step is bigger
                       index === currentStep ? "w-8 h-8" : "w-6 h-6",
-                      // Colors
                       index < currentStep
                         ? "bg-green-500 text-white cursor-pointer"
                         : index === currentStep
@@ -542,12 +515,10 @@ export default function EditEventPage() {
                     ) : (
                       <span className="text-xs font-semibold">{index + 1}</span>
                     )}
-                    {/* Connector line between dots */}
                     {index < ALL_STEPS.length - 1 && (
                       <span
                         className={cn(
                           "absolute left-full top-1/2 -translate-y-1/2 h-px transition-all duration-300",
-                          // Width fills gap between dots — adjust based on step count
                           "w-[calc((100vw-4rem)/9-1.5rem)] max-w-8",
                           index < currentStep ? "bg-green-400" : "bg-muted"
                         )}
@@ -557,7 +528,7 @@ export default function EditEventPage() {
                 ))}
               </div>
 
-              {/* Step pills — desktop only (lg+) */}
+              {/* Step pills — desktop */}
               <div className="hidden lg:flex items-center justify-between">
                 {ALL_STEPS.map((step, index) => (
                   <div
