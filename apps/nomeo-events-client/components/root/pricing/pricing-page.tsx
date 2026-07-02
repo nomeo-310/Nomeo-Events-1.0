@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ChampionIcon, SparklesIcon, ArrowRight01Icon, Tick01Icon, ArrowDataTransferHorizontalIcon as CompareIcon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
-import { usePricing, usePlanOptions } from '@/hooks/use-plans';
+import { usePricing, usePlanOptions, PlanFeature } from '@/hooks/use-plans';
 import { authClient } from '@/lib/auth-client';
 import { useModal } from '@/hooks/use-modal';
 import { AuthWrapper } from '@/components/root/auth/auth-wrapper';
@@ -43,6 +43,8 @@ export const PricingPage: React.FC = () => {
   const [selectedPlansForCompare, setSelectedPlansForCompare] = useState<string[]>([]);
   const [selectedPlanForPayment,  setSelectedPlanForPayment]  = useState<SelectedPlanForPayment | null>(null);
 
+
+
   const isLoggedIn = !!session;
 
   // ── Auth modals ────────────────────────────────────────────────────────────
@@ -65,11 +67,12 @@ export const PricingPage: React.FC = () => {
   // ── Default plan selection ─────────────────────────────────────────────────
   useEffect(() => {
     if (tiers.length > 0 && !selectedTier) {
-      // ✅ Find first paid tier (not free)
       const firstPaid = tiers.find((t) => !isFreeTier(t));
       setSelectedTier(firstPaid?.tier ?? tiers[0]?.tier ?? null);
     }
   }, [tiers, selectedTier]);
+
+
 
   // ── Subscribe flow ─────────────────────────────────────────────────────────
   const handleSubscribeClick = async (tier: TierPricing, pricing: IntervalPricing) => {
@@ -96,7 +99,7 @@ export const PricingPage: React.FC = () => {
         pricing,
         planId: planDoc._id ?? '',
         slug:   planDoc.slug ?? '',
-        subscriptionId: '', // intentionally empty — created post-payment
+        subscriptionId: '',
       });
 
       setShowConfirmationModal(true);
@@ -127,6 +130,11 @@ export const PricingPage: React.FC = () => {
 
   const displayTier    = tiers.find((t) => t.tier === selectedTier);
   const displayPricing = displayTier ? getPricingForTier(displayTier) : null;
+
+  // ✅ Read features and limits directly from the selected interval pricing
+  // (now embedded in each IntervalPricing by the backend)
+  const displayFeatures = (displayPricing as any)?.features ?? displayTier?.features ?? [];
+  const displayLimits   = (displayPricing as any)?.limits   ?? displayTier?.limits   ?? {};
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950">
@@ -267,7 +275,6 @@ export const PricingPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* ✅ Changed: Check if tier is free using helper function */}
                   {!isFreeTier(displayTier) && (
                     <div className="mt-6">
                       <button
@@ -285,20 +292,22 @@ export const PricingPage: React.FC = () => {
                   )}
                 </div>
 
+                {/* Limits — now interval-aware */}
                 <div className="rounded-xl border border-gray-100 dark:border-gray-800 p-4 sm:p-6 bg-gray-50 dark:bg-gray-900/30">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Plan limits</h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <LimitStat value={displayTier.limits.maxEvents === undefined ? '∞' : String(displayTier.limits.maxEvents)} label="Max Events" />
-                    <LimitStat value={displayTier.limits.maxAttendeesPerEvent === undefined ? '∞' : displayTier.limits.maxAttendeesPerEvent.toLocaleString()} label="Attendees / event" />
-                    <LimitStat value={displayTier.limits.maxTeamMembers === undefined ? '∞' : String(displayTier.limits.maxTeamMembers)} label="Team members" />
-                    <LimitStat value={displayTier.limits.storageGb === undefined ? '∞' : `${displayTier.limits.storageGb} GB`} label="Storage" />
+                    <LimitStat value={displayLimits.maxEvents            === undefined ? '∞' : String(displayLimits.maxEvents)}                             label="Max Events" />
+                    <LimitStat value={displayLimits.maxAttendeesPerEvent === undefined ? '∞' : displayLimits.maxAttendeesPerEvent.toLocaleString()} label="Attendees / event" />
+                    <LimitStat value={displayLimits.maxTeamMembers       === undefined ? '∞' : String(displayLimits.maxTeamMembers)}                        label="Team members" />
+                    <LimitStat value={displayLimits.storageGb            === undefined ? '∞' : `${displayLimits.storageGb} GB`}                             label="Storage" />
                   </div>
                 </div>
 
+                {/* Features — now interval-aware */}
                 <div className="rounded-xl border border-gray-100 dark:border-gray-800 p-4 sm:p-6 bg-gray-50 dark:bg-gray-900/30">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">All features</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-0.5">
-                    {displayTier.features.map((f, i) => (
+                    {displayFeatures.map((f: PlanFeature, i: number) => (
                       <FeatureRow key={i} name={f.name} included={f.included} limit={f.limit} unit={f.unit} description={f.description} />
                     ))}
                   </div>

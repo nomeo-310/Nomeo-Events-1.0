@@ -24,7 +24,6 @@ export async function GET() {
   try {
     await connectDB();
 
-    // ✅ Get all active intervals once (not per plan)
     const intervalMap = await getIntervalMap();
     const allIntervals = Array.from(intervalMap.values());
 
@@ -41,11 +40,10 @@ export async function GET() {
       } as ApiResponse, { status: 404 });
     }
 
-    // ✅ monthly baseline - now uses interval slug "monthly"
+    // monthly baseline for savings calculation
     const monthlyPrices: Record<string, number> = {};
-
     plans.forEach((plan: any) => {
-      if (plan.interval === "monthly") {
+      if (plan.interval === 'monthly') {
         monthlyPrices[plan.tier] = plan.priceKobo;
       }
     });
@@ -56,13 +54,11 @@ export async function GET() {
       const tier = plan.tier;
       const intervalData = intervalMap.get(plan.interval);
 
-      // ✅ Skip if interval not found or inactive
       if (!intervalData) {
         console.warn(`Interval "${plan.interval}" not found for plan ${plan.name}`);
         continue;
       }
 
-      // ✅ safe metadata handling
       const safeMetadata =
         plan.metadata instanceof Map
           ? Object.fromEntries(plan.metadata)
@@ -70,25 +66,26 @@ export async function GET() {
           ? plan.metadata
           : {};
 
+      // ── Init tier entry (no features/limits here — they're per-interval now) ──
       if (!tiersMap.has(tier)) {
         tiersMap.set(tier, {
-          tier: tier,
+          tier,
           name: tier.charAt(0).toUpperCase() + tier.slice(1),
           description: plan.description || '',
           tagline: '',
           sortOrder: plan.sortOrder ?? 0,
           isActive: !!plan.isActive,
-          isPopular: false, // Will be determined per interval
+          isPopular: false,
           features: Array.isArray(plan.features) ? plan.features : [],
           limits: {
-            maxEvents: plan.maxEvents ?? 0,
-            maxAttendeesPerEvent: plan.maxAttendeesPerEvent ?? 0,
-            maxTeamMembers: plan.maxTeamMembers ?? 0,
-            storageGb: plan.storageGb ?? 0
+            maxEvents:            plan.maxEvents            ?? undefined,
+            maxAttendeesPerEvent: plan.maxAttendeesPerEvent ?? undefined,
+            maxTeamMembers:       plan.maxTeamMembers       ?? undefined,
+            storageGb:            plan.storageGb            ?? undefined,
           },
           intervals: [],
           ctaText: 'Subscribe',
-          metadata: safeMetadata
+          metadata: safeMetadata,
         });
       }
 
@@ -97,11 +94,11 @@ export async function GET() {
       const months = intervalData.monthsCount || 1;
       const monthlyBaseline = monthlyPrices[tier] || (months === 1 ? plan.priceKobo : 0);
 
-      const perMonthKobo = intervalData.slug === "monthly" || months === 0
+      const perMonthKobo = intervalData.slug === 'monthly' || months === 0
         ? plan.priceKobo
         : Math.round(plan.priceKobo / months);
 
-      // ✅ Calculate savings using interval's built-in discount
+      // ── Savings calculation ──
       let savings = null;
       if (intervalData.discount && intervalData.discount > 0) {
         const savingsAmount = Math.round(plan.priceKobo * (intervalData.discount / 100));
@@ -115,7 +112,6 @@ export async function GET() {
         }
       }
 
-      // ✅ Or calculate based on monthly baseline (fallback)
       if (!savings && monthlyBaseline > 0 && months > 1) {
         const totalMonthlyCost = monthlyBaseline * months;
         const savingsAmount = totalMonthlyCost - plan.priceKobo;
@@ -130,6 +126,7 @@ export async function GET() {
         }
       }
 
+      // ── Push interval with its own features & limits ──
       tierData.intervals.push({
         interval: intervalData.slug,
         priceKobo: plan.priceKobo,
@@ -143,42 +140,49 @@ export async function GET() {
         trialDays: plan.trialDays ?? 0,
         paystackPlanCode: plan.paystackPlanCode,
         isAvailable: true,
-        sortOrder: intervalData.sortOrder ?? 0
+        sortOrder: intervalData.sortOrder ?? 0,
+        features: Array.isArray(plan.features) ? plan.features : [],
+        limits: {
+          maxEvents:            plan.maxEvents            ?? undefined,
+          maxAttendeesPerEvent: plan.maxAttendeesPerEvent ?? undefined,
+          maxTeamMembers:       plan.maxTeamMembers       ?? undefined,
+          storageGb:            plan.storageGb            ?? undefined,
+        },
       });
     }
 
-    // ✅ Build supportedIntervals from database (not hardcoded)
+    // ── Build supportedIntervals from database ──
     const supportedIntervals: SupportedInterval[] = allIntervals.map(interval => ({
       value: interval.slug,
       label: interval.name,
       discount: interval.discount ? `${interval.discount}% OFF` : null,
       isPopular: interval.popular || false,
-      sortOrder: interval.sortOrder ?? 0
+      sortOrder: interval.sortOrder ?? 0,
     }));
 
     const tiers = Array.from(tiersMap.values())
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((tier) => ({
         ...tier,
-        intervals: tier.intervals.sort((a, b) => a.sortOrder - b.sortOrder)
+        intervals: tier.intervals.sort((a, b) => a.sortOrder - b.sortOrder),
       }));
 
-    // ✅ Find default interval (monthly or first active)
-    const defaultInterval = allIntervals.find(i => i.isDefault)?.slug || "monthly";
+    const defaultInterval = allIntervals.find(i => i.isDefault)?.slug || 'monthly';
 
     return NextResponse.json({
       success: true,
       data: {
         tiers,
         defaultInterval,
-        supportedIntervals: supportedIntervals.sort((a, b) => a.sortOrder - b.sortOrder)
+        supportedIntervals: supportedIntervals.sort((a, b) => a.sortOrder - b.sortOrder),
       } as PricingResponse,
       timestamp: new Date().toISOString()
     } as ApiResponse<PricingResponse>);
+
   } catch (error: any) {
     console.error('Failed to fetch pricing:', {
       message: error?.message,
-      stack: error?.stack
+      stack: error?.stack,
     });
 
     return NextResponse.json({

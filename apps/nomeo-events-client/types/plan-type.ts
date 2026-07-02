@@ -140,7 +140,7 @@ export interface IntervalPricing {
   priceDisplay: string;
   pricePerMonthKobo: number;
   pricePerMonthDisplay: string;
-  savings?: {
+  savings: {
     amount: number;
     percent: number;
     text: string;
@@ -153,6 +153,13 @@ export interface IntervalPricing {
   paystackPlanCode?: string;
   isAvailable: boolean;
   sortOrder: number;
+  features?: PlanFeature[];
+  limits?: {
+    maxEvents?: number;
+    maxAttendeesPerEvent?: number;
+    maxTeamMembers?: number;
+    storageGb?: number;
+  };
 }
 
 export interface TierPricing {
