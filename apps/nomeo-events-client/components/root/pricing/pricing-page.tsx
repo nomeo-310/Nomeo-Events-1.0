@@ -279,10 +279,10 @@ export const PricingPage: React.FC = () => {
                     <div className="mt-6">
                       <button
                         onClick={() => handleSubscribeClick(displayTier, displayPricing)}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.98] bg-indigo-600 hover:bg-indigo-700 text-white shadow-md w-full sm:w-auto justify-center"
+                        className="capitalize inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.98] bg-indigo-600 hover:bg-indigo-700 text-white shadow-md w-full sm:w-auto justify-center"
                       >
                         <HugeiconsIcon icon={SparklesIcon} size={14} />
-                        Start {displayTier.name}
+                        Start {displayTier.name} - {selectedInterval} Plan
                         <HugeiconsIcon icon={ArrowRight01Icon} size={12} />
                       </button>
                       <p className="mt-2 text-xs text-gray-400 dark:text-gray-500 text-center sm:text-left">
